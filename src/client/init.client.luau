@@ -70,6 +70,9 @@ TradeUI.Init(screen, UIController)
 local GlobalLeaderboardUI = require(script.GlobalLeaderboardUI)
 GlobalLeaderboardUI.Init(screen, UIController)
 
+local BossUI = require(script.BossUI)
+BossUI.Init(screen)
+
 local SoundController = require(script.SoundController)
 SoundController.Init()
 
