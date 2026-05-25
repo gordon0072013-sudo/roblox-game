@@ -472,6 +472,8 @@ function LabService.GiveBrainrot(player: Player, brainrot: Types.OwnedBrainrot)
 		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
 		if ok then BadgeService.Fire(player, "first_capture") end
 	end
+	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+	if okL then PlayerLevelService.AwardXp(player, "capture") end
 end
 
 function LabService.TransferBrainrot(fromPlayer: Player, toPlayer: Player, uid: string): boolean

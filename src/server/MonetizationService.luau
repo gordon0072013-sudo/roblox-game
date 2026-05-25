@@ -30,6 +30,7 @@ local LabService = require(script.Parent.LabService)
 local CaptureService = require(script.Parent.CaptureService)
 local MutationService = require(script.Parent.MutationService)
 local InfectionService = require(script.Parent.InfectionService)
+local PetService = require(script.Parent.PetService)
 local BattlePassService -- forward
 local AnalyticsService -- forward
 local TrailService -- forward
@@ -103,6 +104,10 @@ local function deliverProduct(player: Player, key: string): boolean
 		InfectionService.AddBombs(player, def.amount or 1)
 	elseif def.kind == "battle_pass" then
 		if BattlePassService then BattlePassService.GrantPremium(player) end
+	elseif def.kind == "pet_egg" then
+		PetService.Hatch(player, false)
+	elseif def.kind == "pet_egg_lucky" then
+		PetService.Hatch(player, true)
 	else
 		warn(`[Monetization] Unknown product kind: ${tostring(def.kind)}`)
 		return false

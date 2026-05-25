@@ -23,6 +23,10 @@ local RemoteNames = {
 	TradeUpdate = "TradeUpdate",
 	GlobalLeaderboardUpdate = "GlobalLeaderboardUpdate",
 	BossUpdate = "BossUpdate",
+	AnnouncementShow = "AnnouncementShow",
+	PetUpdate = "PetUpdate",
+	LevelUpdate = "LevelUpdate",
+	SeasonUpdate = "SeasonUpdate",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -48,6 +52,9 @@ local RemoteNames = {
 	RequestTradeSetCash = "RequestTradeSetCash",
 	RequestTradeConfirm = "RequestTradeConfirm",
 	RequestTradeCancel = "RequestTradeCancel",
+	RequestEquipPet = "RequestEquipPet",
+	RequestUnequipPet = "RequestUnequipPet",
+	RequestClaimLevelReward = "RequestClaimLevelReward",
 }
 
 local Remotes = {}

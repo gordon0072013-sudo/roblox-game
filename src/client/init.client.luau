@@ -73,6 +73,21 @@ GlobalLeaderboardUI.Init(screen, UIController)
 local BossUI = require(script.BossUI)
 BossUI.Init(screen)
 
+local AnnouncementUI = require(script.AnnouncementUI)
+AnnouncementUI.Init(screen)
+
+local PetUI = require(script.PetUI)
+PetUI.Init(screen, UIController)
+
+local LevelUI = require(script.LevelUI)
+LevelUI.Init(screen, UIController)
+
+local PatchNotesUI = require(script.PatchNotesUI)
+PatchNotesUI.Init(screen, UIController)
+
+local LoadingScreen = require(script.LoadingScreen)
+LoadingScreen.Init()
+
 local SoundController = require(script.SoundController)
 SoundController.Init()
 

@@ -6,11 +6,12 @@
 !/ServerPackages/.gitkeep
 !/DevPackages/.gitkeep
 
-# Rojo build artifacts
+# Rojo build artifacts — ignore by default but keep the published beta build
 *.rbxl
 *.rbxlx
 *.rbxm
 *.rbxmx
+!BrainrotLab.rbxlx
 
 # OS / editor
 .DS_Store

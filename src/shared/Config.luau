@@ -13,6 +13,10 @@ local Config = {}
 -- ============================================================
 -- DEV / RELEASE TOGGLES
 -- ============================================================
+-- Bump this any time you ship a meaningful update — the new-update badge
+-- on PatchNotesUI pings any player whose last-seen version is older.
+Config.GAME_VERSION = "0.1.0"
+
 -- Set to false before publishing to slow mutations to a believable cadence.
 Config.FAST_TEST_MODE = false
 
@@ -105,6 +109,7 @@ Config.GAMEPASSES = {
 	TripleCapture   = { id = 0, price = 399, name = "Triple Capture" },
 	RainbowTrail    = { id = 0, price = 149, name = "Rainbow Trail" }, -- cosmetic, high-margin whale slot
 	GoldenPlot      = { id = 0, price = 199, name = "Golden Plot" },   -- cosmetic floor + sign upgrade
+	PetLucky        = { id = 0, price = 299, name = "Pet Lucky" },     -- biases pet rolls toward Legendary/Mythical
 }
 
 Config.DEV_PRODUCTS = {
@@ -121,6 +126,9 @@ Config.DEV_PRODUCTS = {
 	InfectionBomb5  = { id = 0, price = 89,  name = "Infection Bombs x5", kind = "infection_bomb", amount = 5 },
 	-- Battle pass (premium tier purchase)
 	BattlePassPremium = { id = 0, price = 999, name = "Premium Battle Pass", kind = "battle_pass" },
+	-- Pets (the high-ARPU mechanic)
+	PetEgg            = { id = 0, price = 99,  name = "Pet Egg",            kind = "pet_egg" },
+	PetEggGolden      = { id = 0, price = 399, name = "Golden Pet Egg (luckier)", kind = "pet_egg_lucky" },
 }
 
 -- ============================================================

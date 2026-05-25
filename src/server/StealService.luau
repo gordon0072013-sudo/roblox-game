@@ -134,6 +134,8 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 		if ok and atkData and atkData.stats.totalSteals == 1 then
 			BadgeService.Fire(attacker, "first_steal")
 		end
+		local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+		if okL then PlayerLevelService.AwardXp(attacker, "steal") end
 	end
 end
 

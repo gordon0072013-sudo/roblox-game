@@ -76,6 +76,8 @@ function InfectionService.AttemptInfect(attacker: Player, victimUserId: number)
 		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
 		if ok then BadgeService.Fire(attacker, "first_infect") end
 	end
+	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+	if okL then PlayerLevelService.AwardXp(attacker, "infect") end
 
 	local victimPlot = LabService.GetPlotIdForPlayer(victim)
 	if victimPlot then playInfectionVfx(victimPlot) end

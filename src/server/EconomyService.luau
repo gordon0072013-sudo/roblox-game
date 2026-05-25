@@ -32,6 +32,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local gamepassMult = if data.gamepasses["Cash2x"] then 2 else 1
 	local groupMult = if (data :: any)._inGroup then Config.GROUP_REWARD_MULT else 1
 	local premiumMult = if player.MembershipType == Enum.MembershipType.Premium then 1.10 else 1
+	local petMult = 1
+	local okPet, PetService = pcall(require, script.Parent.PetService)
+	if okPet then petMult = PetService.GetCashMult(player) end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -41,7 +44,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
@@ -103,6 +106,8 @@ function EconomyService.TryRebirth(player: Player): boolean
 		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
 		if ok then BadgeService.Fire(player, "first_rebirth") end
 	end
+	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+	if okL then PlayerLevelService.AwardXp(player, "rebirth") end
 	return true
 end
 

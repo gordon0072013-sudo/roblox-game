@@ -32,6 +32,11 @@ local function intervalForPlayer(player: Player): number
 	if data.gamepasses["MutationSpeed2x"] then
 		interval = interval / Config.MUTATION_GAMEPASS_SPEED_MULT
 	end
+	local okPet, PetService = pcall(require, script.Parent.PetService)
+	if okPet then
+		local petMult = PetService.GetMutationSpeedMult(player)
+		if petMult > 1 then interval = interval / petMult end
+	end
 	return interval
 end
 
@@ -56,6 +61,8 @@ local function rollOne(player: Player, brainrotUid: string)
 			if BattlePassService then
 				BattlePassService.AwardXp(player, "mutation")
 			end
+			local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+			if okL then PlayerLevelService.AwardXp(player, "mutation") end
 			if BadgeService then
 				if data.stats.totalMutations == 1 then
 					BadgeService.Fire(player, "first_mutation")
