@@ -303,6 +303,12 @@ end
 do
 	local container = resolveContainer("ServerScriptService")
 	local root = container and container:FindFirstChild("Server")
+	local inst = root and resolveChild(root, "LoginStreakService")
+	check("ServerScriptService/Server/LoginStreakService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("ServerScriptService")
+	local root = container and container:FindFirstChild("Server")
 	local inst = root and resolveChild(root, "LuckyWheelService")
 	check("ServerScriptService/Server/LuckyWheelService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end
