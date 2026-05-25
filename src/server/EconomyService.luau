@@ -30,6 +30,8 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local tierMult = 1 + brainrot.mutationTier * Config.MUTATION_INCOME_MULT_PER_TIER
 	local rebirthMult = Config.REBIRTH_INCOME_MULT(data.rebirths)
 	local gamepassMult = if data.gamepasses["Cash2x"] then 2 else 1
+	local groupMult = if (data :: any)._inGroup then Config.GROUP_REWARD_MULT else 1
+	local premiumMult = if player.MembershipType == Enum.MembershipType.Premium then 1.10 else 1
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -39,7 +41,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)

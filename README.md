@@ -20,7 +20,10 @@ the proven loop:
 
 Plus the standard FOMO/retention toolbox: server-wide Outbreak events,
 7-day daily reward cycle (Premium-only bonus tier), 30-tier Battle Pass,
-server leaderboards.
+server leaderboards, **redemption codes** (your marketing dial),
+**Group +25% reward** (drives Premium-eligible community), a **6-step
+onboarding tutorial** for first-session conversion, and a **Rainbow Trail
+cosmetic gamepass** for whale slots.
 
 ## Tech stack
 
@@ -152,6 +155,27 @@ clears the target. One viral TikTok in the launch month covers the year.
    progress and re-engages lapsed players.
 5. **Always**: respond to top comments / discord pings. Engaged
    communities multiply organic reach.
+
+### Using the redemption codes (your marketing dial)
+
+`src/shared/Config.luau` ships with 6 codes (`LAUNCH`, `BRAINROT`,
+`TIKTOK1K`, `OUTBREAK`, `MUTATE`, `SIGMA`). Add a code, post a video
+that ends with *"Redeem code XYZ for 1k cash"*, watch session length
+jump (= more time in shop = more conversion). After release you can
+add/rotate codes by just editing the table and republishing — no
+schema change needed.
+
+### Group + Discord setup
+
+1. Create a Roblox **Group** (free, instant). Note its numeric ID.
+2. Paste the ID into `Config.GROUP_ID` and republish.
+3. The in-game GroupBanner now shows a +25% cash prompt to non-members.
+4. Optionally: set `Config.DISCORD_INVITE_URL` and post the link in
+   the group description.
+
+Group members get a permanent +25% cash income mult — this is the
+strongest free retention lever you have, since group membership is
+sticky and visible to Roblox's recommendation algorithm.
 
 ### Anti-revenue-loss safeguards already in code
 

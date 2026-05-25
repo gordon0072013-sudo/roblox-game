@@ -32,6 +32,7 @@ local MutationService = require(script.Parent.MutationService)
 local InfectionService = require(script.Parent.InfectionService)
 local BattlePassService -- forward
 local AnalyticsService -- forward
+local TrailService -- forward
 
 local MonetizationService = {}
 
@@ -76,6 +77,9 @@ local function grantGamepass(player: Player, key: string)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "info", text = `Gamepass unlocked: ${(Config.GAMEPASSES[key] or {name=key}).name}`,
 	})
+	if TrailService then
+		TrailService.OnGamepassGranted(player, key)
+	end
 	if AnalyticsService then
 		AnalyticsService.LogPurchase(player, "gamepass", key, (Config.GAMEPASSES[key] or {}).price or 0)
 	end
@@ -139,6 +143,7 @@ end
 function MonetizationService.Init()
 	BattlePassService = require(script.Parent.BattlePassService)
 	AnalyticsService = require(script.Parent.AnalyticsService)
+	TrailService = require(script.Parent.TrailService)
 	rebuildIndexes()
 
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gamePassId, wasPurchased)

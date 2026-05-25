@@ -30,6 +30,8 @@ local RemoteNames = {
 	RequestClaimDaily = "RequestClaimDaily",
 	RequestClaimBattlePassTier = "RequestClaimBattlePassTier",
 	RequestPromptPurchase = "RequestPromptPurchase",
+	RequestRedeemCode = "RequestRedeemCode",
+	RequestRecheckGroup = "RequestRecheckGroup",
 }
 
 local Remotes = {}

@@ -101,6 +101,7 @@ local function buildPanel(parent: Frame)
 		InfectionShield = "Big resistance to infection bombs + 50% steal blocks",
 		LuckyMutations = "Mutation rolls biased toward rare suffixes",
 		TripleCapture = "Capture button gives 3 brainrots per click",
+		RainbowTrail = "Equip a rainbow trail (flex flex flex)",
 	}
 
 	for key, gp in pairs(Config.GAMEPASSES) do

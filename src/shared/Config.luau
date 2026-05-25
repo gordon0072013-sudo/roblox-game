@@ -103,6 +103,7 @@ Config.GAMEPASSES = {
 	InfectionShield = { id = 0, price = 299, name = "Infection Shield" },
 	LuckyMutations  = { id = 0, price = 349, name = "Lucky Mutations" },
 	TripleCapture   = { id = 0, price = 399, name = "Triple Capture" },
+	RainbowTrail    = { id = 0, price = 149, name = "Rainbow Trail" }, -- cosmetic, high-margin whale slot
 }
 
 Config.DEV_PRODUCTS = {
@@ -141,5 +142,40 @@ Config.BATTLE_PASS_XP_SOURCES = {
 -- ============================================================
 Config.MAX_INVENTORY_SIZE = 200
 Config.PURCHASE_LOG_RING_SIZE = 50
+
+-- ============================================================
+-- COMMUNITY / GROUP REWARD
+-- ============================================================
+-- Replace with your real Roblox group id after creating one. A 0 disables
+-- the prompt and reward. Encourage players to join via the in-game banner;
+-- group members get a permanent income multiplier and you get a
+-- discoverable hub for announcements + Premium-eligible engagement.
+Config.GROUP_ID = 0
+Config.GROUP_REWARD_MULT = 1.25 -- +25% cash income for group members
+
+-- Optional Discord invite shown in the same banner. Leave nil to hide.
+Config.DISCORD_INVITE_URL = nil :: string?
+
+-- ============================================================
+-- CODE REDEMPTION (your marketing dial)
+-- ============================================================
+-- Codes are case-insensitive. Each code may be redeemed once per player.
+-- Use these in TikTok/Shorts/Reels videos to drive view-to-play conversion:
+--   "Redeem code TIKTOK1K for 1,000 free cash!"
+-- After release, just add more entries to this table and republish.
+type RedeemableReward = {
+	kind: string,
+	amount: number?,
+	expiresAt: number?, -- unix time; nil = no expiry
+	label: string?,
+}
+Config.REDEMPTION_CODES = {
+	LAUNCH        = { kind = "cash", amount = 2500, label = "Launch reward" },
+	BRAINROT      = { kind = "cash", amount = 1500, label = "Welcome to the lab" },
+	TIKTOK1K      = { kind = "cash", amount = 1000, label = "TikTok viewer reward" },
+	OUTBREAK      = { kind = "infection_bomb", amount = 3, label = "Outbreak survival kit" },
+	MUTATE        = { kind = "instant_mutation", amount = 1, label = "Free instant mutation" },
+	SIGMA         = { kind = "rare_egg", amount = 1, label = "Sigma seed" },
+} :: { [string]: RedeemableReward }
 
 return Config

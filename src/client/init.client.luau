@@ -49,6 +49,15 @@ NotificationUI.Init(screen)
 local PlotUI = require(script.PlotUI)
 PlotUI.Init(screen)
 
+local CodeRedeemUI = require(script.CodeRedeemUI)
+CodeRedeemUI.Init(screen, UIController)
+
+local GroupBannerUI = require(script.GroupBannerUI)
+GroupBannerUI.Init(screen)
+
+local TutorialUI = require(script.TutorialUI)
+TutorialUI.Init(screen)
+
 local SoundController = require(script.SoundController)
 SoundController.Init()
 

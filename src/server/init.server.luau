@@ -26,6 +26,9 @@ local BattlePassService = require(script.BattlePassService)
 local DailyRewardService = require(script.DailyRewardService)
 local LeaderboardService = require(script.LeaderboardService)
 local AnalyticsService = require(script.AnalyticsService)
+local CodeService = require(script.CodeService)
+local GroupRewardService = require(script.GroupRewardService)
+local TrailService = require(script.TrailService)
 
 -- Init order: data first, content next, monetization/UI services last.
 DataService.Init()
@@ -41,6 +44,9 @@ OutbreakService.Init()
 MonetizationService.Init()
 LeaderboardService.Init()
 AnalyticsService.Init()
+CodeService.Init()
+GroupRewardService.Init()
+TrailService.Init()
 
 local function onPlayerAdded(player: Player)
 	DataService.LoadProfile(player)
@@ -52,6 +58,8 @@ local function onPlayerAdded(player: Player)
 		OutbreakService.OnPlayerAdded(player)
 		BattlePassService.OnPlayerAdded(player)
 		DailyRewardService.OnPlayerAdded(player)
+		GroupRewardService.OnPlayerAdded(player)
+		TrailService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -124,6 +132,14 @@ handler(Remotes.Names.RequestPromptPurchase, function(player, kind, key)
 	if typeof(kind) == "string" and typeof(key) == "string" then
 		MonetizationService.PromptPurchase(player, kind, key)
 	end
+end)
+
+handler(Remotes.Names.RequestRedeemCode, function(player, code)
+	if typeof(code) == "string" then CodeService.Redeem(player, code) end
+end)
+
+handler(Remotes.Names.RequestRecheckGroup, function(player)
+	GroupRewardService.Check(player)
 end)
 
 print("[BrainrotLab] Server boot complete.")
