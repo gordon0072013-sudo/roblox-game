@@ -52,6 +52,8 @@ local CinematicService        = require(script.CinematicService)
 local MilestoneAnnounceService= require(script.MilestoneAnnounceService)
 local VipServerService        = require(script.VipServerService)
 local AutoSellService         = require(script.AutoSellService)
+local PerformanceService      = require(script.PerformanceService)
+local CrossServerShoutService = require(script.CrossServerShoutService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -99,6 +101,8 @@ local bootOrder = {
 	{ "MilestoneAnnounceService", MilestoneAnnounceService.Init },
 	{ "VipServerService",     VipServerService.Init      },
 	{ "AutoSellService",      AutoSellService.Init       },
+	{ "PerformanceService",   PerformanceService.Init    },
+	{ "CrossServerShoutService", CrossServerShoutService.Init },
 }
 
 for _, entry in ipairs(bootOrder) do

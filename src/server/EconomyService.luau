@@ -127,6 +127,8 @@ function EconomyService.TryRebirth(player: Player): boolean
 			durationSeconds = 3,
 		})
 	end
+	local okX, CrossServerShoutService = pcall(require, script.Parent.CrossServerShoutService)
+	if okX then CrossServerShoutService.NotifyRebirth(player, data.rebirths) end
 	return true
 end
 

@@ -1329,6 +1329,8 @@ local CinematicService        = require(script.CinematicService)
 local MilestoneAnnounceService= require(script.MilestoneAnnounceService)
 local VipServerService        = require(script.VipServerService)
 local AutoSellService         = require(script.AutoSellService)
+local PerformanceService      = require(script.PerformanceService)
+local CrossServerShoutService = require(script.CrossServerShoutService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1376,6 +1378,8 @@ local bootOrder = {
 	{ "MilestoneAnnounceService", MilestoneAnnounceService.Init },
 	{ "VipServerService",     VipServerService.Init      },
 	{ "AutoSellService",      AutoSellService.Init       },
+	{ "PerformanceService",   PerformanceService.Init    },
+	{ "CrossServerShoutService", CrossServerShoutService.Init },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -3389,6 +3393,88 @@ end
 
 return CodeService
 ]=])
+	ensurePath(root, "CrossServerShoutService", "ModuleScript", [[
+--!strict
+
+local MessagingService = game:GetService("MessagingService")
+local Players          = game:GetService("Players")
+local HttpService      = game:GetService("HttpService")
+local RunService       = game:GetService("RunService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log    = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local CrossServerShoutService = {}
+
+local TOPIC = "BrainrotLab_Shouts_v1"
+local ownServerId = HttpService:GenerateGUID(false)
+local MIN_SHOUT_THRESHOLD = {
+	rebirth = 25,    -- only shout cross-server for Rebirth 25+
+	cash    = 10000000, -- 10M total cash earned
+}
+
+-- Sends a notable event to every server in the experience. Used sparingly:
+-- the MessagingService budget is small (~60 req/min per server) so we only
+-- broadcast actually-meaningful milestones.
+
+function CrossServerShoutService.Publish(payload: any)
+	if RunService:IsStudio() then return end
+	pcall(function()
+		MessagingService:PublishAsync(TOPIC, {
+			source = ownServerId,
+			payload = payload,
+		})
+	end)
+end
+
+function CrossServerShoutService.NotifyRebirth(player: Player, rebirths: number)
+	if rebirths < MIN_SHOUT_THRESHOLD.rebirth then return end
+	CrossServerShoutService.Publish({
+		kind = "rebirth",
+		name = player.DisplayName,
+		rebirths = rebirths,
+	})
+end
+
+function CrossServerShoutService.NotifyCash(player: Player, totalEarned: number)
+	if totalEarned < MIN_SHOUT_THRESHOLD.cash then return end
+	CrossServerShoutService.Publish({
+		kind = "cash",
+		name = player.DisplayName,
+		totalEarned = totalEarned,
+	})
+end
+
+function CrossServerShoutService.Init()
+	if RunService:IsStudio() then return end
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	local ok = pcall(function()
+		MessagingService:SubscribeAsync(TOPIC, function(message: any)
+			local body = message.Data
+			if not body or body.source == ownServerId then return end
+			local p = body.payload
+			if not p then return end
+			if p.kind == "rebirth" and AnnouncementService then
+				AnnouncementService.Push(
+					string.format("🌐 Cross-server: %s reached Rebirth %d!", p.name, p.rebirths),
+					{ 255, 100, 220 }, 20)
+			elseif p.kind == "cash" and AnnouncementService then
+				AnnouncementService.Push(
+					string.format("🌐 Cross-server: %s passed %d total cash!", p.name, p.totalEarned),
+					{ 120, 220, 120 }, 20)
+			end
+		end)
+	end)
+	if not ok then
+		Log.Warn("CrossShout", "MessagingService unavailable — cross-server shouts disabled")
+	end
+end
+
+return CrossServerShoutService
+]])
 	ensurePath(root, "DailyRewardService", "ModuleScript", [=[
 --!strict
 --[[
@@ -3968,6 +4054,8 @@ function EconomyService.TryRebirth(player: Player): boolean
 			durationSeconds = 3,
 		})
 	end
+	local okX, CrossServerShoutService = pcall(require, script.Parent.CrossServerShoutService)
+	if okX then CrossServerShoutService.NotifyRebirth(player, data.rebirths) end
 	return true
 end
 
@@ -6195,6 +6283,73 @@ end
 
 return OutbreakService
 ]=])
+	ensurePath(root, "PerformanceService", "ModuleScript", [[
+--!strict
+
+local Players          = game:GetService("Players")
+local Workspace        = game:GetService("Workspace")
+local Stats            = game:GetService("Stats")
+local RunService       = game:GetService("RunService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log    = require(Shared.Log)
+
+local PerformanceService = {}
+
+-- Runtime server-side performance monitor. Logs a warning if the
+-- physics/heartbeat step time blows up, which is the early signal of
+-- a runaway loop or an unbounded model-creation pattern (the most
+-- common cause of low-end device drop-off).
+
+local SAMPLE_INTERVAL    = 15      -- seconds
+local STEP_WARN_MS       = 30      -- single-step ceiling we care about
+local PLOT_PART_LIMIT    = 800     -- if a plot folder exceeds this we warn
+
+local function countDescendantsBaseparts(folder: Instance): number
+	local n = 0
+	for _, d in ipairs(folder:GetDescendants()) do
+		if d:IsA("BasePart") then n += 1 end
+	end
+	return n
+end
+
+local function checkPlotBudgets()
+	local plots = Workspace:FindFirstChild("Plots")
+	if not plots then return end
+	for _, plot in ipairs(plots:GetChildren()) do
+		local count = countDescendantsBaseparts(plot)
+		if count > PLOT_PART_LIMIT then
+			Log.Warn("Perf", "%s has %d parts (limit %d) — consider mesh consolidation",
+				plot.Name, count, PLOT_PART_LIMIT)
+		end
+	end
+end
+
+local function snapshotStats()
+	local heartbeat = Stats:FindFirstChild("Heartbeat") and Stats.Heartbeat:GetValue() or 0
+	local physics   = Stats:FindFirstChild("Physics") and Stats.Physics:GetValue() or 0
+	local players   = #Players:GetPlayers()
+	Log.Debug("Perf", "players=%d heartbeat=%.2fms physics=%.2fms", players, heartbeat * 1000, physics * 1000)
+	if heartbeat * 1000 > STEP_WARN_MS then
+		Log.Warn("Perf", "heartbeat exceeded %dms (was %.1fms) — investigate hot loops",
+			STEP_WARN_MS, heartbeat * 1000)
+	end
+end
+
+function PerformanceService.Init()
+	if RunService:IsClient() then return end
+	task.spawn(function()
+		while true do
+			task.wait(SAMPLE_INTERVAL)
+			snapshotStats()
+			checkPlotBudgets()
+		end
+	end)
+end
+
+return PerformanceService
+]])
 	ensurePath(root, "PetService", "ModuleScript", [=[
 --!strict
 --[[
