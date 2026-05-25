@@ -9,10 +9,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared  = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
 
 local AntiCheat = {}
-
-local LOG_PREFIX = "[AntiCheat]"
 
 local RATE_LIMITS: { [string]: { window: number, max: number } } = {
 	RequestCapture            = { window = 1.0,  max = 4   },
@@ -95,8 +94,8 @@ local function flag(player: Player, tag: string, detail: string, severity: numbe
 	r.violations += severity
 	table.insert(r.flagLog, { tag = tag, detail = detail, at = os.time() })
 	if #r.flagLog > 32 then table.remove(r.flagLog, 1) end
-	warn(string.format("%s [%s sid=%s] %s — %s (severity=%d violations=%d)",
-		LOG_PREFIX, player.Name, r.sessionId, tag, detail, severity, r.violations))
+	Log.Warn("AntiCheat", "%s sid=%s | %s — %s (sev=%d total=%d)",
+		player.Name, r.sessionId, tag, detail, severity, r.violations)
 	notifyListeners(player, tag, detail, severity)
 	if r.violations >= VIOLATION_KICK_THRESHOLD then
 		player:Kick(string.format("Disconnected: anti-cheat flag (%s). Rejoin to continue.", tag))
@@ -240,7 +239,7 @@ function AntiCheat.WrapRemote(remote: RemoteEvent, name: string, handler: (Playe
 		if not AntiCheat.CheckRate(player, name) then return end
 		local ok, err = pcall(handler, player, ...)
 		if not ok then
-			warn(string.format("%s handler %s errored: %s", LOG_PREFIX, name, tostring(err)))
+			Log.Error("AntiCheat", "handler %s errored: %s", name, tostring(err))
 		end
 	end)
 end

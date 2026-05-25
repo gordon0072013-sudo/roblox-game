@@ -94,6 +94,9 @@ InviteUI.Init(screen, UIController)
 local AdminPanelUI = require(script.AdminPanelUI)
 AdminPanelUI.Init(screen)
 
+local WelcomeOfferUI = require(script.WelcomeOfferUI)
+WelcomeOfferUI.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 

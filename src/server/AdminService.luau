@@ -393,6 +393,7 @@ function AdminService.OnPlayerAdded(player: Player)
 		return
 	end
 	-- Chat-command bridge for all admins regardless of whether the panel is open.
+	-- Legacy chat path; the TextChatService path is wired once in Init().
 	if isAdmin(player.UserId) then
 		player.Chatted:Connect(function(message)
 			if string.sub(message, 1, 1) ~= "/" then return end
@@ -430,6 +431,23 @@ function AdminService.Init()
 		Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
 	end)
 
+	-- TextChatService bridge: modern Roblox chat doesn't fire player.Chatted,
+	-- so we intercept SendingMessage. Admin-prefixed '/' messages are
+	-- swallowed (destroyed) so other players don't see them.
+	local ok, TextChatService = pcall(function() return game:GetService("TextChatService") end)
+	if ok and TextChatService and TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+		TextChatService.SendingMessage:Connect(function(message)
+			local source = message.TextSource
+			if not source then return end
+			local player = Players:GetPlayerByUserId(source.UserId)
+			if not player or not isAdmin(player.UserId) then return end
+			local text = message.Text
+			if string.sub(text, 1, 1) ~= "/" then return end
+			pcall(function() message:Destroy() end)
+			local result = AdminService.RunCommand(player, text)
+			Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
+		end)
+	end
 end
 
 return AdminService

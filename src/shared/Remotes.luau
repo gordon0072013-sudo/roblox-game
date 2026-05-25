@@ -29,6 +29,7 @@ local RemoteNames = {
 	SeasonUpdate = "SeasonUpdate",
 	DecorationUpdate = "DecorationUpdate",
 	InviteUpdate = "InviteUpdate",
+	WelcomeOffer = "WelcomeOffer",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions

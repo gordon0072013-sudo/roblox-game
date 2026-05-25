@@ -1025,6 +1025,7 @@ local RemoteNames = {
 	SeasonUpdate = "SeasonUpdate",
 	DecorationUpdate = "DecorationUpdate",
 	InviteUpdate = "InviteUpdate",
+	WelcomeOffer = "WelcomeOffer",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -1306,6 +1307,8 @@ local DecorationService       = require(script.DecorationService)
 local InviteService           = require(script.InviteService)
 local WebhookService          = require(script.WebhookService)
 local AdminService            = require(script.AdminService)
+local OfflineCashService      = require(script.OfflineCashService)
+local WelcomeOfferService     = require(script.WelcomeOfferService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1342,6 +1345,8 @@ local bootOrder = {
 	{ "InviteService",        InviteService.Init         },
 	{ "WebhookService",       WebhookService.Init        },
 	{ "AdminService",         AdminService.Init          },
+	{ "OfflineCashService",   OfflineCashService.Init    },
+	{ "WelcomeOfferService",  WelcomeOfferService.Init   },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1378,6 +1383,8 @@ local function onPlayerAdded(player: Player)
 		DecorationService.OnPlayerAdded(player)
 		InviteService.OnPlayerAdded(player)
 		AdminService.OnPlayerAdded(player)
+		OfflineCashService.OnPlayerAdded(player)
+		WelcomeOfferService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -1390,6 +1397,7 @@ local function onPlayerRemoving(player: Player)
 	AfkService.OnPlayerRemoving(player)
 	DecorationService.OnPlayerRemoving(player)
 	AntiCheat.OnPlayerRemoving(player)
+	OfflineCashService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
@@ -1659,7 +1667,6 @@ return AchievementService
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace         = game:GetService("Workspace")
 local RunService        = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -2051,6 +2058,7 @@ function AdminService.OnPlayerAdded(player: Player)
 		return
 	end
 	-- Chat-command bridge for all admins regardless of whether the panel is open.
+	-- Legacy chat path; the TextChatService path is wired once in Init().
 	if isAdmin(player.UserId) then
 		player.Chatted:Connect(function(message)
 			if string.sub(message, 1, 1) ~= "/" then return end
@@ -2088,6 +2096,23 @@ function AdminService.Init()
 		Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
 	end)
 
+	-- TextChatService bridge: modern Roblox chat doesn't fire player.Chatted,
+	-- so we intercept SendingMessage. Admin-prefixed '/' messages are
+	-- swallowed (destroyed) so other players don't see them.
+	local ok, TextChatService = pcall(function() return game:GetService("TextChatService") end)
+	if ok and TextChatService and TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+		TextChatService.SendingMessage:Connect(function(message)
+			local source = message.TextSource
+			if not source then return end
+			local player = Players:GetPlayerByUserId(source.UserId)
+			if not player or not isAdmin(player.UserId) then return end
+			local text = message.Text
+			if string.sub(text, 1, 1) ~= "/" then return end
+			pcall(function() message:Destroy() end)
+			local result = AdminService.RunCommand(player, text)
+			Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
+		end)
+	end
 end
 
 return AdminService
@@ -2328,10 +2353,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared  = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
 
 local AntiCheat = {}
-
-local LOG_PREFIX = "[AntiCheat]"
 
 local RATE_LIMITS: { [string]: { window: number, max: number } } = {
 	RequestCapture            = { window = 1.0,  max = 4   },
@@ -2414,8 +2438,8 @@ local function flag(player: Player, tag: string, detail: string, severity: numbe
 	r.violations += severity
 	table.insert(r.flagLog, { tag = tag, detail = detail, at = os.time() })
 	if #r.flagLog > 32 then table.remove(r.flagLog, 1) end
-	warn(string.format("%s [%s sid=%s] %s — %s (severity=%d violations=%d)",
-		LOG_PREFIX, player.Name, r.sessionId, tag, detail, severity, r.violations))
+	Log.Warn("AntiCheat", "%s sid=%s | %s — %s (sev=%d total=%d)",
+		player.Name, r.sessionId, tag, detail, severity, r.violations)
 	notifyListeners(player, tag, detail, severity)
 	if r.violations >= VIOLATION_KICK_THRESHOLD then
 		player:Kick(string.format("Disconnected: anti-cheat flag (%s). Rejoin to continue.", tag))
@@ -2559,7 +2583,7 @@ function AntiCheat.WrapRemote(remote: RemoteEvent, name: string, handler: (Playe
 		if not AntiCheat.CheckRate(player, name) then return end
 		local ok, err = pcall(handler, player, ...)
 		if not ok then
-			warn(string.format("%s handler %s errored: %s", LOG_PREFIX, name, tostring(err)))
+			Log.Error("AntiCheat", "handler %s errored: %s", name, tostring(err))
 		end
 	end)
 end
@@ -5242,6 +5266,83 @@ end
 
 return MutationService
 ]=])
+	ensurePath(root, "OfflineCashService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config       = require(Shared.Config)
+local Remotes      = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local Util         = require(Shared.Util)
+local Log          = require(Shared.Log)
+
+local DataService    = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local OfflineCashService = {}
+
+-- How much of a player's offline time we credit. We cap at 8 hours so that
+-- players who leave for days don't return to absurd payouts that destroy
+-- the early-game economy.
+local MAX_OFFLINE_HOURS    = 8
+local OFFLINE_INCOME_RATIO = 0.40    -- offline income at 40% of live rate
+local MIN_OFFLINE_SECONDS  = 60      -- ignore session-resume blips
+
+local function estimatedIncomePerSec(player: Player): number
+	local data = DataService.Get(player)
+	if not data then return 0 end
+	-- We use the *inventory* (not just placed) at 60% to reflect the fact
+	-- that placed slots are bounded by plot capacity. Players with deep
+	-- benches benefit from the offline window even without re-placing.
+	local total = 0
+	local rebirthMult = Config.REBIRTH_INCOME_MULT(data.rebirths)
+	local cashMult = if data.gamepasses["Cash2x"] then 2 else 1
+	for _, b in ipairs(data.inventory) do
+		local def = BrainrotData.Get(b.speciesId)
+		if def then
+			local tierMult = 1 + b.mutationTier * Config.MUTATION_INCOME_MULT_PER_TIER
+			total += def.baseIncomePerSecond * tierMult
+		end
+	end
+	return total * rebirthMult * cashMult * 0.6
+end
+
+function OfflineCashService.OnPlayerAdded(player: Player)
+	DataService.OnProfileLoaded(player, function()
+		local data = DataService.Get(player)
+		if not data then return end
+		local prevLeftAt = (data :: any)._lastLeftAt or 0
+		if prevLeftAt == 0 then
+			(data :: any)._lastLeftAt = os.time()
+			return
+		end
+		local elapsed = math.min(os.time() - prevLeftAt, MAX_OFFLINE_HOURS * 3600)
+		if elapsed < MIN_OFFLINE_SECONDS then return end
+		local perSec = estimatedIncomePerSec(player)
+		if perSec <= 0 then return end
+		local earned = math.floor(perSec * elapsed * OFFLINE_INCOME_RATIO)
+		if earned <= 0 then return end
+		EconomyService.AwardCash(player, earned)
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("Welcome back! +%s cash earned while away (%s).",
+				Util.FormatShortNumber(earned), Util.SecondsToClock(elapsed)),
+		})
+		Log.Info("OfflineCash", "%s offline %ds -> +%d cash", player.Name, elapsed, earned)
+	end)
+end
+
+function OfflineCashService.OnPlayerRemoving(player: Player)
+	local data = DataService.Get(player)
+	if data then (data :: any)._lastLeftAt = os.time() end
+end
+
+function OfflineCashService.Init() end
+
+return OfflineCashService
+]])
 	ensurePath(root, "OutbreakService", "ModuleScript", [=[
 --!strict
 --[[
@@ -6605,6 +6706,74 @@ end
 
 return WebhookService
 ]=])
+	ensurePath(root, "WelcomeOfferService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config  = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local DataService = require(script.Parent.DataService)
+
+local WelcomeOfferService = {}
+
+local OFFER_DURATION_SECONDS = 600   -- 10 min visibility window
+local OFFER_SHOW_DELAY        = 90    -- give them ~90s of play first
+local OFFER_PRODUCT_KEY      = "CashLarge"   -- bundles 7,500 cash
+
+local function ensure(data: any)
+	data._welcomeOffer = data._welcomeOffer or {
+		shown = false,
+		usedAt = 0,
+		shownAt = 0,
+	}
+end
+
+local function pushOffer(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	local product = Config.DEV_PRODUCTS[OFFER_PRODUCT_KEY]
+	if not product then return end
+	Remotes.Event(Remotes.Names.WelcomeOffer):FireClient(player, {
+		kind = "show",
+		productKey = OFFER_PRODUCT_KEY,
+		title = `STARTER PACK · 50% extra cash`,
+		body  = string.format("Get %s cash for just %d R$. Today only — applies to your first purchase.",
+			tostring(product.amount or 0), product.price),
+		productPrice = product.price,
+		expiresIn = OFFER_DURATION_SECONDS,
+	})
+	data._welcomeOffer.shown = true
+	data._welcomeOffer.shownAt = os.time()
+	Log.Info("WelcomeOffer", "shown to %s", player.Name)
+end
+
+function WelcomeOfferService.OnPlayerAdded(player: Player)
+	DataService.OnProfileLoaded(player, function()
+		local data = DataService.Get(player)
+		if not data then return end
+		ensure(data)
+		-- Only first-time players (never bought anything) see this.
+		local hasBought = (data :: any)._purchaseLog and #((data :: any)._purchaseLog) > 0
+		if data._welcomeOffer.shown or hasBought then return end
+		task.delay(OFFER_SHOW_DELAY, function()
+			if not Players:FindFirstChild(player.Name) then return end
+			pushOffer(player)
+		end)
+	end)
+end
+
+function WelcomeOfferService.Init()
+	Remotes.Event(Remotes.Names.WelcomeOffer)
+end
+
+return WelcomeOfferService
+]])
 end
 
 do  -- StarterPlayer.StarterPlayerScripts/Client
@@ -6705,6 +6874,9 @@ InviteUI.Init(screen, UIController)
 
 local AdminPanelUI = require(script.AdminPanelUI)
 AdminPanelUI.Init(screen)
+
+local WelcomeOfferUI = require(script.WelcomeOfferUI)
+WelcomeOfferUI.Init(screen)
 
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
@@ -10114,6 +10286,146 @@ end
 
 return UIController
 ]=])
+	ensurePath(root, "WelcomeOfferUI", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+
+local WelcomeOfferUI = {}
+
+function WelcomeOfferUI.Init(screen: ScreenGui)
+	Remotes.Event(Remotes.Names.WelcomeOffer).OnClientEvent:Connect(function(payload)
+		if not payload or payload.kind ~= "show" then return end
+
+		local existing = screen:FindFirstChild("WelcomeOffer")
+		if existing then existing:Destroy() end
+
+		local backdrop = Instance.new("Frame")
+		backdrop.Name = "WelcomeOffer"
+		backdrop.Size = UDim2.fromScale(1, 1)
+		backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		backdrop.BackgroundTransparency = 0.4
+		backdrop.BorderSizePixel = 0
+		backdrop.Parent = screen
+
+		local frame = Instance.new("Frame")
+		frame.AnchorPoint = Vector2.new(0.5, 0.5)
+		frame.Position = UDim2.fromScale(0.5, 0.5)
+		frame.Size = UDim2.fromOffset(420, 320)
+		frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+		frame.BorderSizePixel = 0
+		frame.Parent = backdrop
+		local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(0, 16); fc.Parent = frame
+		local fs = Instance.new("UIStroke"); fs.Color = Color3.fromRGB(255, 215, 80); fs.Thickness = 3; fs.Parent = frame
+
+		local ribbon = Instance.new("TextLabel")
+		ribbon.AnchorPoint = Vector2.new(0.5, 0)
+		ribbon.Position = UDim2.new(0.5, 0, 0, -16)
+		ribbon.Size = UDim2.fromOffset(180, 32)
+		ribbon.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+		ribbon.Font = Enum.Font.GothamBlack
+		ribbon.TextScaled = true
+		ribbon.TextColor3 = Color3.fromRGB(255, 255, 255)
+		ribbon.Text = "STARTER OFFER"
+		ribbon.Parent = frame
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = ribbon
+
+		local title = Instance.new("TextLabel")
+		title.Position = UDim2.fromOffset(20, 30)
+		title.Size = UDim2.new(1, -40, 0, 48)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextWrapped = true
+		title.TextColor3 = Color3.fromRGB(255, 215, 80)
+		title.Text = payload.title or "Welcome Offer"
+		title.Parent = frame
+
+		local body = Instance.new("TextLabel")
+		body.Position = UDim2.fromOffset(20, 86)
+		body.Size = UDim2.new(1, -40, 0, 112)
+		body.BackgroundTransparency = 1
+		body.Font = Enum.Font.Gotham
+		body.TextScaled = true
+		body.TextWrapped = true
+		body.TextYAlignment = Enum.TextYAlignment.Top
+		body.TextColor3 = Color3.fromRGB(220, 220, 230)
+		body.Text = payload.body or ""
+		body.Parent = frame
+
+		local timer = Instance.new("TextLabel")
+		timer.Position = UDim2.fromOffset(20, 200)
+		timer.Size = UDim2.new(1, -40, 0, 22)
+		timer.BackgroundTransparency = 1
+		timer.Font = Enum.Font.GothamBold
+		timer.TextScaled = true
+		timer.TextColor3 = Color3.fromRGB(255, 120, 120)
+		timer.Text = ""
+		timer.Parent = frame
+
+		local buy = Instance.new("TextButton")
+		buy.Position = UDim2.fromOffset(20, 232)
+		buy.Size = UDim2.new(1, -40, 0, 48)
+		buy.Font = Enum.Font.GothamBlack
+		buy.TextScaled = true
+		buy.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+		buy.TextColor3 = Color3.fromRGB(255, 255, 255)
+		buy.BorderSizePixel = 0
+		buy.Text = string.format("BUY · R$ %d", payload.productPrice or 0)
+		buy.Parent = frame
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 10); bc.Parent = buy
+
+		local close = Instance.new("TextButton")
+		close.AnchorPoint = Vector2.new(1, 0)
+		close.Position = UDim2.new(1, -8, 0, 8)
+		close.Size = UDim2.fromOffset(32, 32)
+		close.Font = Enum.Font.GothamBold
+		close.TextScaled = true
+		close.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+		close.TextColor3 = Color3.fromRGB(220, 220, 220)
+		close.BorderSizePixel = 0
+		close.Text = "✕"
+		close.Parent = frame
+		local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 6); cc.Parent = close
+
+		local closed = false
+		local function dismiss()
+			if closed then return end
+			closed = true
+			local tw = TweenService:Create(backdrop, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
+			tw:Play()
+			tw.Completed:Wait()
+			backdrop:Destroy()
+		end
+
+		close.MouseButton1Click:Connect(dismiss)
+		buy.MouseButton1Click:Connect(function()
+			if payload.productKey then
+				Remotes.Event(Remotes.Names.RequestPromptPurchase):FireServer("product", payload.productKey)
+			end
+			task.delay(0.5, dismiss)
+		end)
+
+		-- Auto-dismiss countdown
+		task.spawn(function()
+			local expires = os.time() + (payload.expiresIn or 600)
+			while not closed do
+				local left = expires - os.time()
+				if left <= 0 then dismiss(); break end
+				timer.Text = `Expires in ${Util.SecondsToClock(left)}`
+				task.wait(1)
+			end
+		end)
+	end)
+end
+
+return WelcomeOfferUI
+]])
 end
 
 print("[BrainrotLab Installer] Install complete. Save the place or press Play to test.")
