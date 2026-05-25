@@ -61,6 +61,12 @@ TutorialUI.Init(screen)
 local AchievementUI = require(script.AchievementUI)
 AchievementUI.Init(screen, UIController)
 
+local QuestUI = require(script.QuestUI)
+QuestUI.Init(screen, UIController)
+
+local TradeUI = require(script.TradeUI)
+TradeUI.Init(screen, UIController)
+
 local SoundController = require(script.SoundController)
 SoundController.Init()
 

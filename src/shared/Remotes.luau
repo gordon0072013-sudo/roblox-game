@@ -18,6 +18,9 @@ local RemoteNames = {
 	DailyRewardUpdate = "DailyRewardUpdate",
 	LeaderboardUpdate = "LeaderboardUpdate",
 	AchievementUpdate = "AchievementUpdate",
+	QuestUpdate = "QuestUpdate",
+	TradeInvite = "TradeInvite",
+	TradeUpdate = "TradeUpdate",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -34,6 +37,15 @@ local RemoteNames = {
 	RequestRedeemCode = "RequestRedeemCode",
 	RequestRecheckGroup = "RequestRecheckGroup",
 	RequestClaimAchievement = "RequestClaimAchievement",
+	RequestClaimQuest = "RequestClaimQuest",
+	RequestTradeInvite = "RequestTradeInvite",
+	RequestTradeAccept = "RequestTradeAccept",
+	RequestTradeDecline = "RequestTradeDecline",
+	RequestTradeAddBrainrot = "RequestTradeAddBrainrot",
+	RequestTradeRemoveBrainrot = "RequestTradeRemoveBrainrot",
+	RequestTradeSetCash = "RequestTradeSetCash",
+	RequestTradeConfirm = "RequestTradeConfirm",
+	RequestTradeCancel = "RequestTradeCancel",
 }
 
 local Remotes = {}

@@ -30,6 +30,8 @@ local CodeService = require(script.CodeService)
 local GroupRewardService = require(script.GroupRewardService)
 local TrailService = require(script.TrailService)
 local AchievementService = require(script.AchievementService)
+local QuestService = require(script.QuestService)
+local TradeService = require(script.TradeService)
 
 -- Init order: data first, content next, monetization/UI services last.
 DataService.Init()
@@ -49,6 +51,8 @@ CodeService.Init()
 GroupRewardService.Init()
 TrailService.Init()
 AchievementService.Init()
+QuestService.Init()
+TradeService.Init()
 
 local function onPlayerAdded(player: Player)
 	DataService.LoadProfile(player)
@@ -63,6 +67,7 @@ local function onPlayerAdded(player: Player)
 		GroupRewardService.OnPlayerAdded(player)
 		TrailService.OnPlayerAdded(player)
 		AchievementService.OnPlayerAdded(player)
+		QuestService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -70,6 +75,7 @@ end
 local function onPlayerRemoving(player: Player)
 	LabService.OnPlayerRemoving(player)
 	StealService.OnPlayerRemoving(player)
+	TradeService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
@@ -148,5 +154,26 @@ end)
 handler(Remotes.Names.RequestClaimAchievement, function(player, id)
 	if typeof(id) == "string" then AchievementService.Claim(player, id) end
 end)
+
+handler(Remotes.Names.RequestClaimQuest, function(player, id)
+	if typeof(id) == "string" then QuestService.Claim(player, id) end
+end)
+
+handler(Remotes.Names.RequestTradeInvite, function(player, targetUserId)
+	if typeof(targetUserId) == "number" then TradeService.Invite(player, targetUserId) end
+end)
+handler(Remotes.Names.RequestTradeAccept, function(player) TradeService.Accept(player) end)
+handler(Remotes.Names.RequestTradeDecline, function(player) TradeService.Decline(player) end)
+handler(Remotes.Names.RequestTradeAddBrainrot, function(player, uid)
+	if typeof(uid) == "string" then TradeService.AddBrainrot(player, uid) end
+end)
+handler(Remotes.Names.RequestTradeRemoveBrainrot, function(player, uid)
+	if typeof(uid) == "string" then TradeService.RemoveBrainrot(player, uid) end
+end)
+handler(Remotes.Names.RequestTradeSetCash, function(player, n)
+	if typeof(n) == "number" then TradeService.SetCash(player, n) end
+end)
+handler(Remotes.Names.RequestTradeConfirm, function(player) TradeService.Confirm(player) end)
+handler(Remotes.Names.RequestTradeCancel, function(player) TradeService.Cancel(player) end)
 
 print("[BrainrotLab] Server boot complete.")

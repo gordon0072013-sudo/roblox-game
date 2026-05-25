@@ -57,6 +57,18 @@ local catalog: { Types.BrainrotDefinition } = {
 	-- Outbreak (event-only, can be captured during Outbreak event)
 	{ id="patriarch",  displayName="Patriarchus Sigmus",     rarity="Outbreak", baseIncomePerSecond=500, color=c3(255,215,0),   primaryShape="Wedge", sizeStuds=Vector3.new(7,7,7), tagline="The original. The mind virus." },
 	{ id="apexor",     displayName="Apexor Brainrot",        rarity="Outbreak", baseIncomePerSecond=650, color=c3(255,0,120),   primaryShape="Ball",  sizeStuds=Vector3.new(7,7,7), tagline="Final form. Final boss." },
+
+	-- Additional content (v2 expansion — depth keeps players collecting)
+	{ id="garamaraman",   displayName="Garamaraman Garamamarinanara", rarity="Common",    baseIncomePerSecond=2.6, color=c3(80,200,200),  primaryShape="Ball",     sizeStuds=Vector3.new(3,3,3),   tagline="Says many words. Means none." },
+	{ id="trippitroppa",  displayName="Trippi Troppa Sigma",          rarity="Uncommon",  baseIncomePerSecond=5.5, color=c3(255,80,180),  primaryShape="Ball",     sizeStuds=Vector3.new(4,3,4),   tagline="Shrimp dad. Six pack abs." },
+	{ id="bobritini",     displayName="Bobritini Crocodilini",        rarity="Rare",      baseIncomePerSecond=18,  color=c3(50,140,80),   primaryShape="Cylinder", sizeStuds=Vector3.new(5,2,5),   tagline="Bob with teeth." },
+	{ id="brrbrrtim",     displayName="Brr Brr Tim Tim",              rarity="Rare",      baseIncomePerSecond=20,  color=c3(140,100,70),  primaryShape="Block",    sizeStuds=Vector3.new(4,4,3),   tagline="Two trees, one mission." },
+	{ id="trulilulilu",   displayName="Trulilu Lirili Lulilu",        rarity="Epic",      baseIncomePerSecond=44,  color=c3(220,140,255), primaryShape="Wedge",    sizeStuds=Vector3.new(4,5,4),   tagline="Forgets what time means." },
+	{ id="bombobambino",  displayName="Bombobambino Bambinello",      rarity="Epic",      baseIncomePerSecond=50,  color=c3(180,200,80),  primaryShape="Cylinder", sizeStuds=Vector3.new(3,3,3),   tagline="Tiny bombs. Big anger." },
+	{ id="cappuccinetto", displayName="Cappuccinetto Mezzanotte",     rarity="Legendary", baseIncomePerSecond=140, color=c3(60,30,20),    primaryShape="Cylinder", sizeStuds=Vector3.new(3,4,3),   tagline="Espresso at 3am. Unstoppable." },
+	{ id="frigocamelona", displayName="Frigo Camelona Suprema",       rarity="Legendary", baseIncomePerSecond=160, color=c3(255,255,255), primaryShape="Block",    sizeStuds=Vector3.new(5,6,5),   tagline="Holds the cold and the truth." },
+	{ id="balerinamamma", displayName="Ballerina Mamma Mia",          rarity="Mythic",    baseIncomePerSecond=320, color=c3(255,200,220), primaryShape="Block",    sizeStuds=Vector3.new(4,6,4),   tagline="Dances on dimensions." },
+	{ id="lalilelilu",    displayName="La Lili Le Li Lu",             rarity="Mythic",    baseIncomePerSecond=380, color=c3(180,0,255),   primaryShape="Cylinder", sizeStuds=Vector3.new(4,7,4),   tagline="Numbers became sounds, sounds became him." },
 }
 
 local byId: { [string]: Types.BrainrotDefinition } = {}
