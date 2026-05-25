@@ -91,6 +91,9 @@ DecorationUI.Init(screen, UIController)
 local InviteUI = require(script.InviteUI)
 InviteUI.Init(screen, UIController)
 
+local AdminPanelUI = require(script.AdminPanelUI)
+AdminPanelUI.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 

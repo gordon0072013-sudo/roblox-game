@@ -40,6 +40,7 @@ local SeasonService           = require(script.SeasonService)
 local DecorationService       = require(script.DecorationService)
 local InviteService           = require(script.InviteService)
 local WebhookService          = require(script.WebhookService)
+local AdminService            = require(script.AdminService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -75,6 +76,7 @@ local bootOrder = {
 	{ "DecorationService",    DecorationService.Init     },
 	{ "InviteService",        InviteService.Init         },
 	{ "WebhookService",       WebhookService.Init        },
+	{ "AdminService",         AdminService.Init          },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -84,6 +86,10 @@ end
 
 local function onPlayerAdded(player: Player)
 	AntiCheat.OnPlayerAdded(player)
+	if AdminService.IsBanned(player.UserId) then
+		player:Kick("You are banned from this experience.")
+		return
+	end
 	DataService.LoadProfile(player)
 	DataService.OnProfileLoaded(player, function()
 		LabService.OnPlayerAdded(player)
@@ -106,6 +112,7 @@ local function onPlayerAdded(player: Player)
 		SeasonService.OnPlayerAdded(player)
 		DecorationService.OnPlayerAdded(player)
 		InviteService.OnPlayerAdded(player)
+		AdminService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end

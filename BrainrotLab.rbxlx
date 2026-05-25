@@ -428,6 +428,14 @@ Config.MAX_INVENTORY_SIZE = 200
 Config.PURCHASE_LOG_RING_SIZE = 50
 
 -- ============================================================
+-- ADMIN
+-- ============================================================
+-- The experience owner (game.CreatorId) is admin by default. Add extra
+-- UserIds here to grant admin access without owning the experience.
+-- Owner-only commands stay locked to game.CreatorId.
+Config.ADMIN_USER_IDS = {} :: { number }
+
+-- ============================================================
 -- COMMUNITY / GROUP REWARD
 -- ============================================================
 -- Replace with your real Roblox group id after creating one. A 0 disables
@@ -1262,6 +1270,7 @@ local SeasonService           = require(script.SeasonService)
 local DecorationService       = require(script.DecorationService)
 local InviteService           = require(script.InviteService)
 local WebhookService          = require(script.WebhookService)
+local AdminService            = require(script.AdminService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1297,6 +1306,7 @@ local bootOrder = {
 	{ "DecorationService",    DecorationService.Init     },
 	{ "InviteService",        InviteService.Init         },
 	{ "WebhookService",       WebhookService.Init        },
+	{ "AdminService",         AdminService.Init          },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1306,6 +1316,10 @@ end
 
 local function onPlayerAdded(player: Player)
 	AntiCheat.OnPlayerAdded(player)
+	if AdminService.IsBanned(player.UserId) then
+		player:Kick("You are banned from this experience.")
+		return
+	end
 	DataService.LoadProfile(player)
 	DataService.OnProfileLoaded(player, function()
 		LabService.OnPlayerAdded(player)
@@ -1328,6 +1342,7 @@ local function onPlayerAdded(player: Player)
 		SeasonService.OnPlayerAdded(player)
 		DecorationService.OnPlayerAdded(player)
 		InviteService.OnPlayerAdded(player)
+		AdminService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -1611,6 +1626,448 @@ return AchievementService
       </Item>
       <Item class="ModuleScript" referent="22">
         <Properties>
+          <string name="Name">AdminService</string>
+          <string name="Source"><![CDATA[--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace         = game:GetService("Workspace")
+local RunService        = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config       = require(Shared.Config)
+local Remotes      = require(Shared.Remotes)
+local Log          = require(Shared.Log)
+local BrainrotData = require(Shared.BrainrotData)
+
+local DataService     = require(script.Parent.DataService)
+local EconomyService  = require(script.Parent.EconomyService)
+local LabService      = require(script.Parent.LabService)
+local CaptureService  = require(script.Parent.CaptureService)
+local InfectionService= require(script.Parent.InfectionService)
+local MutationService = require(script.Parent.MutationService)
+local AntiCheat       = require(script.Parent.AntiCheat)
+
+local AdminService = {}
+
+-- ============================================================
+-- AUTHORIZATION
+-- ============================================================
+-- Owner is auto-detected via game.CreatorId (works for both User-owned
+-- and Group-owned experiences). Additional admin UserIds can be added
+-- via Config.ADMIN_USER_IDS.
+
+local function isOwner(userId: number): boolean
+	if userId == game.CreatorId then return true end
+	if game.CreatorType == Enum.CreatorType.Group then
+		local ok, rank = pcall(function() return Players:GetPlayerByUserId(userId):GetRankInGroup(game.CreatorId) end)
+		if ok and rank and rank >= 254 then return true end -- group owner / co-owner
+	end
+	return false
+end
+
+local function isAdmin(userId: number): boolean
+	if isOwner(userId) then return true end
+	for _, id in ipairs((Config :: any).ADMIN_USER_IDS or {}) do
+		if id == userId then return true end
+	end
+	return false
+end
+
+function AdminService.IsAdmin(player: Player): boolean
+	return isAdmin(player.UserId)
+end
+
+function AdminService.IsOwner(player: Player): boolean
+	return isOwner(player.UserId)
+end
+
+-- ============================================================
+-- COMMANDS
+-- ============================================================
+
+type Command = {
+	name: string,
+	usage: string,
+	help: string,
+	ownerOnly: boolean?,
+	fn: (Player, { string }) -> string,
+}
+
+local commands: { Command } = {}
+
+local function find(commands_: { Command }, name: string): Command?
+	name = string.lower(name)
+	for _, c in ipairs(commands_) do
+		if c.name == name then return c end
+	end
+	return nil
+end
+
+local function findPlayer(query: string): Player?
+	query = string.lower(query)
+	for _, p in ipairs(Players:GetPlayers()) do
+		if string.lower(p.Name) == query or string.lower(p.DisplayName) == query
+			or string.lower(p.Name):sub(1, #query) == query then
+			return p
+		end
+	end
+	return nil
+end
+
+local function asNumber(s: string?): number?
+	if not s then return nil end
+	local n = tonumber(s)
+	return if n == n and n ~= math.huge and n ~= -math.huge then n else nil
+end
+
+table.insert(commands, {
+	name = "help",
+	usage = "/help",
+	help = "List commands.",
+	fn = function(player, args)
+		local list = {}
+		for _, c in ipairs(commands) do
+			table.insert(list, string.format("%s — %s", c.usage, c.help))
+		end
+		return "Commands:\n" .. table.concat(list, "\n")
+	end,
+})
+
+table.insert(commands, {
+	name = "give",
+	usage = "/give <player> <amount>",
+	help = "Give cash to a player (owner only).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local amount = asNumber(args[2])
+		if not target or not amount then return "usage: /give <player> <amount>" end
+		EconomyService.AwardCash(target, math.floor(amount), "admin grant")
+		return string.format("granted %d cash to %s", math.floor(amount), target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "rebirths",
+	usage = "/rebirths <player> <count>",
+	help = "Set a player's rebirth count.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local count  = asNumber(args[2])
+		if not target or not count then return "usage: /rebirths <player> <count>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		data.rebirths = math.max(0, math.floor(count))
+		EconomyService.PushHud(target)
+		return string.format("%s rebirths = %d", target.Name, data.rebirths)
+	end,
+})
+
+table.insert(commands, {
+	name = "give-brainrot",
+	usage = "/give-brainrot <player> <speciesId>",
+	help = "Give a player a specific brainrot. species id in BrainrotData.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local id = args[2]
+		if not target or not id then return "usage: /give-brainrot <player> <speciesId>" end
+		local def = BrainrotData.Get(id)
+		if not def then return "unknown species: " .. id end
+		CaptureService.GiveOutbreakBrainrot(target, id)
+		return string.format("gave %s to %s", def.displayName, target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "skip-outbreak",
+	usage = "/skip-outbreak",
+	help = "Trigger an Outbreak event immediately.",
+	ownerOnly = true,
+	fn = function()
+		local OutbreakService = require(script.Parent.OutbreakService)
+		if OutbreakService and (OutbreakService :: any).ForceStart then
+			(OutbreakService :: any).ForceStart()
+			return "outbreak forced"
+		end
+		return "outbreak service does not expose ForceStart yet"
+	end,
+})
+
+table.insert(commands, {
+	name = "spawn-boss",
+	usage = "/spawn-boss",
+	help = "Spawn the Mega Boss now.",
+	ownerOnly = true,
+	fn = function()
+		local BossEventService = require(script.Parent.BossEventService)
+		if BossEventService and (BossEventService :: any).ForceSpawn then
+			(BossEventService :: any).ForceSpawn()
+			return "boss forced"
+		end
+		return "boss service does not expose ForceSpawn yet"
+	end,
+})
+
+table.insert(commands, {
+	name = "mutate-all",
+	usage = "/mutate-all <player>",
+	help = "Force a mutation on every placed brainrot for a player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /mutate-all <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local n = 0
+		for _, b in ipairs(data.inventory) do
+			if b.placed then
+				MutationService.ForceInstantMutation(target)
+				n += 1
+			end
+		end
+		return string.format("forced %d mutations on %s", n, target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "tp",
+	usage = "/tp <player> [targetPlayer|x,y,z]",
+	help = "Teleport a player to another player or coordinates.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /tp <player> <target|x,y,z>" end
+		local dest = args[2]
+		if not dest then return "missing destination" end
+		local destPlayer = findPlayer(dest)
+		if destPlayer and destPlayer.Character then
+			target.Character:PivotTo(destPlayer.Character:GetPivot())
+			return string.format("tp %s -> %s", target.Name, destPlayer.Name)
+		end
+		local x, y, z = string.match(dest, "(-?%d+%.?%d*),(-?%d+%.?%d*),(-?%d+%.?%d*)")
+		if x then
+			target.Character:PivotTo(CFrame.new(tonumber(x) :: number, tonumber(y) :: number, tonumber(z) :: number))
+			return string.format("tp %s -> %s,%s,%s", target.Name, x, y, z)
+		end
+		return "could not resolve destination"
+	end,
+})
+
+table.insert(commands, {
+	name = "kick",
+	usage = "/kick <player> [reason]",
+	help = "Kick a player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /kick <player> [reason]" end
+		local reason = table.concat(args, " ", 2)
+		if reason == "" then reason = "Removed by admin." end
+		target:Kick(reason)
+		return string.format("kicked %s — %s", target.Name, reason)
+	end,
+})
+
+table.insert(commands, {
+	name = "ban",
+	usage = "/ban <userId|name> [reason]",
+	help = "Soft-ban a user (DataStore-backed, persistent).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local first = args[1]
+		if not first then return "usage: /ban <userId|name>" end
+		local userId = tonumber(first)
+		if not userId then
+			local p = findPlayer(first)
+			if p then userId = p.UserId end
+		end
+		if not userId then return "could not resolve user" end
+		AdminService.SoftBan(userId, table.concat(args, " ", 2))
+		local p = Players:GetPlayerByUserId(userId)
+		if p then p:Kick("Banned by admin.") end
+		return string.format("banned userId %d", userId)
+	end,
+})
+
+table.insert(commands, {
+	name = "unban",
+	usage = "/unban <userId>",
+	help = "Lift a soft-ban.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local userId = asNumber(args[1])
+		if not userId then return "usage: /unban <userId>" end
+		AdminService.SoftUnban(math.floor(userId))
+		return string.format("unbanned userId %d", math.floor(userId))
+	end,
+})
+
+table.insert(commands, {
+	name = "flags",
+	usage = "/flags",
+	help = "Show recent anti-cheat flags for all players.",
+	fn = function()
+		local snap = AntiCheat.Snapshot()
+		local lines = {}
+		for name, info in pairs(snap) do
+			table.insert(lines, string.format("%s (sid=%s, vio=%d, recent=%d)",
+				name, info.sessionId, info.violations, #info.recentFlags))
+			for _, f in ipairs(info.recentFlags) do
+				table.insert(lines, string.format("    %s: %s", f.tag, f.detail))
+			end
+		end
+		return #lines > 0 and table.concat(lines, "\n") or "no flags"
+	end,
+})
+
+table.insert(commands, {
+	name = "stats",
+	usage = "/stats",
+	help = "Show server stats summary.",
+	fn = function()
+		local n = #Players:GetPlayers()
+		return string.format("server: %d/%d players, uptime %ds", n, Players.MaxPlayers, math.floor(time()))
+	end,
+})
+
+-- ============================================================
+-- BAN STORE (persistent across servers)
+-- ============================================================
+local DataStoreService = game:GetService("DataStoreService")
+local banStore: DataStore?
+if not RunService:IsStudio() then
+	pcall(function() banStore = DataStoreService:GetDataStore(Config.DATASTORE_SCOPE .. "_Bans") end)
+end
+
+local banCache: { [number]: { reason: string, at: number } } = {}
+
+function AdminService.SoftBan(userId: number, reason: string?)
+	local entry = { reason = reason or "Banned", at = os.time() }
+	banCache[userId] = entry
+	if banStore then
+		pcall(function() banStore:SetAsync(tostring(userId), entry) end)
+	end
+end
+
+function AdminService.SoftUnban(userId: number)
+	banCache[userId] = nil
+	if banStore then
+		pcall(function() banStore:RemoveAsync(tostring(userId)) end)
+	end
+end
+
+function AdminService.IsBanned(userId: number): boolean
+	if banCache[userId] then return true end
+	if not banStore then return false end
+	local ok, entry = pcall(function() return banStore:GetAsync(tostring(userId)) end)
+	if ok and entry then banCache[userId] = entry; return true end
+	return false
+end
+
+-- ============================================================
+-- DISPATCH
+-- ============================================================
+
+function AdminService.RunCommand(player: Player, line: string): string
+	if not isAdmin(player.UserId) then
+		return "permission denied"
+	end
+	if string.sub(line, 1, 1) == "/" then line = string.sub(line, 2) end
+	local parts: { string } = {}
+	for word in string.gmatch(line, "%S+") do table.insert(parts, word) end
+	if #parts == 0 then return "type /help" end
+	local name = string.lower(table.remove(parts, 1) :: string)
+	local cmd = find(commands, name)
+	if not cmd then return "unknown command: " .. name end
+	if cmd.ownerOnly and not isOwner(player.UserId) then return "owner-only command" end
+	local ok, result = pcall(cmd.fn, player, parts)
+	if not ok then
+		Log.Error("Admin", "%s ran /%s -> %s", player.Name, name, tostring(result))
+		return "error: " .. tostring(result)
+	end
+	Log.Info("Admin", "%s ran /%s -> %s", player.Name, name, tostring(result))
+	return tostring(result)
+end
+
+function AdminService.SnapshotPlayers(): { any }
+	local out = {}
+	local flags = AntiCheat.Snapshot()
+	for _, p in ipairs(Players:GetPlayers()) do
+		local d = DataService.Get(p)
+		local f = flags[p.Name] or { violations = 0, recentFlags = {} }
+		table.insert(out, {
+			userId = p.UserId,
+			name = p.Name,
+			displayName = p.DisplayName,
+			cash = d and d.cash or 0,
+			rebirths = d and d.rebirths or 0,
+			brainrots = d and #d.inventory or 0,
+			violations = f.violations,
+			isAdmin = isAdmin(p.UserId),
+			isOwner = isOwner(p.UserId),
+		})
+	end
+	return out
+end
+
+-- ============================================================
+-- INIT
+-- ============================================================
+local OPEN_REMOTE_NAME = "AdminUpdate"
+local RUN_REMOTE_NAME  = "AdminRunCommand"
+
+function AdminService.OnPlayerAdded(player: Player)
+	if AdminService.IsBanned(player.UserId) then
+		player:Kick("You are banned from this experience.")
+		return
+	end
+	-- Chat-command bridge for all admins regardless of whether the panel is open.
+	if isAdmin(player.UserId) then
+		player.Chatted:Connect(function(message)
+			if string.sub(message, 1, 1) ~= "/" then return end
+			local result = AdminService.RunCommand(player, message)
+			Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
+		end)
+		task.delay(2, function()
+			Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, {
+				kind = "init",
+				isOwner = isOwner(player.UserId),
+				players = AdminService.SnapshotPlayers(),
+			})
+		end)
+		task.spawn(function()
+			while player.Parent do
+				task.wait(5)
+				if isAdmin(player.UserId) then
+					Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, {
+						kind = "tick",
+						players = AdminService.SnapshotPlayers(),
+					})
+				end
+			end
+		end)
+	end
+end
+
+function AdminService.Init()
+	Remotes.Event(OPEN_REMOTE_NAME)
+
+	AntiCheat.WrapRemote(Remotes.Event(RUN_REMOTE_NAME), RUN_REMOTE_NAME, function(player, line)
+		if typeof(line) ~= "string" then return end
+		if #line > 256 then return end
+		local result = AdminService.RunCommand(player, line)
+		Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
+	end)
+
+end
+
+return AdminService
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="23">
+        <Properties>
           <string name="Name">AfkService</string>
           <string name="Source"><![CDATA[--!strict
 --[[
@@ -1698,7 +2155,7 @@ return AfkService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="23">
+      <Item class="ModuleScript" referent="24">
         <Properties>
           <string name="Name">AnalyticsService</string>
           <string name="Source"><![CDATA[--!strict
@@ -1749,7 +2206,7 @@ return AnalyticsService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="24">
+      <Item class="ModuleScript" referent="25">
         <Properties>
           <string name="Name">AnnouncementService</string>
           <string name="Source"><![CDATA[--!strict
@@ -1845,7 +2302,7 @@ return AnnouncementService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="25">
+      <Item class="ModuleScript" referent="26">
         <Properties>
           <string name="Name">AntiCheat</string>
           <string name="Source"><![CDATA[--!strict
@@ -2141,7 +2598,7 @@ return AntiCheat
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="26">
+      <Item class="ModuleScript" referent="27">
         <Properties>
           <string name="Name">BadgeService</string>
           <string name="Source"><![CDATA[--!strict
@@ -2248,7 +2705,7 @@ return BadgeService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="27">
+      <Item class="ModuleScript" referent="28">
         <Properties>
           <string name="Name">BattlePassService</string>
           <string name="Source"><![CDATA[--!strict
@@ -2370,7 +2827,7 @@ return BattlePassService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="28">
+      <Item class="ModuleScript" referent="29">
         <Properties>
           <string name="Name">BossEventService</string>
           <string name="Source"><![CDATA[--!strict
@@ -2561,6 +3018,11 @@ function BossEventService.Init()
 	end)
 end
 
+function BossEventService.ForceSpawn()
+	if activeBoss then return end
+	spawnBoss()
+end
+
 function BossEventService.OnPlayerAdded(player: Player)
 	task.delay(2, broadcastState)
 end
@@ -2569,7 +3031,7 @@ return BossEventService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="29">
+      <Item class="ModuleScript" referent="30">
         <Properties>
           <string name="Name">CaptureService</string>
           <string name="Source"><![CDATA[--!strict
@@ -2656,7 +3118,7 @@ return CaptureService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="30">
+      <Item class="ModuleScript" referent="31">
         <Properties>
           <string name="Name">CodeService</string>
           <string name="Source"><![CDATA[--!strict
@@ -2742,7 +3204,7 @@ return CodeService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="31">
+      <Item class="ModuleScript" referent="32">
         <Properties>
           <string name="Name">DailyRewardService</string>
           <string name="Source"><![CDATA[--!strict
@@ -2822,7 +3284,7 @@ return DailyRewardService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="32">
+      <Item class="ModuleScript" referent="33">
         <Properties>
           <string name="Name">DataService</string>
           <string name="Source"><![CDATA[--!strict
@@ -3010,7 +3472,7 @@ return DataService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="33">
+      <Item class="ModuleScript" referent="34">
         <Properties>
           <string name="Name">DecorationService</string>
           <string name="Source"><![CDATA[--!strict
@@ -3203,7 +3665,7 @@ return DecorationService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="34">
+      <Item class="ModuleScript" referent="35">
         <Properties>
           <string name="Name">EconomyService</string>
           <string name="Source"><![CDATA[--!strict
@@ -3355,7 +3817,7 @@ return EconomyService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="35">
+      <Item class="ModuleScript" referent="36">
         <Properties>
           <string name="Name">GlobalLeaderboardService</string>
           <string name="Source"><![CDATA[--!strict
@@ -3510,7 +3972,7 @@ return GlobalLeaderboardService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="36">
+      <Item class="ModuleScript" referent="37">
         <Properties>
           <string name="Name">GroupRewardService</string>
           <string name="Source"><![CDATA[--!strict
@@ -3579,7 +4041,7 @@ return GroupRewardService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="37">
+      <Item class="ModuleScript" referent="38">
         <Properties>
           <string name="Name">InfectionService</string>
           <string name="Source"><![CDATA[--!strict
@@ -3685,7 +4147,7 @@ return InfectionService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="38">
+      <Item class="ModuleScript" referent="39">
         <Properties>
           <string name="Name">InviteService</string>
           <string name="Source"><![CDATA[--!strict
@@ -3816,7 +4278,7 @@ return InviteService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="39">
+      <Item class="ModuleScript" referent="40">
         <Properties>
           <string name="Name">LabService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4437,7 +4899,7 @@ return LabService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="40">
+      <Item class="ModuleScript" referent="41">
         <Properties>
           <string name="Name">LeaderboardService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4508,7 +4970,7 @@ return LeaderboardService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="41">
+      <Item class="ModuleScript" referent="42">
         <Properties>
           <string name="Name">MonetizationService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4713,7 +5175,7 @@ return MonetizationService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="42">
+      <Item class="ModuleScript" referent="43">
         <Properties>
           <string name="Name">MutationService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4838,7 +5300,7 @@ return MutationService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="43">
+      <Item class="ModuleScript" referent="44">
         <Properties>
           <string name="Name">OutbreakService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5028,6 +5490,11 @@ function OutbreakService.Init()
 	end)
 end
 
+function OutbreakService.ForceStart()
+	if os.time() < activeUntil then return end
+	startOutbreak()
+end
+
 function OutbreakService.OnPlayerAdded(player: Player)
 	task.delay(2, pushOutbreakState)
 end
@@ -5036,7 +5503,7 @@ return OutbreakService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="44">
+      <Item class="ModuleScript" referent="45">
         <Properties>
           <string name="Name">PetService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5234,7 +5701,7 @@ return PetService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="45">
+      <Item class="ModuleScript" referent="46">
         <Properties>
           <string name="Name">PlayerLevelService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5333,7 +5800,7 @@ return PlayerLevelService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="46">
+      <Item class="ModuleScript" referent="47">
         <Properties>
           <string name="Name">QuestService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5511,7 +5978,7 @@ return QuestService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="47">
+      <Item class="ModuleScript" referent="48">
         <Properties>
           <string name="Name">SeasonService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5614,7 +6081,7 @@ return SeasonService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="48">
+      <Item class="ModuleScript" referent="49">
         <Properties>
           <string name="Name">StealService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5778,7 +6245,7 @@ return StealService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="49">
+      <Item class="ModuleScript" referent="50">
         <Properties>
           <string name="Name">TradeService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6081,7 +6548,7 @@ return TradeService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="50">
+      <Item class="ModuleScript" referent="51">
         <Properties>
           <string name="Name">TrailService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6166,7 +6633,7 @@ return TrailService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="51">
+      <Item class="ModuleScript" referent="52">
         <Properties>
           <string name="Name">WebhookService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6233,27 +6700,27 @@ return WebhookService
         </Properties>
       </Item>
     </Item>
-    <Item class="Folder" referent="52">
+    <Item class="Folder" referent="53">
       <Properties>
         <string name="Name">ServerPackages</string>
       </Properties>
     </Item>
   </Item>
-  <Item class="SoundService" referent="53">
+  <Item class="SoundService" referent="54">
     <Properties>
       <string name="Name">SoundService</string>
       <bool name="RespectFilteringEnabled">true</bool>
     </Properties>
   </Item>
-  <Item class="StarterPlayer" referent="54">
+  <Item class="StarterPlayer" referent="55">
     <Properties>
       <string name="Name">StarterPlayer</string>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="55">
+    <Item class="StarterPlayerScripts" referent="56">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="56">
+      <Item class="LocalScript" referent="57">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[--!strict
@@ -6349,6 +6816,9 @@ DecorationUI.Init(screen, UIController)
 local InviteUI = require(script.InviteUI)
 InviteUI.Init(screen, UIController)
 
+local AdminPanelUI = require(script.AdminPanelUI)
+AdminPanelUI.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 
@@ -6358,7 +6828,7 @@ SoundController.Init()
 print("[BrainrotLab] Client ready.")
 ]]></string>
         </Properties>
-        <Item class="ModuleScript" referent="57">
+        <Item class="ModuleScript" referent="58">
           <Properties>
             <string name="Name">AchievementUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -6501,7 +6971,279 @@ return AchievementUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="58">
+        <Item class="ModuleScript" referent="59">
+          <Properties>
+            <string name="Name">AdminPanelUI</string>
+            <string name="Source"><![CDATA[--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+
+local Shared  = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local AdminPanelUI = {}
+
+local UPDATE_REMOTE = "AdminUpdate"
+local RUN_REMOTE    = "AdminRunCommand"
+
+local localPlayer = Players.LocalPlayer
+
+local panel:        Frame?
+local resultLabel:  TextLabel?
+local playersList:  ScrollingFrame?
+local input:        TextBox?
+local toggleButton: TextButton?
+local isOwner = false
+
+local function applyStyle(b: TextButton, color: Color3)
+	b.Font = Enum.Font.GothamBold
+	b.TextScaled = true
+	b.BackgroundColor3 = color
+	b.TextColor3 = Color3.fromRGB(255,255,255)
+	b.BorderSizePixel = 0
+	b.AutoButtonColor = true
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = b
+end
+
+local function mkButton(parent: Instance, text: string, color: Color3, onClick: () -> ()): TextButton
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.fromOffset(120, 30)
+	b.Text = text
+	b.Parent = parent
+	applyStyle(b, color)
+	b.MouseButton1Click:Connect(onClick)
+	return b
+end
+
+local function renderPlayers(list: { any })
+	if not playersList then return end
+	playersList:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = playersList
+
+	for _, p in ipairs(list) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 56)
+		row.BackgroundColor3 = if p.isOwner then Color3.fromRGB(70, 60, 30)
+			elseif p.isAdmin then Color3.fromRGB(40, 60, 40)
+			elseif p.violations > 0 then Color3.fromRGB(70, 30, 30)
+			else Color3.fromRGB(35, 35, 50)
+		row.BorderSizePixel = 0
+		row.Parent = playersList
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = row
+
+		local name = Instance.new("TextLabel")
+		name.Position = UDim2.fromOffset(10, 4)
+		name.Size = UDim2.new(1, -260, 0, 22)
+		name.BackgroundTransparency = 1
+		name.Font = Enum.Font.GothamBold
+		name.TextScaled = true
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.TextColor3 = Color3.fromRGB(255,255,255)
+		local badge = p.isOwner and " 👑" or (p.isAdmin and " 🛡️" or "")
+		name.Text = `${p.displayName}${badge}  (${p.name})`
+		name.Parent = row
+
+		local stats = Instance.new("TextLabel")
+		stats.Position = UDim2.fromOffset(10, 28)
+		stats.Size = UDim2.new(1, -260, 0, 22)
+		stats.BackgroundTransparency = 1
+		stats.Font = Enum.Font.Gotham
+		stats.TextScaled = true
+		stats.TextXAlignment = Enum.TextXAlignment.Left
+		stats.TextColor3 = Color3.fromRGB(200, 200, 220)
+		stats.Text = string.format("%d cash · R%d · %d brainrots · vio %d",
+			p.cash, p.rebirths, p.brainrots, p.violations)
+		stats.Parent = row
+
+		local function quick(name: string, color: Color3, line: string, dx: number)
+			local b = mkButton(row, name, color, function()
+				Remotes.Event(RUN_REMOTE):FireServer(line)
+			end)
+			b.AnchorPoint = Vector2.new(1, 0.5)
+			b.Position = UDim2.new(1, dx, 0.5, 0)
+			b.Size = UDim2.fromOffset(80, 40)
+		end
+
+		quick("Give 10k", Color3.fromRGB(80, 200, 120), `give ${p.name} 10000`, -10)
+		quick("Mutate",   Color3.fromRGB(255, 100, 220), `mutate-all ${p.name}`, -96)
+		quick("Kick",     Color3.fromRGB(220, 80, 80),  `kick ${p.name}`, -182)
+	end
+end
+
+local function showResult(text: string)
+	if resultLabel then
+		resultLabel.Text = text
+	end
+end
+
+local function buildPanel(screen: ScreenGui)
+	panel = Instance.new("Frame")
+	(panel :: Frame).Name = "AdminPanel"
+	(panel :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
+	(panel :: Frame).Position = UDim2.fromScale(0.5, 0.5)
+	(panel :: Frame).Size = UDim2.fromOffset(760, 580)
+	(panel :: Frame).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+	(panel :: Frame).BackgroundTransparency = 0.05
+	(panel :: Frame).BorderSizePixel = 0
+	(panel :: Frame).Visible = false
+	(panel :: Frame).Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = panel
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 80, 80); s.Thickness = 2; s.Parent = panel
+
+	local header = Instance.new("TextLabel")
+	header.Position = UDim2.fromOffset(14, 8)
+	header.Size = UDim2.new(1, -28, 0, 32)
+	header.BackgroundTransparency = 1
+	header.Font = Enum.Font.GothamBlack
+	header.TextScaled = true
+	header.TextColor3 = Color3.fromRGB(255, 80, 80)
+	header.TextXAlignment = Enum.TextXAlignment.Left
+	header.Text = "🛡 ADMIN PANEL — owner only"
+	header.Parent = panel
+
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.AnchorPoint = Vector2.new(1, 0)
+	closeBtn.Position = UDim2.new(1, -10, 0, 8)
+	closeBtn.Size = UDim2.fromOffset(60, 32)
+	closeBtn.Parent = panel
+	applyStyle(closeBtn, Color3.fromRGB(60, 60, 80))
+	closeBtn.Text = "✕"
+	closeBtn.MouseButton1Click:Connect(function()
+		if panel then panel.Visible = false end
+	end)
+
+	playersList = Instance.new("ScrollingFrame")
+	(playersList :: ScrollingFrame).Position = UDim2.fromOffset(14, 50)
+	(playersList :: ScrollingFrame).Size = UDim2.new(1, -28, 0, 360)
+	(playersList :: ScrollingFrame).BackgroundColor3 = Color3.fromRGB(22, 22, 38)
+	(playersList :: ScrollingFrame).BackgroundTransparency = 0.3
+	(playersList :: ScrollingFrame).BorderSizePixel = 0
+	(playersList :: ScrollingFrame).ScrollBarThickness = 6
+	(playersList :: ScrollingFrame).CanvasSize = UDim2.new(0, 0, 0, 0)
+	(playersList :: ScrollingFrame).AutomaticCanvasSize = Enum.AutomaticSize.Y
+	(playersList :: ScrollingFrame).Parent = panel
+	local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 8); pc.Parent = playersList
+
+	-- Quick commands row
+	local quickRow = Instance.new("Frame")
+	quickRow.Position = UDim2.fromOffset(14, 420)
+	quickRow.Size = UDim2.new(1, -28, 0, 40)
+	quickRow.BackgroundTransparency = 1
+	quickRow.Parent = panel
+	local qrLayout = Instance.new("UIListLayout")
+	qrLayout.FillDirection = Enum.FillDirection.Horizontal
+	qrLayout.Padding = UDim.new(0, 6)
+	qrLayout.Parent = quickRow
+
+	mkButton(quickRow, "Outbreak",   Color3.fromRGB(255, 120, 60),  function() Remotes.Event(RUN_REMOTE):FireServer("skip-outbreak") end)
+	mkButton(quickRow, "Spawn Boss", Color3.fromRGB(255, 80, 80),   function() Remotes.Event(RUN_REMOTE):FireServer("spawn-boss") end)
+	mkButton(quickRow, "Flags",      Color3.fromRGB(200, 200, 80),  function() Remotes.Event(RUN_REMOTE):FireServer("flags") end)
+	mkButton(quickRow, "Stats",      Color3.fromRGB(120, 200, 255), function() Remotes.Event(RUN_REMOTE):FireServer("stats") end)
+	mkButton(quickRow, "Help",       Color3.fromRGB(180, 180, 200), function() Remotes.Event(RUN_REMOTE):FireServer("help") end)
+
+	-- Custom command input
+	local inputRow = Instance.new("Frame")
+	inputRow.Position = UDim2.fromOffset(14, 470)
+	inputRow.Size = UDim2.new(1, -28, 0, 36)
+	inputRow.BackgroundTransparency = 1
+	inputRow.Parent = panel
+
+	input = Instance.new("TextBox")
+	(input :: TextBox).Size = UDim2.new(1, -120, 1, 0)
+	(input :: TextBox).Position = UDim2.fromOffset(0, 0)
+	(input :: TextBox).Font = Enum.Font.RobotoMono
+	(input :: TextBox).TextScaled = true
+	(input :: TextBox).BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	(input :: TextBox).TextColor3 = Color3.fromRGB(255, 255, 255)
+	(input :: TextBox).PlaceholderText = "/give <player> <amount>  (try /help)"
+	(input :: TextBox).Text = ""
+	(input :: TextBox).ClearTextOnFocus = false
+	(input :: TextBox).Parent = inputRow
+	local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(0, 6); ic.Parent = input
+
+	local runBtn = Instance.new("TextButton")
+	runBtn.AnchorPoint = Vector2.new(1, 0)
+	runBtn.Position = UDim2.new(1, 0, 0, 0)
+	runBtn.Size = UDim2.fromOffset(110, 36)
+	runBtn.Parent = inputRow
+	applyStyle(runBtn, Color3.fromRGB(80, 200, 120))
+	runBtn.Text = "RUN"
+	local function runIt()
+		if input and input.Text and #input.Text > 0 then
+			Remotes.Event(RUN_REMOTE):FireServer(input.Text)
+			input.Text = ""
+		end
+	end
+	runBtn.MouseButton1Click:Connect(runIt)
+	;(input :: TextBox).FocusLost:Connect(function(enter) if enter then runIt() end end)
+
+	-- Result label
+	resultLabel = Instance.new("TextLabel")
+	(resultLabel :: TextLabel).Position = UDim2.fromOffset(14, 516)
+	(resultLabel :: TextLabel).Size = UDim2.new(1, -28, 0, 56)
+	(resultLabel :: TextLabel).BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	(resultLabel :: TextLabel).BackgroundTransparency = 0.6
+	(resultLabel :: TextLabel).BorderSizePixel = 0
+	(resultLabel :: TextLabel).Font = Enum.Font.RobotoMono
+	(resultLabel :: TextLabel).TextScaled = true
+	(resultLabel :: TextLabel).TextWrapped = true
+	(resultLabel :: TextLabel).TextXAlignment = Enum.TextXAlignment.Left
+	(resultLabel :: TextLabel).TextYAlignment = Enum.TextYAlignment.Top
+	(resultLabel :: TextLabel).TextColor3 = Color3.fromRGB(180, 220, 180)
+	(resultLabel :: TextLabel).Text = "Output appears here. Try the buttons above or type a command."
+	(resultLabel :: TextLabel).Parent = panel
+	local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = resultLabel
+end
+
+local function buildToggleButton(screen: ScreenGui)
+	toggleButton = Instance.new("TextButton")
+	(toggleButton :: TextButton).AnchorPoint = Vector2.new(1, 1)
+	(toggleButton :: TextButton).Position = UDim2.new(1, -16, 1, -100)
+	(toggleButton :: TextButton).Size = UDim2.fromOffset(48, 48)
+	(toggleButton :: TextButton).Text = "🛡"
+	(toggleButton :: TextButton).Parent = screen
+	applyStyle(toggleButton :: TextButton, Color3.fromRGB(255, 80, 80))
+	(toggleButton :: TextButton).MouseButton1Click:Connect(function()
+		if panel then panel.Visible = not panel.Visible end
+	end)
+end
+
+function AdminPanelUI.Init(screen: ScreenGui)
+	-- Wait for the server to confirm admin status before constructing anything.
+	-- Non-admins never see UI, never see remotes registered as accessible.
+	Remotes.Event(UPDATE_REMOTE).OnClientEvent:Connect(function(payload)
+		if payload.kind == "init" then
+			if not panel then
+				buildPanel(screen)
+				buildToggleButton(screen)
+				isOwner = payload.isOwner == true
+			end
+			renderPlayers(payload.players or {})
+		elseif payload.kind == "tick" then
+			renderPlayers(payload.players or {})
+		elseif payload.kind == "result" then
+			showResult(payload.text or "")
+		end
+	end)
+
+	-- Keybind: Right Shift opens/closes the panel (only does anything if admin).
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.KeyCode == Enum.KeyCode.RightShift and panel then
+			panel.Visible = not panel.Visible
+		end
+	end)
+end
+
+return AdminPanelUI
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="60">
           <Properties>
             <string name="Name">AnnouncementUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -6553,7 +7295,7 @@ return AnnouncementUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="59">
+        <Item class="ModuleScript" referent="61">
           <Properties>
             <string name="Name">BattlePassUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -6685,7 +7427,7 @@ return BattlePassUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="60">
+        <Item class="ModuleScript" referent="62">
           <Properties>
             <string name="Name">BossUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -6740,7 +7482,7 @@ return BossUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="61">
+        <Item class="ModuleScript" referent="63">
           <Properties>
             <string name="Name">CodeRedeemUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -6833,7 +7575,7 @@ return CodeRedeemUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="62">
+        <Item class="ModuleScript" referent="64">
           <Properties>
             <string name="Name">DailyRewardUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -6953,7 +7695,7 @@ return DailyRewardUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="63">
+        <Item class="ModuleScript" referent="65">
           <Properties>
             <string name="Name">DecorationUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -7086,7 +7828,7 @@ return DecorationUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="64">
+        <Item class="ModuleScript" referent="66">
           <Properties>
             <string name="Name">GlobalLeaderboardUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -7199,7 +7941,7 @@ return GlobalLeaderboardUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="65">
+        <Item class="ModuleScript" referent="67">
           <Properties>
             <string name="Name">GroupBannerUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -7297,7 +8039,7 @@ return GroupBannerUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="66">
+        <Item class="ModuleScript" referent="68">
           <Properties>
             <string name="Name">HUD</string>
             <string name="Source"><![CDATA[--!strict
@@ -7398,7 +8140,7 @@ return HUD
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="67">
+        <Item class="ModuleScript" referent="69">
           <Properties>
             <string name="Name">InventoryUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -7534,7 +8276,7 @@ return InventoryUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="68">
+        <Item class="ModuleScript" referent="70">
           <Properties>
             <string name="Name">InviteUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -7654,7 +8396,7 @@ return InviteUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="69">
+        <Item class="ModuleScript" referent="71">
           <Properties>
             <string name="Name">LeaderboardUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -7744,7 +8486,7 @@ return LeaderboardUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="70">
+        <Item class="ModuleScript" referent="72">
           <Properties>
             <string name="Name">LevelUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -7881,7 +8623,7 @@ return LevelUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="71">
+        <Item class="ModuleScript" referent="73">
           <Properties>
             <string name="Name">LoadingScreen</string>
             <string name="Source"><![CDATA[--!strict
@@ -8034,7 +8776,7 @@ return LoadingScreen
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="72">
+        <Item class="ModuleScript" referent="74">
           <Properties>
             <string name="Name">NotificationUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8114,7 +8856,7 @@ return NotificationUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="73">
+        <Item class="ModuleScript" referent="75">
           <Properties>
             <string name="Name">OutbreakUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8170,7 +8912,7 @@ return OutbreakUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="74">
+        <Item class="ModuleScript" referent="76">
           <Properties>
             <string name="Name">PatchNotesUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8280,7 +9022,7 @@ return PatchNotesUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="75">
+        <Item class="ModuleScript" referent="77">
           <Properties>
             <string name="Name">PetUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8414,7 +9156,7 @@ return PetUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="76">
+        <Item class="ModuleScript" referent="78">
           <Properties>
             <string name="Name">PlotUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8575,7 +9317,7 @@ return PlotUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="77">
+        <Item class="ModuleScript" referent="79">
           <Properties>
             <string name="Name">QuestUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8693,7 +9435,7 @@ return QuestUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="78">
+        <Item class="ModuleScript" referent="80">
           <Properties>
             <string name="Name">ShopUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8845,7 +9587,7 @@ return ShopUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="79">
+        <Item class="ModuleScript" referent="81">
           <Properties>
             <string name="Name">SoundController</string>
             <string name="Source"><![CDATA[--!strict
@@ -8909,7 +9651,7 @@ return SoundController
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="80">
+        <Item class="ModuleScript" referent="82">
           <Properties>
             <string name="Name">TradeUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9297,7 +10039,7 @@ return TradeUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="81">
+        <Item class="ModuleScript" referent="83">
           <Properties>
             <string name="Name">TutorialUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9455,7 +10197,7 @@ return TutorialUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="82">
+        <Item class="ModuleScript" referent="84">
           <Properties>
             <string name="Name">UIController</string>
             <string name="Source"><![CDATA[--!strict
@@ -9597,14 +10339,14 @@ return UIController
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="83">
+  <Item class="Workspace" referent="85">
     <Properties>
       <string name="Name">Workspace</string>
       <bool name="FilteringEnabled">true</bool>
       <float name="Gravity">196.2</float>
       <bool name="NeedsPivotMigration">false</bool>
     </Properties>
-    <Item class="Part" referent="84">
+    <Item class="Part" referent="86">
       <Properties>
         <string name="Name">Baseplate</string>
         <bool name="Anchored">true</bool>
@@ -9622,12 +10364,12 @@ return UIController
         </Vector3>
       </Properties>
     </Item>
-    <Item class="Folder" referent="85">
+    <Item class="Folder" referent="87">
       <Properties>
         <string name="Name">Brainrots</string>
       </Properties>
     </Item>
-    <Item class="Folder" referent="86">
+    <Item class="Folder" referent="88">
       <Properties>
         <string name="Name">Plots</string>
       </Properties>

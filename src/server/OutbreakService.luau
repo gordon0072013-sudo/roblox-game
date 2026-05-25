@@ -185,6 +185,11 @@ function OutbreakService.Init()
 	end)
 end
 
+function OutbreakService.ForceStart()
+	if os.time() < activeUntil then return end
+	startOutbreak()
+end
+
 function OutbreakService.OnPlayerAdded(player: Player)
 	task.delay(2, pushOutbreakState)
 end

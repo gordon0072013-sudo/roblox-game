@@ -154,6 +154,14 @@ Config.MAX_INVENTORY_SIZE = 200
 Config.PURCHASE_LOG_RING_SIZE = 50
 
 -- ============================================================
+-- ADMIN
+-- ============================================================
+-- The experience owner (game.CreatorId) is admin by default. Add extra
+-- UserIds here to grant admin access without owning the experience.
+-- Owner-only commands stay locked to game.CreatorId.
+Config.ADMIN_USER_IDS = {} :: { number }
+
+-- ============================================================
 -- COMMUNITY / GROUP REWARD
 -- ============================================================
 -- Replace with your real Roblox group id after creating one. A 0 disables

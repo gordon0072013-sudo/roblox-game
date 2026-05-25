@@ -186,6 +186,11 @@ function BossEventService.Init()
 	end)
 end
 
+function BossEventService.ForceSpawn()
+	if activeBoss then return end
+	spawnBoss()
+end
+
 function BossEventService.OnPlayerAdded(player: Player)
 	task.delay(2, broadcastState)
 end
