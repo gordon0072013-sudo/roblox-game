@@ -100,6 +100,9 @@ WelcomeOfferUI.Init(screen)
 local LuckyWheelUI = require(script.LuckyWheelUI)
 LuckyWheelUI.Init(screen, UIController)
 
+local CinematicUI = require(script.CinematicUI)
+CinematicUI.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 

@@ -38,6 +38,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local hotMult = 1
 	local okHot, HotStreakService = pcall(require, script.Parent.HotStreakService)
 	if okHot then hotMult = HotStreakService.GetMultiplier() end
+	local eventMult = 1
+	local okEvt, EventService = pcall(require, script.Parent.EventService)
+	if okEvt then eventMult = EventService.GetCashMult() end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -47,7 +50,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
@@ -111,6 +114,16 @@ function EconomyService.TryRebirth(player: Player): boolean
 	end
 	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
 	if okL then PlayerLevelService.AwardXp(player, "rebirth") end
+	local okC, CinematicService = pcall(require, script.Parent.CinematicService)
+	if okC then
+		CinematicService.Play(player, {
+			kind = "rebirth",
+			title = string.format("REBIRTH %d", data.rebirths),
+			subtitle = string.format("%.2fx income unlocked", Config.REBIRTH_INCOME_MULT(data.rebirths)),
+			color = { 255, 100, 220 },
+			durationSeconds = 3,
+		})
+	end
 	return true
 end
 

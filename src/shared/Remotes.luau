@@ -32,6 +32,8 @@ local RemoteNames = {
 	WelcomeOffer = "WelcomeOffer",
 	WheelUpdate = "WheelUpdate",
 	WheelSpinResult = "WheelSpinResult",
+	EventUpdate = "EventUpdate",
+	Cinematic = "Cinematic",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions

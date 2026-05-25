@@ -47,6 +47,8 @@ local LuckyWheelService       = require(script.LuckyWheelService)
 local SocialInviteService     = require(script.SocialInviteService)
 local HotStreakService        = require(script.HotStreakService)
 local PresenceService         = require(script.PresenceService)
+local EventService            = require(script.EventService)
+local CinematicService        = require(script.CinematicService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -89,6 +91,8 @@ local bootOrder = {
 	{ "SocialInviteService",  SocialInviteService.Init   },
 	{ "HotStreakService",     HotStreakService.Init      },
 	{ "PresenceService",      PresenceService.Init       },
+	{ "EventService",         EventService.Init          },
+	{ "CinematicService",     CinematicService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -130,6 +134,8 @@ local function onPlayerAdded(player: Player)
 		LuckyWheelService.OnPlayerAdded(player)
 		HotStreakService.OnPlayerAdded(player)
 		PresenceService.OnPlayerAdded(player)
+		EventService.OnPlayerAdded(player)
+		CinematicService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end

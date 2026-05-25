@@ -1031,6 +1031,8 @@ local RemoteNames = {
 	WelcomeOffer = "WelcomeOffer",
 	WheelUpdate = "WheelUpdate",
 	WheelSpinResult = "WheelSpinResult",
+	EventUpdate = "EventUpdate",
+	Cinematic = "Cinematic",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -1320,6 +1322,8 @@ local LuckyWheelService       = require(script.LuckyWheelService)
 local SocialInviteService     = require(script.SocialInviteService)
 local HotStreakService        = require(script.HotStreakService)
 local PresenceService         = require(script.PresenceService)
+local EventService            = require(script.EventService)
+local CinematicService        = require(script.CinematicService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1362,6 +1366,8 @@ local bootOrder = {
 	{ "SocialInviteService",  SocialInviteService.Init   },
 	{ "HotStreakService",     HotStreakService.Init      },
 	{ "PresenceService",      PresenceService.Init       },
+	{ "EventService",         EventService.Init          },
+	{ "CinematicService",     CinematicService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1403,6 +1409,8 @@ local function onPlayerAdded(player: Player)
 		LuckyWheelService.OnPlayerAdded(player)
 		HotStreakService.OnPlayerAdded(player)
 		PresenceService.OnPlayerAdded(player)
+		EventService.OnPlayerAdded(player)
+		CinematicService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -3164,6 +3172,38 @@ function CaptureService.Init() end
 
 return CaptureService
 ]=])
+	ensurePath(root, "CinematicService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local CinematicService = {}
+
+-- Fires a "cinematic" event to a player. Client side renders a brief
+-- full-screen overlay tuned per kind. Used for moments worth pausing for:
+-- big mutations, rebirths, full-combo equivalents.
+type Cinematic = {
+	kind: string,                 -- "rebirth" | "apex_mutation" | "mythic_drop"
+	title: string,
+	subtitle: string?,
+	color: { number }?,            -- {r,g,b}
+	durationSeconds: number?,
+}
+
+function CinematicService.Play(player: Player, cine: Cinematic)
+	Remotes.Event(Remotes.Names.Cinematic):FireClient(player, cine)
+end
+
+function CinematicService.OnPlayerAdded(_: Player) end
+
+function CinematicService.Init()
+	Remotes.Event(Remotes.Names.Cinematic)
+end
+
+return CinematicService
+]])
 	ensurePath(root, "CodeService", "ModuleScript", [=[
 --!strict
 --[[
@@ -3736,6 +3776,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local hotMult = 1
 	local okHot, HotStreakService = pcall(require, script.Parent.HotStreakService)
 	if okHot then hotMult = HotStreakService.GetMultiplier() end
+	local eventMult = 1
+	local okEvt, EventService = pcall(require, script.Parent.EventService)
+	if okEvt then eventMult = EventService.GetCashMult() end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -3745,7 +3788,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
@@ -3809,6 +3852,16 @@ function EconomyService.TryRebirth(player: Player): boolean
 	end
 	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
 	if okL then PlayerLevelService.AwardXp(player, "rebirth") end
+	local okC, CinematicService = pcall(require, script.Parent.CinematicService)
+	if okC then
+		CinematicService.Play(player, {
+			kind = "rebirth",
+			title = string.format("REBIRTH %d", data.rebirths),
+			subtitle = string.format("%.2fx income unlocked", Config.REBIRTH_INCOME_MULT(data.rebirths)),
+			color = { 255, 100, 220 },
+			durationSeconds = 3,
+		})
+	end
 	return true
 end
 
@@ -3846,6 +3899,138 @@ function EconomyService.Init() end
 
 return EconomyService
 ]=])
+	ensurePath(root, "EventService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+local Log     = require(Shared.Log)
+
+local EventService = {}
+
+-- Limited-time events are the strongest FOMO lever in the Roblox tycoon
+-- meta. We schedule them by absolute timestamps so all servers see the
+-- same window simultaneously. Add entries here when you want to push a
+-- live-ops moment; the client auto-picks up state via the EventUpdate remote.
+
+type EventDefinition = {
+	id: string,
+	name: string,
+	bannerColor: { number },     -- {r,g,b}
+	startTs: number,             -- unix time
+	endTs: number,
+	cashMult: number?,            -- global cash mult for participants
+	mutationSpeedMult: number?,   -- multiplier on mutation cadence
+	luckyBoost: number?,          -- biases capture/pet rolls
+}
+
+local EVENTS: { EventDefinition } = {}
+
+local function nowSec(): number return os.time() end
+
+local function buildDefaults()
+	-- Default rolling event: a 48-hour "Launch Hype" double-cash window
+	-- starting at the moment the server boots. Replace with hardcoded
+	-- timestamps to lock specific events to wall-clock weekends.
+	local now = nowSec()
+	table.insert(EVENTS, {
+		id = "launch_hype",
+		name = "🚀 LAUNCH HYPE — 2x cash for everyone",
+		bannerColor = { 255, 100, 200 },
+		startTs = now,
+		endTs   = now + 48 * 3600,
+		cashMult = 2.0,
+	})
+	table.insert(EVENTS, {
+		id = "weekend_mutation",
+		name = "🧬 WEEKEND MUTATION — 3x mutation speed",
+		bannerColor = { 120, 220, 255 },
+		startTs = now + 7 * 86400,
+		endTs   = now + 9 * 86400,
+		mutationSpeedMult = 3.0,
+	})
+end
+
+local function activeEvents(): { EventDefinition }
+	local out: { EventDefinition } = {}
+	local now = nowSec()
+	for _, e in ipairs(EVENTS) do
+		if now >= e.startTs and now < e.endTs then
+			table.insert(out, e)
+		end
+	end
+	return out
+end
+
+function EventService.GetCashMult(): number
+	local m = 1
+	for _, e in ipairs(activeEvents()) do
+		if e.cashMult then m *= e.cashMult end
+	end
+	return m
+end
+
+function EventService.GetMutationSpeedMult(): number
+	local m = 1
+	for _, e in ipairs(activeEvents()) do
+		if e.mutationSpeedMult then m *= e.mutationSpeedMult end
+	end
+	return m
+end
+
+function EventService.GetLuckyBoost(): number
+	local b = 0
+	for _, e in ipairs(activeEvents()) do
+		if e.luckyBoost then b += e.luckyBoost end
+	end
+	return b
+end
+
+local function broadcast()
+	local payload = {
+		active = activeEvents(),
+		upcoming = nil :: any,
+	}
+	-- Pick next-upcoming event for the "coming soon" banner.
+	local now = nowSec()
+	local nearest
+	for _, e in ipairs(EVENTS) do
+		if e.startTs > now then
+			if not nearest or e.startTs < nearest.startTs then
+				nearest = e
+			end
+		end
+	end
+	payload.upcoming = nearest
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.EventUpdate):FireClient(p, payload)
+	end
+end
+
+function EventService.OnPlayerAdded(_: Player)
+	task.delay(2, broadcast)
+end
+
+function EventService.Init()
+	buildDefaults()
+	Remotes.Event(Remotes.Names.EventUpdate)
+	task.spawn(function()
+		while true do
+			task.wait(20)
+			broadcast()
+		end
+	end)
+	Log.Info("Events", "%d events scheduled", #EVENTS)
+	local _ = Util
+end
+
+return EventService
+]])
 	ensurePath(root, "GlobalLeaderboardService", "ModuleScript", [=[
 --!strict
 --[[
@@ -5477,6 +5662,18 @@ local function rollOne(player: Player, brainrotUid: string)
 				end
 				if b.mutationTier >= Config.MUTATION_MAX_TIER then
 					BadgeService.Fire(player, "apex_mutation")
+				end
+			end
+			if b.mutationTier >= Config.MUTATION_MAX_TIER then
+				local okC, CinematicService = pcall(require, script.Parent.CinematicService)
+				if okC then
+					CinematicService.Play(player, {
+						kind = "apex_mutation",
+						title = "APEX MUTATION",
+						subtitle = mutation.suffix .. " achieved",
+						color = { 255, 60, 60 },
+						durationSeconds = 4,
+					})
 				end
 			end
 			return
@@ -7274,6 +7471,9 @@ WelcomeOfferUI.Init(screen)
 local LuckyWheelUI = require(script.LuckyWheelUI)
 LuckyWheelUI.Init(screen, UIController)
 
+local CinematicUI = require(script.CinematicUI)
+CinematicUI.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 
@@ -7915,6 +8115,82 @@ function BossUI.Init(screen: ScreenGui)
 end
 
 return BossUI
+]])
+	ensurePath(root, "CinematicUI", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local CinematicUI = {}
+
+function CinematicUI.Init(screen: ScreenGui)
+	Remotes.Event(Remotes.Names.Cinematic).OnClientEvent:Connect(function(cine)
+		if not cine or not cine.title then return end
+
+		local color = if cine.color then Color3.fromRGB(cine.color[1], cine.color[2], cine.color[3])
+			else Color3.fromRGB(255, 215, 80)
+		local duration = cine.durationSeconds or 3
+
+		-- Full-screen vignette + centerpiece title.
+		local overlay = Instance.new("Frame")
+		overlay.Name = "Cinematic"
+		overlay.Size = UDim2.fromScale(1, 1)
+		overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		overlay.BackgroundTransparency = 1
+		overlay.BorderSizePixel = 0
+		overlay.ZIndex = 50
+		overlay.Parent = screen
+
+		local title = Instance.new("TextLabel")
+		title.AnchorPoint = Vector2.new(0.5, 0.5)
+		title.Position = UDim2.fromScale(0.5, 0.45)
+		title.Size = UDim2.fromOffset(900, 120)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextColor3 = color
+		title.TextStrokeTransparency = 0
+		title.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		title.Text = cine.title
+		title.TextTransparency = 1
+		title.ZIndex = 51
+		title.Parent = overlay
+
+		local subtitle = Instance.new("TextLabel")
+		subtitle.AnchorPoint = Vector2.new(0.5, 0.5)
+		subtitle.Position = UDim2.fromScale(0.5, 0.58)
+		subtitle.Size = UDim2.fromOffset(700, 48)
+		subtitle.BackgroundTransparency = 1
+		subtitle.Font = Enum.Font.GothamBold
+		subtitle.TextScaled = true
+		subtitle.TextColor3 = Color3.fromRGB(240, 240, 250)
+		subtitle.TextStrokeTransparency = 0.2
+		subtitle.Text = cine.subtitle or ""
+		subtitle.TextTransparency = 1
+		subtitle.ZIndex = 51
+		subtitle.Parent = overlay
+
+		-- Fade in
+		TweenService:Create(overlay, TweenInfo.new(0.25), { BackgroundTransparency = 0.55 }):Play()
+		TweenService:Create(title,   TweenInfo.new(0.35), { TextTransparency = 0 }):Play()
+		TweenService:Create(subtitle,TweenInfo.new(0.45), { TextTransparency = 0 }):Play()
+
+		task.delay(duration, function()
+			local fade = TweenService:Create(overlay, TweenInfo.new(0.4), { BackgroundTransparency = 1 })
+			TweenService:Create(title,    TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+			TweenService:Create(subtitle, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+			fade:Play()
+			fade.Completed:Wait()
+			overlay:Destroy()
+		end)
+	end)
+end
+
+return CinematicUI
 ]])
 	ensurePath(root, "CodeRedeemUI", "ModuleScript", [=[
 --!strict

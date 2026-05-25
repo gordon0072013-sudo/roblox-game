@@ -71,6 +71,18 @@ local function rollOne(player: Player, brainrotUid: string)
 					BadgeService.Fire(player, "apex_mutation")
 				end
 			end
+			if b.mutationTier >= Config.MUTATION_MAX_TIER then
+				local okC, CinematicService = pcall(require, script.Parent.CinematicService)
+				if okC then
+					CinematicService.Play(player, {
+						kind = "apex_mutation",
+						title = "APEX MUTATION",
+						subtitle = mutation.suffix .. " achieved",
+						color = { 255, 60, 60 },
+						durationSeconds = 4,
+					})
+				end
+			end
 			return
 		end
 	end
