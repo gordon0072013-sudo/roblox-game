@@ -67,6 +67,9 @@ QuestUI.Init(screen, UIController)
 local TradeUI = require(script.TradeUI)
 TradeUI.Init(screen, UIController)
 
+local GlobalLeaderboardUI = require(script.GlobalLeaderboardUI)
+GlobalLeaderboardUI.Init(screen, UIController)
+
 local SoundController = require(script.SoundController)
 SoundController.Init()
 

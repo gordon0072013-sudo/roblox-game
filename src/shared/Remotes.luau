@@ -21,6 +21,7 @@ local RemoteNames = {
 	QuestUpdate = "QuestUpdate",
 	TradeInvite = "TradeInvite",
 	TradeUpdate = "TradeUpdate",
+	GlobalLeaderboardUpdate = "GlobalLeaderboardUpdate",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
