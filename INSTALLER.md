@@ -34,6 +34,25 @@ each time you take a new copy from the repo.
 | `Lighting` | Sensible defaults |
 | `HttpService` | Enabled (required for the optional Discord webhook) |
 
+## Verifying the install
+
+After running the installer, paste `BrainrotLab_Verify.luau` (also at
+repo root) into the Command Bar and press Enter. It walks the
+DataModel and prints PASS/FAIL for every expected Folder, Script,
+ModuleScript and LocalScript. Catches paste truncation, partial
+re-installs, and Studio reverting state. 93 checks run; a clean
+install reports all green plus a single Remotes-folder presence check.
+
+```
+[BrainrotLab Verifier] starting…
+  PASS  ReplicatedStorage
+  PASS  ReplicatedStorage/Shared
+  ...
+[BrainrotLab Verifier] 93 / 93 checks passed (0 failures)
+```
+
+If any FAIL lines appear, re-paste the installer and re-verify.
+
 ## Regenerating the installer
 
 After editing any source file in `src/`, regenerate the installer:
