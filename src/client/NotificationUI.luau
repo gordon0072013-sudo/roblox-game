@@ -68,7 +68,18 @@ function NotificationUI.Init(screen: ScreenGui)
 	list.HorizontalAlignment = Enum.HorizontalAlignment.Right
 	list.Parent = container
 
-	Remotes.Event(Remotes.Names.Notify).OnClientEvent:Connect(toast)
+	-- Rate-limit identical toasts: if the same text fires within 750ms of
+	-- the previous identical toast, suppress it. Prevents toast spam from
+	-- burst events (rapid mutations, capture loops).
+	local lastByText: { [string]: number } = {}
+	Remotes.Event(Remotes.Names.Notify).OnClientEvent:Connect(function(payload)
+		if not payload or typeof(payload) ~= "table" then return end
+		local key = tostring(payload.text or "")
+		local now = os.clock()
+		if lastByText[key] and now - lastByText[key] < 0.75 then return end
+		lastByText[key] = now
+		toast(payload)
+	end)
 end
 
 return NotificationUI

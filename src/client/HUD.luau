@@ -71,8 +71,29 @@ function HUD.Init(screen: ScreenGui)
 	rebirthBtn.BorderSizePixel = 0
 	rebirthBtn.Parent = frame
 	local rbc = Instance.new("UICorner"); rbc.CornerRadius = UDim.new(0, 8); rbc.Parent = rebirthBtn
+	local confirming = false
+	local confirmExpiresAt = 0
+	local function originalText() return "REBIRTH" end
 	rebirthBtn.MouseButton1Click:Connect(function()
-		Remotes.Event(Remotes.Names.RequestRebirth):FireServer()
+		if confirming and os.clock() < confirmExpiresAt then
+			confirming = false
+			rebirthBtn.Text = originalText()
+			rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+			Remotes.Event(Remotes.Names.RequestRebirth):FireServer()
+			return
+		end
+		-- First click: arm the confirmation. Auto-revert after 4s.
+		confirming = true
+		confirmExpiresAt = os.clock() + 4
+		rebirthBtn.Text = "TAP AGAIN TO CONFIRM"
+		rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 160, 80)
+		task.delay(4, function()
+			if confirming and os.clock() >= confirmExpiresAt then
+				confirming = false
+				rebirthBtn.Text = originalText()
+				rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+			end
+		end)
 	end)
 
 	Remotes.Event(Remotes.Names.HudUpdate).OnClientEvent:Connect(function(payload)
