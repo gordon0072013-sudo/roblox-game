@@ -40,6 +40,9 @@ local AnnouncementService = require(script.AnnouncementService)
 local PetService = require(script.PetService)
 local PlayerLevelService = require(script.PlayerLevelService)
 local SeasonService = require(script.SeasonService)
+local DecorationService = require(script.DecorationService)
+local InviteService = require(script.InviteService)
+local WebhookService = require(script.WebhookService)
 
 -- Init order: data first, content next, monetization/UI services last.
 DataService.Init()
@@ -69,6 +72,9 @@ AnnouncementService.Init()
 PetService.Init()
 PlayerLevelService.Init()
 SeasonService.Init()
+DecorationService.Init()
+InviteService.Init()
+WebhookService.Init()
 
 local function onPlayerAdded(player: Player)
 	DataService.LoadProfile(player)
@@ -92,6 +98,8 @@ local function onPlayerAdded(player: Player)
 		PetService.OnPlayerAdded(player)
 		PlayerLevelService.OnPlayerAdded(player)
 		SeasonService.OnPlayerAdded(player)
+		DecorationService.OnPlayerAdded(player)
+		InviteService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -102,6 +110,7 @@ local function onPlayerRemoving(player: Player)
 	TradeService.OnPlayerRemoving(player)
 	GlobalLeaderboardService.OnPlayerRemoving(player)
 	AfkService.OnPlayerRemoving(player)
+	DecorationService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
@@ -208,6 +217,16 @@ end)
 handler(Remotes.Names.RequestUnequipPet, function(player) PetService.Unequip(player) end)
 handler(Remotes.Names.RequestClaimLevelReward, function(player, lvl)
 	if typeof(lvl) == "number" then PlayerLevelService.ClaimLevelReward(player, lvl) end
+end)
+
+handler(Remotes.Names.RequestBuyDecoration, function(player, id)
+	if typeof(id) == "string" then DecorationService.Buy(player, id) end
+end)
+handler(Remotes.Names.RequestSellDecoration, function(player, uid)
+	if typeof(uid) == "string" then DecorationService.Sell(player, uid) end
+end)
+handler(Remotes.Names.RequestRedeemInvite, function(player, code)
+	if typeof(code) == "string" then InviteService.Redeem(player, code) end
 end)
 
 print("[BrainrotLab] Server boot complete.")

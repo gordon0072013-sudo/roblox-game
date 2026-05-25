@@ -85,6 +85,12 @@ LevelUI.Init(screen, UIController)
 local PatchNotesUI = require(script.PatchNotesUI)
 PatchNotesUI.Init(screen, UIController)
 
+local DecorationUI = require(script.DecorationUI)
+DecorationUI.Init(screen, UIController)
+
+local InviteUI = require(script.InviteUI)
+InviteUI.Init(screen, UIController)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 

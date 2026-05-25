@@ -103,6 +103,8 @@ local function buildPanel(parent: Frame)
 		TripleCapture = "Capture button gives 3 brainrots per click",
 		RainbowTrail = "Equip a rainbow trail (flex flex flex)",
 		GoldenPlot = "Your lab floor turns gold + glowing sign",
+		PetLucky = "Pet eggs biased toward Legendary/Mythical pets",
+		DecorationPack = "Unlocks premium-tier decorations (Cash Fountain, Apex Brazier, Rainbow Orb)",
 	}
 
 	for key, gp in pairs(Config.GAMEPASSES) do

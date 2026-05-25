@@ -27,6 +27,8 @@ local RemoteNames = {
 	PetUpdate = "PetUpdate",
 	LevelUpdate = "LevelUpdate",
 	SeasonUpdate = "SeasonUpdate",
+	DecorationUpdate = "DecorationUpdate",
+	InviteUpdate = "InviteUpdate",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -55,6 +57,9 @@ local RemoteNames = {
 	RequestEquipPet = "RequestEquipPet",
 	RequestUnequipPet = "RequestUnequipPet",
 	RequestClaimLevelReward = "RequestClaimLevelReward",
+	RequestBuyDecoration = "RequestBuyDecoration",
+	RequestSellDecoration = "RequestSellDecoration",
+	RequestRedeemInvite = "RequestRedeemInvite",
 }
 
 local Remotes = {}

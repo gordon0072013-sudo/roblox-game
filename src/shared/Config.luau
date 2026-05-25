@@ -110,6 +110,7 @@ Config.GAMEPASSES = {
 	RainbowTrail    = { id = 0, price = 149, name = "Rainbow Trail" }, -- cosmetic, high-margin whale slot
 	GoldenPlot      = { id = 0, price = 199, name = "Golden Plot" },   -- cosmetic floor + sign upgrade
 	PetLucky        = { id = 0, price = 299, name = "Pet Lucky" },     -- biases pet rolls toward Legendary/Mythical
+	DecorationPack  = { id = 0, price = 249, name = "Decoration Pack" }, -- unlocks premium-tier decorations
 }
 
 Config.DEV_PRODUCTS = {

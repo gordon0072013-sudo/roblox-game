@@ -30,6 +30,8 @@ function AnalyticsService.LogPurchase(player: Player, kind: string, key: string,
 			store:SetAsync(`${player.UserId}_${os.time()}_${key}`, entry)
 		end)
 	end
+	local ok, WebhookService = pcall(require, script.Parent.WebhookService)
+	if ok then WebhookService.PostSale(player, kind, key, price) end
 end
 
 function AnalyticsService.Summary(): { totalRobux: number, count: number }

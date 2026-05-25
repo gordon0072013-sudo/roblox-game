@@ -11,10 +11,10 @@ announcement + a TikTok video clip.
 | 2 | 1 | **PetService** — collectible pet companions w/ buffs + Pet Egg gamepass | Whale monetization slot; pets are the highest ARPU mechanic in the Roblox tycoon meta | ✅ shipped |
 | 3 | 1 | **PlayerLevelService** — XP + persistent level, level-reward chest | Sticky progression separate from rebirth — keeps long-tail players engaged after they cap rebirths | ✅ shipped |
 | 4 | 2 | **SeasonService** — limited-time seasonal brainrot rotates every 2 weeks | FOMO drives the strongest revenue spikes in Roblox. Limited brainrots are tradable, so resale value compounds | ✅ shipped |
-| 5 | 2 | **PlotDecorationService** — placeable cosmetic items + decoration gamepass | Extra cosmetic monetization slot; deeply personal plots screenshot well | 🔜 planned |
+| 5 | 2 | **PlotDecorationService** — placeable cosmetic items + decoration gamepass | Extra cosmetic monetization slot; deeply personal plots screenshot well | ✅ shipped |
 | 6 | 2 | **PatchNotesUI** — in-game changelog panel with new-update badge | Pro polish; signals "actively developed" to players (retention) and to Roblox's algorithm | ✅ shipped |
-| 7 | 3 | **InviteService** — referral codes + reward on friend's first session | Viral growth loop; cheaper than ads per new user | 🔜 planned |
-| 8 | 3 | **WebhookService** — Discord webhook on milestones (big purchases, boss kills) | Builds community presence + serves as light analytics dashboard | 🔜 planned |
+| 7 | 3 | **InviteService** — referral codes + reward on friend's first session | Viral growth loop; cheaper than ads per new user | ✅ shipped |
+| 8 | 3 | **WebhookService** — Discord webhook on milestones (big purchases, boss kills) | Builds community presence + serves as light analytics dashboard | ✅ shipped |
 | 9 | 4 | **LocalizationService** — string keys + ES/PT/FR translation | ~40% of Roblox traffic is LATAM + EU mobile. Localizing the storefront copy alone boosts conversion 15–30% in those regions | ✅ shipped (framework + ES + PT stubs) |
 | 10 | 4 | **TestHarness** — economy + monetization math unit tests | Catches balance regressions before they ship. Pro signal for collaborators | ✅ shipped |
 
