@@ -13,9 +13,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local BrainrotData = require(Shared.BrainrotData)
-local Util = require(Shared.Util)
 
-local DataService = require(script.Parent.DataService)
 local CaptureService = require(script.Parent.CaptureService)
 local BattlePassService -- forward
 

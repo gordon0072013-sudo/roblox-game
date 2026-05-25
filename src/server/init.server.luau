@@ -56,6 +56,7 @@ local PerformanceService      = require(script.PerformanceService)
 local CrossServerShoutService = require(script.CrossServerShoutService)
 local FusionService           = require(script.FusionService)
 local TopOfHourService        = require(script.TopOfHourService)
+local DailyDealService        = require(script.DailyDealService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -107,6 +108,7 @@ local bootOrder = {
 	{ "CrossServerShoutService", CrossServerShoutService.Init },
 	{ "FusionService",        FusionService.Init         },
 	{ "TopOfHourService",     TopOfHourService.Init      },
+	{ "DailyDealService",     DailyDealService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -153,6 +155,7 @@ local function onPlayerAdded(player: Player)
 		MilestoneAnnounceService.OnPlayerAdded(player)
 		VipServerService.OnPlayerAdded(player)
 		AutoSellService.OnPlayerAdded(player)
+		DailyDealService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end

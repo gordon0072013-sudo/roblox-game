@@ -12,9 +12,7 @@ local BrainrotData = require(Shared.BrainrotData)
 
 local DataService     = require(script.Parent.DataService)
 local EconomyService  = require(script.Parent.EconomyService)
-local LabService      = require(script.Parent.LabService)
 local CaptureService  = require(script.Parent.CaptureService)
-local InfectionService= require(script.Parent.InfectionService)
 local MutationService = require(script.Parent.MutationService)
 local AntiCheat       = require(script.Parent.AntiCheat)
 

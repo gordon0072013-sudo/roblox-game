@@ -85,6 +85,8 @@ local function grantGamepass(player: Player, key: string)
 	if key == "GoldenPlot" then
 		LabService.RefreshPlotCosmetics(player)
 	end
+	local okDD, DailyDealService = pcall(require, script.Parent.DailyDealService)
+	if okDD then DailyDealService.OnGamepassPurchased(player, key) end
 	if AnalyticsService then
 		AnalyticsService.LogPurchase(player, "gamepass", key, (Config.GAMEPASSES[key] or {}).price or 0)
 	end

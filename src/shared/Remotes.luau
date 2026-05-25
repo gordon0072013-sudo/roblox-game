@@ -35,6 +35,7 @@ local RemoteNames = {
 	EventUpdate = "EventUpdate",
 	Cinematic = "Cinematic",
 	AutoSellUpdate = "AutoSellUpdate",
+	DailyDeal = "DailyDeal",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions

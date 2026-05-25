@@ -4,8 +4,7 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Remotes = require(Shared.Remotes)
-local Log     = require(Shared.Log)
+local Log = require(Shared.Log)
 
 local AnnouncementService -- forward
 
