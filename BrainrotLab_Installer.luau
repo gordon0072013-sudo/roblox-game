@@ -1068,6 +1068,7 @@ local RemoteNames = {
 	RequestWheelSpin = "RequestWheelSpin",
 	RequestSocialInvite = "RequestSocialInvite",
 	RequestSetAutoSell = "RequestSetAutoSell",
+	RequestFuse = "RequestFuse",
 }
 
 local Remotes = {}
@@ -1331,6 +1332,8 @@ local VipServerService        = require(script.VipServerService)
 local AutoSellService         = require(script.AutoSellService)
 local PerformanceService      = require(script.PerformanceService)
 local CrossServerShoutService = require(script.CrossServerShoutService)
+local FusionService           = require(script.FusionService)
+local TopOfHourService        = require(script.TopOfHourService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1380,6 +1383,8 @@ local bootOrder = {
 	{ "AutoSellService",      AutoSellService.Init       },
 	{ "PerformanceService",   PerformanceService.Init    },
 	{ "CrossServerShoutService", CrossServerShoutService.Init },
+	{ "FusionService",        FusionService.Init         },
+	{ "TopOfHourService",     TopOfHourService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1606,6 +1611,16 @@ bind(Remotes.Names.RequestSetAutoSell, function(player, enabled, threshold, excl
 	if t and typeof(enabled) == "boolean" and typeof(excludeMutated) == "boolean" then
 		AutoSellService.SetConfig(player, enabled, t, excludeMutated)
 	end
+end)
+
+bind(Remotes.Names.RequestFuse, function(player, uids)
+	if typeof(uids) ~= "table" then return end
+	local cleaned: { string } = {}
+	for _, u in ipairs(uids) do
+		local s = asUid(player, u, "Fuse.uid")
+		if s then table.insert(cleaned, s) end
+	end
+	if #cleaned == 3 then FusionService.Attempt(player, cleaned) end
 end)
 
 Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)
@@ -3971,6 +3986,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local vipServerMult = 1
 	local okVip, VipServerService = pcall(require, script.Parent.VipServerService)
 	if okVip then vipServerMult = VipServerService.GetCashMult() end
+	local hourMult = 1
+	local okHour, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+	if okHour then hourMult = TopOfHourService.GetCashMult() end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -3980,7 +3998,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
@@ -4224,6 +4242,132 @@ function EventService.Init()
 end
 
 return EventService
+]])
+	ensurePath(root, "FusionService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes      = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local Util         = require(Shared.Util)
+local Log          = require(Shared.Log)
+local Types        = require(Shared.Types)
+
+local DataService = require(script.Parent.DataService)
+local LabService  = require(script.Parent.LabService)
+
+local FusionService = {}
+
+-- Combine 3 brainrots into a guaranteed roll from the next rarity tier.
+-- Inputs must be the same species (forces deeper grinding into the
+-- gacha) and unmutated. Outputs are a random species of the next rarity.
+local RARITY_LADDER = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" }
+
+local function nextRarityName(r: string): string?
+	for i, name in ipairs(RARITY_LADDER) do
+		if name == r and RARITY_LADDER[i + 1] then return RARITY_LADDER[i + 1] end
+	end
+	return nil
+end
+
+local function speciesOfRarity(rarity: string): { Types.BrainrotDefinition }
+	local out = {}
+	for _, d in ipairs(BrainrotData.GetAll()) do
+		if d.rarity == rarity then table.insert(out, d) end
+	end
+	return out
+end
+
+local rng = Random.new()
+
+function FusionService.Attempt(player: Player, uids: { string })
+	if #uids ~= 3 then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Fusion needs exactly 3 brainrots." })
+		return
+	end
+	local data = DataService.Get(player)
+	if not data then return end
+
+	-- Resolve all three; require same species & no mutations.
+	local resolved: { Types.OwnedBrainrot } = {}
+	for _, uid in ipairs(uids) do
+		local found
+		for _, b in ipairs(data.inventory) do
+			if b.uid == uid then found = b; break end
+		end
+		if not found then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Brainrot not in inventory." })
+			return
+		end
+		if found.mutationTier > 0 then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Cannot fuse mutated brainrots." })
+			return
+		end
+		table.insert(resolved, found)
+	end
+
+	local species = resolved[1].speciesId
+	for _, b in ipairs(resolved) do
+		if b.speciesId ~= species then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="All 3 must be the same species." })
+			return
+		end
+	end
+
+	local def = BrainrotData.Get(species)
+	if not def then return end
+	local nextRarity = nextRarityName(def.rarity)
+	if not nextRarity then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Already at top fuseable rarity." })
+		return
+	end
+
+	-- Roll the output species
+	local pool = speciesOfRarity(nextRarity)
+	if #pool == 0 then return end
+	local newDef = pool[rng:NextInteger(1, #pool)]
+
+	-- Atomically: remove the three inputs, give the output.
+	local toRemove: { [string]: boolean } = {}
+	for _, u in ipairs(uids) do toRemove[u] = true end
+
+	-- Unplace any that are placed (TransferBrainrot path expects this)
+	for _, u in ipairs(uids) do
+		LabService.UnplaceBrainrot(player, u)
+	end
+	for i = #data.inventory, 1, -1 do
+		if toRemove[data.inventory[i].uid] then
+			table.remove(data.inventory, i)
+		end
+	end
+
+	local newBrainrot: Types.OwnedBrainrot = {
+		uid = Util.GenerateUid(),
+		speciesId = newDef.id,
+		mutationTier = 0,
+		mutations = {},
+		bornAt = os.time(),
+		lastMutationAt = os.time(),
+		placed = false,
+	}
+	LabService.GiveBrainrot(player, newBrainrot)
+	LabService.PlaceBrainrot(player, newBrainrot.uid)
+	LabService.PushInventory(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = string.format("✨ Fused 3x %s → %s [%s]", def.displayName, newDef.displayName, newDef.rarity),
+	})
+	Log.Info("Fusion", "%s fused 3x %s -> %s", player.Name, def.id, newDef.id)
+end
+
+function FusionService.Init()
+	-- Suppress unused
+	local _ = Util
+end
+
+return FusionService
 ]])
 	ensurePath(root, "GlobalLeaderboardService", "ModuleScript", [=[
 --!strict
@@ -7205,6 +7349,101 @@ end
 
 return StealService
 ]=])
+	ensurePath(root, "TopOfHourService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local TopOfHourService = {}
+
+-- Predictable 5-minute event every hour on the hour (HH:00 - HH:05 UTC).
+-- Players know exactly when to log in. Combined with daily reward and
+-- HotStreak this creates 24 daily engagement windows / day.
+
+local EVENT_DURATION = 300
+
+local activeUntil = 0
+local currentMult = 1
+
+local EVENT_TYPES = {
+	{ label = "💰 GOLDEN HOUR — 3x cash for 5 minutes!",     color = { 255, 215, 80 },  cashMult = 3.0 },
+	{ label = "🧬 MUTATION RUSH — 4x mutation speed for 5 minutes!", color = { 255, 100, 220 }, cashMult = 1.5, mutationMult = 4.0 },
+	{ label = "🎰 SPIN HOUR — every player gets 1 free wheel spin!",  color = { 120, 220, 255 }, cashMult = 1.5, freeSpins = 1 },
+}
+
+local currentEvent: any = nil
+
+local function startEvent()
+	currentEvent = EVENT_TYPES[math.random(1, #EVENT_TYPES)]
+	activeUntil = os.time() + EVENT_DURATION
+	currentMult = currentEvent.cashMult or 1
+	if AnnouncementService then
+		AnnouncementService.Push(currentEvent.label, currentEvent.color, EVENT_DURATION)
+	end
+
+	-- Grant any one-time perks declared by this event
+	if currentEvent.freeSpins then
+		local ok, LuckyWheelService = pcall(require, script.Parent.LuckyWheelService)
+		if ok then
+			for _, p in ipairs(Players:GetPlayers()) do
+				LuckyWheelService.GrantSpins(p, currentEvent.freeSpins)
+			end
+		end
+	end
+
+	Log.Info("TopOfHour", "%s for %ds", currentEvent.label, EVENT_DURATION)
+end
+
+local function endEvent()
+	currentEvent = nil
+	currentMult = 1
+	activeUntil = 0
+end
+
+function TopOfHourService.GetCashMult(): number
+	if os.time() < activeUntil then return currentMult end
+	return 1
+end
+
+function TopOfHourService.GetMutationMult(): number
+	if os.time() < activeUntil and currentEvent and currentEvent.mutationMult then
+		return currentEvent.mutationMult
+	end
+	return 1
+end
+
+function TopOfHourService.GetActive(): any?
+	if os.time() < activeUntil then return currentEvent end
+	return nil
+end
+
+function TopOfHourService.Init()
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	task.spawn(function()
+		while true do
+			task.wait(5)
+			local now = os.time()
+			local minute = math.floor(now / 60) % 60
+			local second = now % 60
+			if activeUntil > 0 and now >= activeUntil then
+				endEvent()
+			elseif activeUntil == 0 and minute == 0 and second < 6 then
+				startEvent()
+				task.wait(10) -- avoid double-trigger within the same minute
+			end
+		end
+	end)
+end
+
+return TopOfHourService
+]])
 	ensurePath(root, "TradeService", "ModuleScript", [=[
 --!strict
 --[[

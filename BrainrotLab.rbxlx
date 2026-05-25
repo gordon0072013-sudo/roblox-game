@@ -1023,6 +1023,7 @@ local RemoteNames = {
 	RequestWheelSpin = "RequestWheelSpin",
 	RequestSocialInvite = "RequestSocialInvite",
 	RequestSetAutoSell = "RequestSetAutoSell",
+	RequestFuse = "RequestFuse",
 }
 
 local Remotes = {}
@@ -1296,6 +1297,8 @@ local VipServerService        = require(script.VipServerService)
 local AutoSellService         = require(script.AutoSellService)
 local PerformanceService      = require(script.PerformanceService)
 local CrossServerShoutService = require(script.CrossServerShoutService)
+local FusionService           = require(script.FusionService)
+local TopOfHourService        = require(script.TopOfHourService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1345,6 +1348,8 @@ local bootOrder = {
 	{ "AutoSellService",      AutoSellService.Init       },
 	{ "PerformanceService",   PerformanceService.Init    },
 	{ "CrossServerShoutService", CrossServerShoutService.Init },
+	{ "FusionService",        FusionService.Init         },
+	{ "TopOfHourService",     TopOfHourService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1571,6 +1576,16 @@ bind(Remotes.Names.RequestSetAutoSell, function(player, enabled, threshold, excl
 	if t and typeof(enabled) == "boolean" and typeof(excludeMutated) == "boolean" then
 		AutoSellService.SetConfig(player, enabled, t, excludeMutated)
 	end
+end)
+
+bind(Remotes.Names.RequestFuse, function(player, uids)
+	if typeof(uids) ~= "table" then return end
+	local cleaned: { string } = {}
+	for _, u in ipairs(uids) do
+		local s = asUid(player, u, "Fuse.uid")
+		if s then table.insert(cleaned, s) end
+	end
+	if #cleaned == 3 then FusionService.Attempt(player, cleaned) end
 end)
 
 Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)
@@ -4007,6 +4022,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local vipServerMult = 1
 	local okVip, VipServerService = pcall(require, script.Parent.VipServerService)
 	if okVip then vipServerMult = VipServerService.GetCashMult() end
+	local hourMult = 1
+	local okHour, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+	if okHour then hourMult = TopOfHourService.GetCashMult() end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -4016,7 +4034,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
@@ -4269,6 +4287,136 @@ return EventService
       </Item>
       <Item class="ModuleScript" referent="40">
         <Properties>
+          <string name="Name">FusionService</string>
+          <string name="Source"><![CDATA[--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes      = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local Util         = require(Shared.Util)
+local Log          = require(Shared.Log)
+local Types        = require(Shared.Types)
+
+local DataService = require(script.Parent.DataService)
+local LabService  = require(script.Parent.LabService)
+
+local FusionService = {}
+
+-- Combine 3 brainrots into a guaranteed roll from the next rarity tier.
+-- Inputs must be the same species (forces deeper grinding into the
+-- gacha) and unmutated. Outputs are a random species of the next rarity.
+local RARITY_LADDER = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" }
+
+local function nextRarityName(r: string): string?
+	for i, name in ipairs(RARITY_LADDER) do
+		if name == r and RARITY_LADDER[i + 1] then return RARITY_LADDER[i + 1] end
+	end
+	return nil
+end
+
+local function speciesOfRarity(rarity: string): { Types.BrainrotDefinition }
+	local out = {}
+	for _, d in ipairs(BrainrotData.GetAll()) do
+		if d.rarity == rarity then table.insert(out, d) end
+	end
+	return out
+end
+
+local rng = Random.new()
+
+function FusionService.Attempt(player: Player, uids: { string })
+	if #uids ~= 3 then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Fusion needs exactly 3 brainrots." })
+		return
+	end
+	local data = DataService.Get(player)
+	if not data then return end
+
+	-- Resolve all three; require same species & no mutations.
+	local resolved: { Types.OwnedBrainrot } = {}
+	for _, uid in ipairs(uids) do
+		local found
+		for _, b in ipairs(data.inventory) do
+			if b.uid == uid then found = b; break end
+		end
+		if not found then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Brainrot not in inventory." })
+			return
+		end
+		if found.mutationTier > 0 then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Cannot fuse mutated brainrots." })
+			return
+		end
+		table.insert(resolved, found)
+	end
+
+	local species = resolved[1].speciesId
+	for _, b in ipairs(resolved) do
+		if b.speciesId ~= species then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="All 3 must be the same species." })
+			return
+		end
+	end
+
+	local def = BrainrotData.Get(species)
+	if not def then return end
+	local nextRarity = nextRarityName(def.rarity)
+	if not nextRarity then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Already at top fuseable rarity." })
+		return
+	end
+
+	-- Roll the output species
+	local pool = speciesOfRarity(nextRarity)
+	if #pool == 0 then return end
+	local newDef = pool[rng:NextInteger(1, #pool)]
+
+	-- Atomically: remove the three inputs, give the output.
+	local toRemove: { [string]: boolean } = {}
+	for _, u in ipairs(uids) do toRemove[u] = true end
+
+	-- Unplace any that are placed (TransferBrainrot path expects this)
+	for _, u in ipairs(uids) do
+		LabService.UnplaceBrainrot(player, u)
+	end
+	for i = #data.inventory, 1, -1 do
+		if toRemove[data.inventory[i].uid] then
+			table.remove(data.inventory, i)
+		end
+	end
+
+	local newBrainrot: Types.OwnedBrainrot = {
+		uid = Util.GenerateUid(),
+		speciesId = newDef.id,
+		mutationTier = 0,
+		mutations = {},
+		bornAt = os.time(),
+		lastMutationAt = os.time(),
+		placed = false,
+	}
+	LabService.GiveBrainrot(player, newBrainrot)
+	LabService.PlaceBrainrot(player, newBrainrot.uid)
+	LabService.PushInventory(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = string.format("✨ Fused 3x %s → %s [%s]", def.displayName, newDef.displayName, newDef.rarity),
+	})
+	Log.Info("Fusion", "%s fused 3x %s -> %s", player.Name, def.id, newDef.id)
+end
+
+function FusionService.Init()
+	-- Suppress unused
+	local _ = Util
+end
+
+return FusionService
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="41">
+        <Properties>
           <string name="Name">GlobalLeaderboardService</string>
           <string name="Source"><![CDATA[--!strict
 --[[
@@ -4422,7 +4570,7 @@ return GlobalLeaderboardService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="41">
+      <Item class="ModuleScript" referent="42">
         <Properties>
           <string name="Name">GroupRewardService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4491,7 +4639,7 @@ return GroupRewardService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="42">
+      <Item class="ModuleScript" referent="43">
         <Properties>
           <string name="Name">HotStreakService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4571,7 +4719,7 @@ return HotStreakService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="43">
+      <Item class="ModuleScript" referent="44">
         <Properties>
           <string name="Name">InfectionService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4677,7 +4825,7 @@ return InfectionService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="44">
+      <Item class="ModuleScript" referent="45">
         <Properties>
           <string name="Name">InviteService</string>
           <string name="Source"><![CDATA[--!strict
@@ -4808,7 +4956,7 @@ return InviteService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="45">
+      <Item class="ModuleScript" referent="46">
         <Properties>
           <string name="Name">LabService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5431,7 +5579,7 @@ return LabService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="46">
+      <Item class="ModuleScript" referent="47">
         <Properties>
           <string name="Name">LeaderboardService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5502,7 +5650,7 @@ return LeaderboardService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="47">
+      <Item class="ModuleScript" referent="48">
         <Properties>
           <string name="Name">LuckyWheelService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5655,7 +5803,7 @@ return LuckyWheelService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="48">
+      <Item class="ModuleScript" referent="49">
         <Properties>
           <string name="Name">MilestoneAnnounceService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5747,7 +5895,7 @@ return MilestoneAnnounceService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="49">
+      <Item class="ModuleScript" referent="50">
         <Properties>
           <string name="Name">MonetizationService</string>
           <string name="Source"><![CDATA[--!strict
@@ -5956,7 +6104,7 @@ return MonetizationService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="50">
+      <Item class="ModuleScript" referent="51">
         <Properties>
           <string name="Name">MutationService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6093,7 +6241,7 @@ return MutationService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="51">
+      <Item class="ModuleScript" referent="52">
         <Properties>
           <string name="Name">OfflineCashService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6174,7 +6322,7 @@ return OfflineCashService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="52">
+      <Item class="ModuleScript" referent="53">
         <Properties>
           <string name="Name">OutbreakService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6377,7 +6525,7 @@ return OutbreakService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="53">
+      <Item class="ModuleScript" referent="54">
         <Properties>
           <string name="Name">PerformanceService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6448,7 +6596,7 @@ return PerformanceService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="54">
+      <Item class="ModuleScript" referent="55">
         <Properties>
           <string name="Name">PetService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6646,7 +6794,7 @@ return PetService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="55">
+      <Item class="ModuleScript" referent="56">
         <Properties>
           <string name="Name">PlayerLevelService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6745,7 +6893,7 @@ return PlayerLevelService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="56">
+      <Item class="ModuleScript" referent="57">
         <Properties>
           <string name="Name">PresenceService</string>
           <string name="Source"><![CDATA[--!strict
@@ -6841,7 +6989,7 @@ return PresenceService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="57">
+      <Item class="ModuleScript" referent="58">
         <Properties>
           <string name="Name">QuestService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7019,7 +7167,7 @@ return QuestService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="58">
+      <Item class="ModuleScript" referent="59">
         <Properties>
           <string name="Name">SeasonService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7122,7 +7270,7 @@ return SeasonService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="59">
+      <Item class="ModuleScript" referent="60">
         <Properties>
           <string name="Name">SocialInviteService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7167,7 +7315,7 @@ return SocialInviteService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="60">
+      <Item class="ModuleScript" referent="61">
         <Properties>
           <string name="Name">StealService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7331,7 +7479,106 @@ return StealService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="61">
+      <Item class="ModuleScript" referent="62">
+        <Properties>
+          <string name="Name">TopOfHourService</string>
+          <string name="Source"><![CDATA[--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local TopOfHourService = {}
+
+-- Predictable 5-minute event every hour on the hour (HH:00 - HH:05 UTC).
+-- Players know exactly when to log in. Combined with daily reward and
+-- HotStreak this creates 24 daily engagement windows / day.
+
+local EVENT_DURATION = 300
+
+local activeUntil = 0
+local currentMult = 1
+
+local EVENT_TYPES = {
+	{ label = "💰 GOLDEN HOUR — 3x cash for 5 minutes!",     color = { 255, 215, 80 },  cashMult = 3.0 },
+	{ label = "🧬 MUTATION RUSH — 4x mutation speed for 5 minutes!", color = { 255, 100, 220 }, cashMult = 1.5, mutationMult = 4.0 },
+	{ label = "🎰 SPIN HOUR — every player gets 1 free wheel spin!",  color = { 120, 220, 255 }, cashMult = 1.5, freeSpins = 1 },
+}
+
+local currentEvent: any = nil
+
+local function startEvent()
+	currentEvent = EVENT_TYPES[math.random(1, #EVENT_TYPES)]
+	activeUntil = os.time() + EVENT_DURATION
+	currentMult = currentEvent.cashMult or 1
+	if AnnouncementService then
+		AnnouncementService.Push(currentEvent.label, currentEvent.color, EVENT_DURATION)
+	end
+
+	-- Grant any one-time perks declared by this event
+	if currentEvent.freeSpins then
+		local ok, LuckyWheelService = pcall(require, script.Parent.LuckyWheelService)
+		if ok then
+			for _, p in ipairs(Players:GetPlayers()) do
+				LuckyWheelService.GrantSpins(p, currentEvent.freeSpins)
+			end
+		end
+	end
+
+	Log.Info("TopOfHour", "%s for %ds", currentEvent.label, EVENT_DURATION)
+end
+
+local function endEvent()
+	currentEvent = nil
+	currentMult = 1
+	activeUntil = 0
+end
+
+function TopOfHourService.GetCashMult(): number
+	if os.time() < activeUntil then return currentMult end
+	return 1
+end
+
+function TopOfHourService.GetMutationMult(): number
+	if os.time() < activeUntil and currentEvent and currentEvent.mutationMult then
+		return currentEvent.mutationMult
+	end
+	return 1
+end
+
+function TopOfHourService.GetActive(): any?
+	if os.time() < activeUntil then return currentEvent end
+	return nil
+end
+
+function TopOfHourService.Init()
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	task.spawn(function()
+		while true do
+			task.wait(5)
+			local now = os.time()
+			local minute = math.floor(now / 60) % 60
+			local second = now % 60
+			if activeUntil > 0 and now >= activeUntil then
+				endEvent()
+			elseif activeUntil == 0 and minute == 0 and second < 6 then
+				startEvent()
+				task.wait(10) -- avoid double-trigger within the same minute
+			end
+		end
+	end)
+end
+
+return TopOfHourService
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="63">
         <Properties>
           <string name="Name">TradeService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7634,7 +7881,7 @@ return TradeService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="62">
+      <Item class="ModuleScript" referent="64">
         <Properties>
           <string name="Name">TrailService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7719,7 +7966,7 @@ return TrailService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="63">
+      <Item class="ModuleScript" referent="65">
         <Properties>
           <string name="Name">VipServerService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7770,7 +8017,7 @@ return VipServerService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="64">
+      <Item class="ModuleScript" referent="66">
         <Properties>
           <string name="Name">WebhookService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7836,7 +8083,7 @@ return WebhookService
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="65">
+      <Item class="ModuleScript" referent="67">
         <Properties>
           <string name="Name">WelcomeOfferService</string>
           <string name="Source"><![CDATA[--!strict
@@ -7909,27 +8156,27 @@ return WelcomeOfferService
         </Properties>
       </Item>
     </Item>
-    <Item class="Folder" referent="66">
+    <Item class="Folder" referent="68">
       <Properties>
         <string name="Name">ServerPackages</string>
       </Properties>
     </Item>
   </Item>
-  <Item class="SoundService" referent="67">
+  <Item class="SoundService" referent="69">
     <Properties>
       <string name="Name">SoundService</string>
       <bool name="RespectFilteringEnabled">true</bool>
     </Properties>
   </Item>
-  <Item class="StarterPlayer" referent="68">
+  <Item class="StarterPlayer" referent="70">
     <Properties>
       <string name="Name">StarterPlayer</string>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="69">
+    <Item class="StarterPlayerScripts" referent="71">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="70">
+      <Item class="LocalScript" referent="72">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[--!strict
@@ -8049,7 +8296,7 @@ SoundController.Init()
 print("[BrainrotLab] Client ready.")
 ]]></string>
         </Properties>
-        <Item class="ModuleScript" referent="71">
+        <Item class="ModuleScript" referent="73">
           <Properties>
             <string name="Name">AchievementUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8192,7 +8439,7 @@ return AchievementUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="72">
+        <Item class="ModuleScript" referent="74">
           <Properties>
             <string name="Name">AdminPanelUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8464,7 +8711,7 @@ return AdminPanelUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="73">
+        <Item class="ModuleScript" referent="75">
           <Properties>
             <string name="Name">AnnouncementUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8516,7 +8763,7 @@ return AnnouncementUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="74">
+        <Item class="ModuleScript" referent="76">
           <Properties>
             <string name="Name">AutoSellUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8677,7 +8924,7 @@ return AutoSellUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="75">
+        <Item class="ModuleScript" referent="77">
           <Properties>
             <string name="Name">BattlePassUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8809,7 +9056,7 @@ return BattlePassUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="76">
+        <Item class="ModuleScript" referent="78">
           <Properties>
             <string name="Name">BossUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8864,7 +9111,7 @@ return BossUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="77">
+        <Item class="ModuleScript" referent="79">
           <Properties>
             <string name="Name">CinematicUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -8944,7 +9191,7 @@ return CinematicUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="78">
+        <Item class="ModuleScript" referent="80">
           <Properties>
             <string name="Name">CodeRedeemUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9037,7 +9284,7 @@ return CodeRedeemUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="79">
+        <Item class="ModuleScript" referent="81">
           <Properties>
             <string name="Name">DailyRewardUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9157,7 +9404,7 @@ return DailyRewardUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="80">
+        <Item class="ModuleScript" referent="82">
           <Properties>
             <string name="Name">DecorationUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9290,7 +9537,7 @@ return DecorationUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="81">
+        <Item class="ModuleScript" referent="83">
           <Properties>
             <string name="Name">GlobalLeaderboardUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9403,7 +9650,7 @@ return GlobalLeaderboardUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="82">
+        <Item class="ModuleScript" referent="84">
           <Properties>
             <string name="Name">GroupBannerUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9501,7 +9748,7 @@ return GroupBannerUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="83">
+        <Item class="ModuleScript" referent="85">
           <Properties>
             <string name="Name">HUD</string>
             <string name="Source"><![CDATA[--!strict
@@ -9602,7 +9849,7 @@ return HUD
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="84">
+        <Item class="ModuleScript" referent="86">
           <Properties>
             <string name="Name">InventoryUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9738,7 +9985,7 @@ return InventoryUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="85">
+        <Item class="ModuleScript" referent="87">
           <Properties>
             <string name="Name">InviteUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9858,7 +10105,7 @@ return InviteUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="86">
+        <Item class="ModuleScript" referent="88">
           <Properties>
             <string name="Name">LeaderboardUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -9948,7 +10195,7 @@ return LeaderboardUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="87">
+        <Item class="ModuleScript" referent="89">
           <Properties>
             <string name="Name">LevelUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -10085,7 +10332,7 @@ return LevelUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="88">
+        <Item class="ModuleScript" referent="90">
           <Properties>
             <string name="Name">LoadingScreen</string>
             <string name="Source"><![CDATA[--!strict
@@ -10238,7 +10485,7 @@ return LoadingScreen
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="89">
+        <Item class="ModuleScript" referent="91">
           <Properties>
             <string name="Name">LuckyWheelUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -10454,7 +10701,7 @@ return LuckyWheelUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="90">
+        <Item class="ModuleScript" referent="92">
           <Properties>
             <string name="Name">NotificationUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -10534,7 +10781,7 @@ return NotificationUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="91">
+        <Item class="ModuleScript" referent="93">
           <Properties>
             <string name="Name">OutbreakUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -10590,7 +10837,7 @@ return OutbreakUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="92">
+        <Item class="ModuleScript" referent="94">
           <Properties>
             <string name="Name">PatchNotesUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -10700,7 +10947,7 @@ return PatchNotesUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="93">
+        <Item class="ModuleScript" referent="95">
           <Properties>
             <string name="Name">PetUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -10834,7 +11081,7 @@ return PetUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="94">
+        <Item class="ModuleScript" referent="96">
           <Properties>
             <string name="Name">PlotUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -11001,7 +11248,7 @@ return PlotUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="95">
+        <Item class="ModuleScript" referent="97">
           <Properties>
             <string name="Name">QuestUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -11119,7 +11366,7 @@ return QuestUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="96">
+        <Item class="ModuleScript" referent="98">
           <Properties>
             <string name="Name">ShopUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -11271,7 +11518,7 @@ return ShopUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="97">
+        <Item class="ModuleScript" referent="99">
           <Properties>
             <string name="Name">SoundController</string>
             <string name="Source"><![CDATA[--!strict
@@ -11335,7 +11582,7 @@ return SoundController
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="98">
+        <Item class="ModuleScript" referent="100">
           <Properties>
             <string name="Name">TradeUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -11723,7 +11970,7 @@ return TradeUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="99">
+        <Item class="ModuleScript" referent="101">
           <Properties>
             <string name="Name">TutorialUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -11881,7 +12128,7 @@ return TutorialUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="100">
+        <Item class="ModuleScript" referent="102">
           <Properties>
             <string name="Name">UIController</string>
             <string name="Source"><![CDATA[--!strict
@@ -12020,7 +12267,7 @@ return UIController
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="101">
+        <Item class="ModuleScript" referent="103">
           <Properties>
             <string name="Name">WelcomeOfferUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -12167,14 +12414,14 @@ return WelcomeOfferUI
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="102">
+  <Item class="Workspace" referent="104">
     <Properties>
       <string name="Name">Workspace</string>
       <bool name="FilteringEnabled">true</bool>
       <float name="Gravity">196.2</float>
       <bool name="NeedsPivotMigration">false</bool>
     </Properties>
-    <Item class="Part" referent="103">
+    <Item class="Part" referent="105">
       <Properties>
         <string name="Name">Baseplate</string>
         <bool name="Anchored">true</bool>
@@ -12192,12 +12439,12 @@ return WelcomeOfferUI
         </Vector3>
       </Properties>
     </Item>
-    <Item class="Folder" referent="104">
+    <Item class="Folder" referent="106">
       <Properties>
         <string name="Name">Brainrots</string>
       </Properties>
     </Item>
-    <Item class="Folder" referent="105">
+    <Item class="Folder" referent="107">
       <Properties>
         <string name="Name">Plots</string>
       </Properties>

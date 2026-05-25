@@ -54,6 +54,8 @@ local VipServerService        = require(script.VipServerService)
 local AutoSellService         = require(script.AutoSellService)
 local PerformanceService      = require(script.PerformanceService)
 local CrossServerShoutService = require(script.CrossServerShoutService)
+local FusionService           = require(script.FusionService)
+local TopOfHourService        = require(script.TopOfHourService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -103,6 +105,8 @@ local bootOrder = {
 	{ "AutoSellService",      AutoSellService.Init       },
 	{ "PerformanceService",   PerformanceService.Init    },
 	{ "CrossServerShoutService", CrossServerShoutService.Init },
+	{ "FusionService",        FusionService.Init         },
+	{ "TopOfHourService",     TopOfHourService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -329,6 +333,16 @@ bind(Remotes.Names.RequestSetAutoSell, function(player, enabled, threshold, excl
 	if t and typeof(enabled) == "boolean" and typeof(excludeMutated) == "boolean" then
 		AutoSellService.SetConfig(player, enabled, t, excludeMutated)
 	end
+end)
+
+bind(Remotes.Names.RequestFuse, function(player, uids)
+	if typeof(uids) ~= "table" then return end
+	local cleaned: { string } = {}
+	for _, u in ipairs(uids) do
+		local s = asUid(player, u, "Fuse.uid")
+		if s then table.insert(cleaned, s) end
+	end
+	if #cleaned == 3 then FusionService.Attempt(player, cleaned) end
 end)
 
 Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)
