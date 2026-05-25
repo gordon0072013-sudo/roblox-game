@@ -1324,6 +1324,8 @@ local HotStreakService        = require(script.HotStreakService)
 local PresenceService         = require(script.PresenceService)
 local EventService            = require(script.EventService)
 local CinematicService        = require(script.CinematicService)
+local MilestoneAnnounceService= require(script.MilestoneAnnounceService)
+local VipServerService        = require(script.VipServerService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1368,6 +1370,8 @@ local bootOrder = {
 	{ "PresenceService",      PresenceService.Init       },
 	{ "EventService",         EventService.Init          },
 	{ "CinematicService",     CinematicService.Init      },
+	{ "MilestoneAnnounceService", MilestoneAnnounceService.Init },
+	{ "VipServerService",     VipServerService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1411,6 +1415,8 @@ local function onPlayerAdded(player: Player)
 		PresenceService.OnPlayerAdded(player)
 		EventService.OnPlayerAdded(player)
 		CinematicService.OnPlayerAdded(player)
+		MilestoneAnnounceService.OnPlayerAdded(player)
+		VipServerService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -1425,6 +1431,7 @@ local function onPlayerRemoving(player: Player)
 	AntiCheat.OnPlayerRemoving(player)
 	OfflineCashService.OnPlayerRemoving(player)
 	HotStreakService.OnPlayerRemoving(player)
+	MilestoneAnnounceService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
@@ -3779,6 +3786,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local eventMult = 1
 	local okEvt, EventService = pcall(require, script.Parent.EventService)
 	if okEvt then eventMult = EventService.GetCashMult() end
+	local vipServerMult = 1
+	local okVip, VipServerService = pcall(require, script.Parent.VipServerService)
+	if okVip then vipServerMult = VipServerService.GetCashMult() end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -3788,7 +3798,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
@@ -5384,6 +5394,94 @@ function LuckyWheelService.Init()
 end
 
 return LuckyWheelService
+]])
+	ensurePath(root, "MilestoneAnnounceService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local MilestoneAnnounceService = {}
+
+-- Watches the same hook points that fire badges, but instead of awarding
+-- the badge to the achieving player, it shouts to the *whole server* so
+-- everyone sees the social proof. Compounding effect: seeing "Mark just
+-- hit Rebirth 5" is the cheapest in-game motivator there is.
+
+local REBIRTH_TIERS = { 1, 3, 5, 10, 25, 50 }
+local CAPTURE_TIERS = { 100, 500, 1000 }
+
+local lastFiredFor: { [string]: { [number]: boolean } } = {}
+
+local function fire(player: Player, kind: string, milestone: number, text: string, color: { number })
+	lastFiredFor[kind] = lastFiredFor[kind] or {}
+	if lastFiredFor[kind][player.UserId] == nil then
+		lastFiredFor[kind][player.UserId] = true
+	end
+	if not AnnouncementService then return end
+	AnnouncementService.Push(text, color, 12)
+	-- Also fire a Notify to the achieving player so they get a personal toast
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = `🎉 Server-wide shoutout: ${text}`,
+	})
+	Log.Info("Milestone", "%s %s %d", player.Name, kind, milestone)
+end
+
+local watchedProfiles: { [Player]: { rebirths: number, captures: number } } = {}
+
+local function snapshot(player: Player)
+	local DataService = require(script.Parent.DataService)
+	local data = DataService.Get(player)
+	if not data then return end
+	local snap = watchedProfiles[player] or { rebirths = 0, captures = 0 }
+	watchedProfiles[player] = snap
+
+	for _, tier in ipairs(REBIRTH_TIERS) do
+		if data.rebirths == tier and snap.rebirths < tier then
+			fire(player, "rebirth", tier,
+				string.format("🚀 %s reached Rebirth %d!", player.DisplayName, tier),
+				{ 255, 100, 220 })
+		end
+	end
+	for _, tier in ipairs(CAPTURE_TIERS) do
+		if data.stats.totalCaptured >= tier and snap.captures < tier then
+			fire(player, "captures", tier,
+				string.format("🧠 %s has captured %d brainrots!", player.DisplayName, tier),
+				{ 120, 220, 255 })
+		end
+	end
+	snap.rebirths = data.rebirths
+	snap.captures = data.stats.totalCaptured
+end
+
+function MilestoneAnnounceService.OnPlayerAdded(player: Player)
+	watchedProfiles[player] = { rebirths = 0, captures = 0 }
+end
+
+function MilestoneAnnounceService.OnPlayerRemoving(player: Player)
+	watchedProfiles[player] = nil
+end
+
+function MilestoneAnnounceService.Init()
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	task.spawn(function()
+		while true do
+			task.wait(5)
+			for _, p in ipairs(Players:GetPlayers()) do
+				snapshot(p)
+			end
+		end
+	end)
+end
+
+return MilestoneAnnounceService
 ]])
 	ensurePath(root, "MonetizationService", "ModuleScript", [=[
 --!strict
@@ -7234,6 +7332,53 @@ end
 
 return TrailService
 ]=])
+	ensurePath(root, "VipServerService", "ModuleScript", [[
+--!strict
+
+local Players = game:GetService("Players")
+
+local VipServerService = {}
+
+-- A "VIP server" in Roblox lingo is a private server a player rents from
+-- the experience for a recurring R$ price (you set it on Creator Dashboard).
+-- game.PrivateServerId is non-empty when the current server is one.
+-- Players in a VIP server get +50% cash on top of every other mult — this
+-- is real recurring revenue with zero ongoing dev cost per subscription.
+local VIP_CASH_BONUS = 1.50
+
+function VipServerService.IsVipServer(): boolean
+	return game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
+end
+
+function VipServerService.GetCashMult(): number
+	return if VipServerService.IsVipServer() then VIP_CASH_BONUS else 1
+end
+
+function VipServerService.OwnerUserId(): number
+	return game.PrivateServerOwnerId
+end
+
+function VipServerService.OnPlayerAdded(player: Player)
+	-- Optional: print a welcome message for players joining a VIP server.
+	-- Done at OnPlayerAdded so the player sees this once on join.
+	if not VipServerService.IsVipServer() then return end
+	task.delay(2, function()
+		if not player.Parent then return end
+		local Remotes = require(game:GetService("ReplicatedStorage").Shared.Remotes)
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("💎 VIP Server — +%d%% cash for everyone here!",
+				math.floor((VIP_CASH_BONUS - 1) * 100)),
+		})
+	end)
+	-- Suppress unused
+	local _ = Players
+end
+
+function VipServerService.Init() end
+
+return VipServerService
+]])
 	ensurePath(root, "WebhookService", "ModuleScript", [=[
 --!strict
 --[[

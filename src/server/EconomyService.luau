@@ -41,6 +41,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local eventMult = 1
 	local okEvt, EventService = pcall(require, script.Parent.EventService)
 	if okEvt then eventMult = EventService.GetCashMult() end
+	local vipServerMult = 1
+	local okVip, VipServerService = pcall(require, script.Parent.VipServerService)
+	if okVip then vipServerMult = VipServerService.GetCashMult() end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -50,7 +53,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)

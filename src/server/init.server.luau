@@ -49,6 +49,8 @@ local HotStreakService        = require(script.HotStreakService)
 local PresenceService         = require(script.PresenceService)
 local EventService            = require(script.EventService)
 local CinematicService        = require(script.CinematicService)
+local MilestoneAnnounceService= require(script.MilestoneAnnounceService)
+local VipServerService        = require(script.VipServerService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -93,6 +95,8 @@ local bootOrder = {
 	{ "PresenceService",      PresenceService.Init       },
 	{ "EventService",         EventService.Init          },
 	{ "CinematicService",     CinematicService.Init      },
+	{ "MilestoneAnnounceService", MilestoneAnnounceService.Init },
+	{ "VipServerService",     VipServerService.Init      },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -136,6 +140,8 @@ local function onPlayerAdded(player: Player)
 		PresenceService.OnPlayerAdded(player)
 		EventService.OnPlayerAdded(player)
 		CinematicService.OnPlayerAdded(player)
+		MilestoneAnnounceService.OnPlayerAdded(player)
+		VipServerService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -150,6 +156,7 @@ local function onPlayerRemoving(player: Player)
 	AntiCheat.OnPlayerRemoving(player)
 	OfflineCashService.OnPlayerRemoving(player)
 	HotStreakService.OnPlayerRemoving(player)
+	MilestoneAnnounceService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
