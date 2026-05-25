@@ -1,45 +1,126 @@
-<roblox version="4">
-  <Item class="HttpService" referent="0">
-    <Properties>
-      <string name="Name">HttpService</string>
-      <bool name="HttpEnabled">false</bool>
-    </Properties>
-  </Item>
-  <Item class="Lighting" referent="1">
-    <Properties>
-      <string name="Name">Lighting</string>
-      <float name="Brightness">2</float>
-      <float name="ClockTime">14</float>
-      <float name="FogEnd">1500</float>
-    </Properties>
-  </Item>
-  <Item class="ReplicatedStorage" referent="2">
-    <Properties>
-      <string name="Name">ReplicatedStorage</string>
-    </Properties>
-    <Item class="Folder" referent="3">
-      <Properties>
-        <string name="Name">Assets</string>
-      </Properties>
-      <Item class="Folder" referent="4">
-        <Properties>
-          <string name="Name">Brainrots</string>
-        </Properties>
-      </Item>
-    </Item>
-    <Item class="Folder" referent="5">
-      <Properties>
-        <string name="Name">Packages</string>
-      </Properties>
-    </Item>
-    <Item class="Folder" referent="6">
-      <Properties>
-        <string name="Name">Shared</string>
-      </Properties>
-      <Item class="ModuleScript" referent="7">
-        <Properties>
-          <string name="Name">AchievementData</string>
-          <string name="Source"><![CDATA[--!strict
+--!strict
+-- BrainrotLab installer — auto-generated. Do not edit by hand.
+--
+-- INSTALLATION
+--   1. Open Roblox Studio. Any place (Baseplate, empty, etc.) works.
+--   2. View tab -> Command Bar.
+--   3. Paste this entire file and press Enter.
+--   4. Wait for "[BrainrotLab Installer] Install complete." in Output.
+--   5. File -> Save (or Publish to Roblox).
+--
+-- The installer is idempotent: re-running it overwrites any previous install
+-- in this place. Safe to run while editing; do not run during Play Solo.
+
+local function ensureFolder(parent, name)
+	local existing = parent:FindFirstChild(name)
+	if existing and existing:IsA("Folder") then return existing end
+	if existing then existing:Destroy() end
+	local f = Instance.new("Folder")
+	f.Name = name
+	f.Parent = parent
+	return f
+end
+
+local function resolveContainer(path)
+	local cur = game
+	for part in string.gmatch(path, "[^%.]+") do
+		local nextInst = cur:FindFirstChild(part)
+		if not nextInst then
+			if cur == game then
+				nextInst = game:GetService(part)
+			else
+				nextInst = Instance.new("Folder")
+				nextInst.Name = part
+				nextInst.Parent = cur
+			end
+		end
+		cur = nextInst
+	end
+	return cur
+end
+
+local function ensureScript(parent, name, className, source)
+	local existing = parent:FindFirstChild(name)
+	if existing and existing.ClassName ~= className then
+		existing:Destroy()
+		existing = nil
+	end
+	if not existing then
+		existing = Instance.new(className)
+		existing.Name = name
+		existing.Parent = parent
+	end
+	existing.Source = source
+	return existing
+end
+
+local function ensurePath(root, path, className, source)
+	local segments = {}
+	for seg in string.gmatch(path, "[^/]+") do table.insert(segments, seg) end
+	local cur = root
+	for i = 1, #segments - 1 do
+		cur = ensureFolder(cur, segments[i])
+	end
+	ensureScript(cur, segments[#segments], className, source)
+end
+
+local function ensureRootScript(container, name, className, source)
+	-- Mirrors Rojo's init.* convention: the named folder *is* the Script,
+	-- so `require(script.X)` in init source resolves children correctly.
+	local existing = container:FindFirstChild(name)
+	if existing and existing.ClassName ~= className then
+		-- preserve children if reinstalling with same kind of root
+		local children = existing:GetChildren()
+		local replacement = Instance.new(className)
+		replacement.Name = name
+		for _, c in ipairs(children) do c.Parent = replacement end
+		existing:Destroy()
+		existing = replacement
+		existing.Parent = container
+	elseif not existing then
+		existing = Instance.new(className)
+		existing.Name = name
+		existing.Parent = container
+	end
+	existing.Source = source
+	return existing
+end
+
+local function ensureBaseScene()
+	-- Workspace baseplate
+	local workspace = game:GetService("Workspace")
+	if not workspace:FindFirstChild("Baseplate") then
+		local base = Instance.new("Part")
+		base.Name = "Baseplate"
+		base.Anchored = true
+		base.Size = Vector3.new(2048, 1, 2048)
+		base.Position = Vector3.new(0, -1, 0)
+		base.Color = Color3.fromRGB(50, 150, 75)
+		base.Material = Enum.Material.Grass
+		base.Parent = workspace
+	end
+	ensureFolder(workspace, "Plots")
+	ensureFolder(workspace, "Brainrots")
+
+	-- Lighting tweaks
+	local lighting = game:GetService("Lighting")
+	lighting.Brightness = 2
+	lighting.ClockTime = 14
+	lighting.FogEnd = 1500
+
+	-- HTTP for the optional WebhookService
+	pcall(function() game:GetService("HttpService").HttpEnabled = true end)
+end
+
+print("[BrainrotLab Installer] Beginning install...")
+ensureBaseScene()
+
+
+do  -- ReplicatedStorage/Shared
+	local container = resolveContainer("ReplicatedStorage")
+	local root = ensureFolder(container, "Shared")
+	ensurePath(root, "AchievementData", "ModuleScript", [=[
+--!strict
 --[[
 	AchievementData — 20 achievements that map onto the natural play loop.
 	Each grants a tangible reward on claim, creating "one more session"
@@ -103,13 +184,9 @@ function AchievementData.Get(id: string): Achievement?
 end
 
 return AchievementData
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="8">
-        <Properties>
-          <string name="Name">BrainrotData</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "BrainrotData", "ModuleScript", [=[
+--!strict
 --[[
 	BrainrotData — the content catalogue. Names and visuals follow the
 	Italian/sigma brainrot meme family. Swap meshes/sounds in Studio later;
@@ -266,13 +343,9 @@ function BrainrotData.RollSpecies(rng: Random, outbreak: boolean, luckyBias: num
 end
 
 return BrainrotData
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="9">
-        <Properties>
-          <string name="Name">Config</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "Config", "ModuleScript", [=[
+--!strict
 --[[
 	Config — single source of truth for tuning + monetization IDs.
 
@@ -463,13 +536,9 @@ Config.REDEMPTION_CODES = {
 } :: { [string]: RedeemableReward }
 
 return Config
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="10">
-        <Properties>
-          <string name="Name">DecorationData</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "DecorationData", "ModuleScript", [=[
+--!strict
 --[[
 	DecorationData — placeable cosmetic items players buy with cash and
 	put on their plot. Pure cosmetics; no income impact. Sold through the
@@ -512,13 +581,9 @@ local module = {}
 function module.GetAll(): { DecorationDefinition } return catalog end
 function module.Get(id: string): DecorationDefinition? return byId[id] end
 return module
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="11">
-        <Properties>
-          <string name="Name">LocalizationService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "LocalizationService", "ModuleScript", [=[
+--!strict
 --[[
 	LocalizationService — string-key lookup with per-locale tables.
 	Roblox provides `LocalizationService:GetCountryRegionForPlayerAsync` and
@@ -662,13 +727,9 @@ function LocalizationService.SetLocale(code: string)
 end
 
 return LocalizationService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="12">
-        <Properties>
-          <string name="Name">Log</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "Log", "ModuleScript", [[
+--!strict
 
 local RunService = game:GetService("RunService")
 
@@ -712,13 +773,9 @@ end
 Log.LEVELS = LEVELS
 
 return Log
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="13">
-        <Properties>
-          <string name="Name">MutationData</string>
-          <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "MutationData", "ModuleScript", [=[
+--!strict
 --[[
 	MutationData — the table of possible mutations a brainrot can acquire.
 	Each tier roll picks ONE mutation from this list (weighted) and appends
@@ -791,13 +848,9 @@ function MutationData.Get(id: string): Types.Mutation?
 end
 
 return MutationData
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="14">
-        <Properties>
-          <string name="Name">PatchNotes</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "PatchNotes", "ModuleScript", [=[
+--!strict
 --[[
 	PatchNotes — chronological release notes shown in-game. Add an entry
 	whenever you bump Config.GAME_VERSION. Players whose lastSeenVersion
@@ -844,13 +897,9 @@ function module.Latest(): PatchEntry
 end
 
 return module
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="15">
-        <Properties>
-          <string name="Name">PetData</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "PetData", "ModuleScript", [=[
+--!strict
 --[[
 	PetData — pet companions. Each pet:
 	  * Floats next to the player when equipped
@@ -935,13 +984,9 @@ function module.Roll(rng: Random, luckyBias: number?): PetDefinition
 end
 
 return module
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="16">
-        <Properties>
-          <string name="Name">Remotes</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "Remotes", "ModuleScript", [=[
+--!strict
 --[[
 	Remotes — central registry. Server creates instances on first access,
 	client just reads them. Avoids stringly-typed lookups scattered across
@@ -1063,13 +1108,9 @@ end
 Remotes.Names = RemoteNames
 
 return Remotes
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="17">
-        <Properties>
-          <string name="Name">Types</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "Types", "ModuleScript", [=[
+--!strict
 --[[
 	Shared type definitions. Used by both server and client modules.
 ]]
@@ -1147,13 +1188,9 @@ export type StealRecord = {
 }
 
 return {}
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="18">
-        <Properties>
-          <string name="Name">Util</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "Util", "ModuleScript", [=[
+--!strict
 --[[
 	Util — tiny shared helpers.
 ]]
@@ -1207,20 +1244,18 @@ function Util.DayIndex(t: number?): number
 end
 
 return Util
-]]></string>
-        </Properties>
-      </Item>
-    </Item>
-  </Item>
-  <Item class="ServerScriptService" referent="19">
-    <Properties>
-      <string name="Name">ServerScriptService</string>
-    </Properties>
-    <Item class="Script" referent="20">
-      <Properties>
-        <string name="Name">Server</string>
-        <token name="RunContext">0</token>
-        <string name="Source"><![CDATA[--!strict
+]=])
+end
+
+do  -- ReplicatedStorage/Assets
+	local container = resolveContainer("ReplicatedStorage")
+	local root = ensureFolder(container, "Assets")
+end
+
+do  -- ServerScriptService/Server
+	local container = resolveContainer("ServerScriptService")
+	local root = ensureRootScript(container, "Server", "Script", [[
+--!strict
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1492,12 +1527,9 @@ bind(Remotes.Names.RequestRedeemInvite, function(player, code)
 end)
 
 Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)
-]]></string>
-      </Properties>
-      <Item class="ModuleScript" referent="21">
-        <Properties>
-          <string name="Name">AchievementService</string>
-          <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "AchievementService", "ModuleScript", [=[
+--!strict
 --[[
 	AchievementService — tracks progress (read from profile.stats and
 	profile.rebirths), delivers rewards on claim. Pushes an update to the
@@ -1606,13 +1638,9 @@ function AchievementService.Init()
 end
 
 return AchievementService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="22">
-        <Properties>
-          <string name="Name">AfkService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "AfkService", "ModuleScript", [=[
+--!strict
 --[[
 	AfkService — soft-kicks players idle for >20 minutes. With only 8 plots
 	per server, an AFK farmer occupies a slot a real new joiner could fill.
@@ -1695,13 +1723,9 @@ function AfkService.Init()
 end
 
 return AfkService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="23">
-        <Properties>
-          <string name="Name">AnalyticsService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "AnalyticsService", "ModuleScript", [=[
+--!strict
 --[[
 	AnalyticsService — lightweight in-process counters and a DataStore-backed
 	purchase log. Use the in-Studio Output to monitor purchase rates during
@@ -1746,13 +1770,9 @@ end
 function AnalyticsService.Init() end
 
 return AnalyticsService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="24">
-        <Properties>
-          <string name="Name">AnnouncementService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "AnnouncementService", "ModuleScript", [=[
+--!strict
 --[[
 	AnnouncementService — broadcasts a rotating banner to all players. Add
 	entries to the ANNOUNCEMENTS table for live-ops (codes drop, event
@@ -1842,13 +1862,9 @@ function AnnouncementService.Init()
 end
 
 return AnnouncementService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="25">
-        <Properties>
-          <string name="Name">AntiCheat</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "AntiCheat", "ModuleScript", [[
+--!strict
 --!native
 
 local HttpService     = game:GetService("HttpService")
@@ -2138,13 +2154,9 @@ function AntiCheat.Init()
 end
 
 return AntiCheat
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="26">
-        <Properties>
-          <string name="Name">BadgeService</string>
-          <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "BadgeService", "ModuleScript", [=[
+--!strict
 --[[
 	BadgeService — awards Roblox Badges for milestone events. Badges show
 	on the player's Roblox profile permanently, which is the most viral
@@ -2245,13 +2257,9 @@ function BadgeService.Init()
 end
 
 return BadgeService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="27">
-        <Properties>
-          <string name="Name">BattlePassService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "BattlePassService", "ModuleScript", [=[
+--!strict
 --[[
 	BattlePassService — XP, tier progression, reward claim.
 	Free tier gives small cash + bombs. Premium tier (sold via Battle Pass
@@ -2367,13 +2375,9 @@ function BattlePassService.Init()
 end
 
 return BattlePassService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="28">
-        <Properties>
-          <string name="Name">BossEventService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "BossEventService", "ModuleScript", [=[
+--!strict
 --[[
 	BossEventService — once every 45 min a "Mega Brainrot" boss spawns at
 	the plaza. All players in the server can damage it by clicking. The
@@ -2566,13 +2570,9 @@ function BossEventService.OnPlayerAdded(player: Player)
 end
 
 return BossEventService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="29">
-        <Properties>
-          <string name="Name">CaptureService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "CaptureService", "ModuleScript", [=[
+--!strict
 --[[
 	CaptureService — handles the "buy a new brainrot" action from a plot's
 	capture button (and from the Rare Brainrot Egg dev product).
@@ -2653,13 +2653,9 @@ end
 function CaptureService.Init() end
 
 return CaptureService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="30">
-        <Properties>
-          <string name="Name">CodeService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "CodeService", "ModuleScript", [=[
+--!strict
 --[[
 	CodeService — redeems marketing codes from Config.REDEMPTION_CODES.
 	Each (player, codeKey) pair is single-use; we track redemptions on the
@@ -2739,13 +2735,9 @@ function CodeService.Init()
 end
 
 return CodeService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="31">
-        <Properties>
-          <string name="Name">DailyRewardService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "DailyRewardService", "ModuleScript", [=[
+--!strict
 --[[
 	DailyRewardService — 7-day cycle, Premium players get bonus on day 7.
 	Streak resets if a day is skipped.
@@ -2819,13 +2811,9 @@ function DailyRewardService.Init()
 end
 
 return DailyRewardService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="32">
-        <Properties>
-          <string name="Name">DataService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "DataService", "ModuleScript", [=[
+--!strict
 --[[
 	DataService — ProfileService-style session-locked DataStore wrapper.
 
@@ -3007,13 +2995,9 @@ game:BindToClose(function()
 end)
 
 return DataService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="33">
-        <Properties>
-          <string name="Name">DecorationService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "DecorationService", "ModuleScript", [=[
+--!strict
 --[[
 	DecorationService — buying and placing cosmetic decorations on a plot.
 
@@ -3200,13 +3184,9 @@ function DecorationService.Init()
 end
 
 return DecorationService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="34">
-        <Properties>
-          <string name="Name">EconomyService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "EconomyService", "ModuleScript", [=[
+--!strict
 --[[
 	EconomyService — cash, rebirths, income calculation, multipliers.
 
@@ -3352,13 +3332,9 @@ end
 function EconomyService.Init() end
 
 return EconomyService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="35">
-        <Properties>
-          <string name="Name">GlobalLeaderboardService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "GlobalLeaderboardService", "ModuleScript", [=[
+--!strict
 --[[
 	GlobalLeaderboardService — cross-server top-100 boards backed by
 	OrderedDataStore. Three boards (cash, mutations, steals) with weekly
@@ -3507,13 +3483,9 @@ function GlobalLeaderboardService.Init()
 end
 
 return GlobalLeaderboardService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="36">
-        <Properties>
-          <string name="Name">GroupRewardService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "GroupRewardService", "ModuleScript", [=[
+--!strict
 --[[
 	GroupRewardService — checks if the player is a member of Config.GROUP_ID
 	on join and on demand (after they click "Join Group" in the banner).
@@ -3576,13 +3548,9 @@ function GroupRewardService.Init()
 end
 
 return GroupRewardService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="37">
-        <Properties>
-          <string name="Name">InfectionService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "InfectionService", "ModuleScript", [=[
+--!strict
 --[[
 	InfectionService — the second PvP novelty. Attacker spends one
 	Infection Bomb to debuff a victim's whole income for INFECTION_DEBUFF_DURATION.
@@ -3682,13 +3650,9 @@ function InfectionService.Init()
 end
 
 return InfectionService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="38">
-        <Properties>
-          <string name="Name">InviteService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "InviteService", "ModuleScript", [=[
+--!strict
 --[[
 	InviteService — referral codes. Every player gets an auto-generated
 	personal code (REF-<6 chars>). When a new player joins and redeems
@@ -3813,13 +3777,9 @@ function InviteService.Init()
 end
 
 return InviteService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="39">
-        <Properties>
-          <string name="Name">LabService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "LabService", "ModuleScript", [=[
+--!strict
 --[[
 	LabService — owns plots, placed brainrots (the visual scene), capture
 	pads, and the income tick that converts placed brainrots into cash.
@@ -4434,13 +4394,9 @@ function LabService.Init()
 end
 
 return LabService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="40">
-        <Properties>
-          <string name="Name">LeaderboardService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "LeaderboardService", "ModuleScript", [=[
+--!strict
 --[[
 	LeaderboardService — pushes a server-local top-10 every 10s. Three boards:
 	Top Cash, Top Mutations, Top Thieves. Resets per server, not global —
@@ -4505,13 +4461,9 @@ function LeaderboardService.Init()
 end
 
 return LeaderboardService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="41">
-        <Properties>
-          <string name="Name">MonetizationService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "MonetizationService", "ModuleScript", [=[
+--!strict
 --[[
 	MonetizationService — the revenue plumbing. Three flows:
 
@@ -4710,13 +4662,9 @@ function MonetizationService.Init()
 end
 
 return MonetizationService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="42">
-        <Properties>
-          <string name="Name">MutationService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "MutationService", "ModuleScript", [=[
+--!strict
 --[[
 	MutationService — the novel mechanic. Every placed brainrot rolls for a
 	mutation tier-up on a per-brainrot interval. Each successful roll picks
@@ -4835,13 +4783,9 @@ function MutationService.Init()
 end
 
 return MutationService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="43">
-        <Properties>
-          <string name="Name">OutbreakService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "OutbreakService", "ModuleScript", [=[
+--!strict
 --[[
 	OutbreakService — runs a server-wide "Outbreak" event on a timer:
 	spawns OUTBREAK_SPAWN_COUNT rare brainrots in the center plaza. Whoever
@@ -5033,13 +4977,9 @@ function OutbreakService.OnPlayerAdded(player: Player)
 end
 
 return OutbreakService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="44">
-        <Properties>
-          <string name="Name">PetService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "PetService", "ModuleScript", [=[
+--!strict
 --[[
 	PetService — pet inventory, hatching from Pet Eggs (dev product), and
 	equipping a single active pet that hovers next to the character and
@@ -5231,13 +5171,9 @@ function PetService.Init()
 end
 
 return PetService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="45">
-        <Properties>
-          <string name="Name">PlayerLevelService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "PlayerLevelService", "ModuleScript", [=[
+--!strict
 --[[
 	PlayerLevelService — persistent XP/level system separate from rebirth
 	and battle pass. XP comes from every meaningful action; level rewards
@@ -5330,13 +5266,9 @@ end
 function PlayerLevelService.Init() end
 
 return PlayerLevelService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="46">
-        <Properties>
-          <string name="Name">QuestService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "QuestService", "ModuleScript", [=[
+--!strict
 --[[
 	QuestService — 3 quests per day, deterministic per-player from
 	(userId, dayIndex). Quests use the same stats counters as
@@ -5508,13 +5440,9 @@ function QuestService.Init()
 end
 
 return QuestService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="47">
-        <Properties>
-          <string name="Name">SeasonService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "SeasonService", "ModuleScript", [=[
+--!strict
 --[[
 	SeasonService — manages a 2-week seasonal brainrot rotation. Each
 	"season" gates one limited brainrot variant that's only obtainable
@@ -5611,13 +5539,9 @@ function SeasonService.Init()
 end
 
 return SeasonService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="48">
-        <Properties>
-          <string name="Name">StealService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "StealService", "ModuleScript", [=[
+--!strict
 --[[
 	StealService — the PvP "raid" mechanic. An attacker standing within
 	STEAL_DETECTION_RADIUS of a rival's placed brainrot can fire a
@@ -5775,13 +5699,9 @@ function StealService.Init()
 end
 
 return StealService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="49">
-        <Properties>
-          <string name="Name">TradeService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "TradeService", "ModuleScript", [=[
+--!strict
 --[[
 	TradeService — player-to-player brainrot swap. Two-party confirm flow:
 
@@ -6078,13 +5998,9 @@ function TradeService.Init()
 end
 
 return TradeService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="50">
-        <Properties>
-          <string name="Name">TrailService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "TrailService", "ModuleScript", [=[
+--!strict
 --[[
 	TrailService — attaches a cycling-rainbow Trail to the character of any
 	player with the Rainbow Trail gamepass. Cosmetic, status-symbol, high
@@ -6163,13 +6079,9 @@ function TrailService.Init()
 end
 
 return TrailService
-]]></string>
-        </Properties>
-      </Item>
-      <Item class="ModuleScript" referent="51">
-        <Properties>
-          <string name="Name">WebhookService</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "WebhookService", "ModuleScript", [=[
+--!strict
 --[[
 	WebhookService — posts notable events to a Discord webhook URL. Two
 	channels supported by default:
@@ -6229,34 +6141,13 @@ function WebhookService.Init()
 end
 
 return WebhookService
-]]></string>
-        </Properties>
-      </Item>
-    </Item>
-    <Item class="Folder" referent="52">
-      <Properties>
-        <string name="Name">ServerPackages</string>
-      </Properties>
-    </Item>
-  </Item>
-  <Item class="SoundService" referent="53">
-    <Properties>
-      <string name="Name">SoundService</string>
-      <bool name="RespectFilteringEnabled">true</bool>
-    </Properties>
-  </Item>
-  <Item class="StarterPlayer" referent="54">
-    <Properties>
-      <string name="Name">StarterPlayer</string>
-    </Properties>
-    <Item class="StarterPlayerScripts" referent="55">
-      <Properties>
-        <string name="Name">StarterPlayerScripts</string>
-      </Properties>
-      <Item class="LocalScript" referent="56">
-        <Properties>
-          <string name="Name">Client</string>
-          <string name="Source"><![CDATA[--!strict
+]=])
+end
+
+do  -- StarterPlayer.StarterPlayerScripts/Client
+	local container = resolveContainer("StarterPlayer.StarterPlayerScripts")
+	local root = ensureRootScript(container, "Client", "LocalScript", [=[
+--!strict
 --[[
 	Client bootstrap — instantiates ScreenGui hierarchy, then hands off to
 	individual UI controllers.
@@ -6356,12 +6247,9 @@ local SoundController = require(script.SoundController)
 SoundController.Init()
 
 print("[BrainrotLab] Client ready.")
-]]></string>
-        </Properties>
-        <Item class="ModuleScript" referent="57">
-          <Properties>
-            <string name="Name">AchievementUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "AchievementUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -6498,13 +6386,9 @@ function AchievementUI.Init(screen: ScreenGui, UIController)
 end
 
 return AchievementUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="58">
-          <Properties>
-            <string name="Name">AnnouncementUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "AnnouncementUI", "ModuleScript", [[
+--!strict
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -6550,13 +6434,9 @@ function AnnouncementUI.Init(screen: ScreenGui)
 end
 
 return AnnouncementUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="59">
-          <Properties>
-            <string name="Name">BattlePassUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "BattlePassUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -6682,13 +6562,9 @@ function BattlePassUI.Init(screen: ScreenGui, UIController)
 end
 
 return BattlePassUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="60">
-          <Properties>
-            <string name="Name">BossUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "BossUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -6737,13 +6613,9 @@ function BossUI.Init(screen: ScreenGui)
 end
 
 return BossUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="61">
-          <Properties>
-            <string name="Name">CodeRedeemUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "CodeRedeemUI", "ModuleScript", [=[
+--!strict
 --[[
 	CodeRedeemUI — small input + redeem button. Toggled from the bottom bar.
 ]]
@@ -6830,13 +6702,9 @@ function CodeRedeemUI.Init(screen: ScreenGui, UIController)
 end
 
 return CodeRedeemUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="62">
-          <Properties>
-            <string name="Name">DailyRewardUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "DailyRewardUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -6950,13 +6818,9 @@ function DailyRewardUI.Init(screen: ScreenGui, UIController)
 end
 
 return DailyRewardUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="63">
-          <Properties>
-            <string name="Name">DecorationUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "DecorationUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -7083,13 +6947,9 @@ function DecorationUI.Init(screen: ScreenGui, UIController)
 end
 
 return DecorationUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="64">
-          <Properties>
-            <string name="Name">GlobalLeaderboardUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "GlobalLeaderboardUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -7196,13 +7056,9 @@ function GlobalLeaderboardUI.Init(screen: ScreenGui, UIController)
 end
 
 return GlobalLeaderboardUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="65">
-          <Properties>
-            <string name="Name">GroupBannerUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "GroupBannerUI", "ModuleScript", [=[
+--!strict
 --[[
 	GroupBannerUI — small top-right banner that prompts the player to join
 	the Roblox group for a permanent +25% cash boost. Hides itself once the
@@ -7294,13 +7150,9 @@ function GroupBannerUI.Init(screen: ScreenGui)
 end
 
 return GroupBannerUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="66">
-          <Properties>
-            <string name="Name">HUD</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "HUD", "ModuleScript", [=[
+--!strict
 --[[
 	HUD — top-left cash + rebirth panel. Driven by HudUpdate remote.
 ]]
@@ -7395,13 +7247,9 @@ function HUD.Init(screen: ScreenGui)
 end
 
 return HUD
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="67">
-          <Properties>
-            <string name="Name">InventoryUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "InventoryUI", "ModuleScript", [=[
+--!strict
 --[[
 	InventoryUI — list of owned brainrots with Place / Unplace / Sell controls.
 ]]
@@ -7531,13 +7379,9 @@ function InventoryUI.Init(screen: ScreenGui, UIController)
 end
 
 return InventoryUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="68">
-          <Properties>
-            <string name="Name">InviteUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "InviteUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -7651,13 +7495,9 @@ function InviteUI.Init(screen: ScreenGui, UIController)
 end
 
 return InviteUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="69">
-          <Properties>
-            <string name="Name">LeaderboardUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "LeaderboardUI", "ModuleScript", [=[
+--!strict
 --[[
 	LeaderboardUI — three columns: top cash, top mutations, top thieves.
 ]]
@@ -7741,13 +7581,9 @@ function LeaderboardUI.Init(screen: ScreenGui, UIController)
 end
 
 return LeaderboardUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="70">
-          <Properties>
-            <string name="Name">LevelUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "LevelUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -7878,13 +7714,9 @@ function LevelUI.Init(screen: ScreenGui, UIController)
 end
 
 return LevelUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="71">
-          <Properties>
-            <string name="Name">LoadingScreen</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "LoadingScreen", "ModuleScript", [=[
+--!strict
 --[[
 	LoadingScreen — covers the screen during initial asset/replication load.
 	Shows the game name, a fake loading bar (real load time on Roblox is
@@ -8031,13 +7863,9 @@ function LoadingScreen.Init()
 end
 
 return LoadingScreen
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="72">
-          <Properties>
-            <string name="Name">NotificationUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "NotificationUI", "ModuleScript", [=[
+--!strict
 --[[
 	NotificationUI — bottom-right toast queue. Drives re-engagement when
 	stolen from / infected (FOMO + revenge mechanic).
@@ -8111,13 +7939,9 @@ function NotificationUI.Init(screen: ScreenGui)
 end
 
 return NotificationUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="73">
-          <Properties>
-            <string name="Name">OutbreakUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "OutbreakUI", "ModuleScript", [=[
+--!strict
 --[[
 	OutbreakUI — top-center banner showing next outbreak countdown or
 	active outbreak alert. Drives FOMO.
@@ -8167,13 +7991,9 @@ function OutbreakUI.Init(screen: ScreenGui)
 end
 
 return OutbreakUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="74">
-          <Properties>
-            <string name="Name">PatchNotesUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "PatchNotesUI", "ModuleScript", [[
+--!strict
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -8277,13 +8097,9 @@ function PatchNotesUI.Init(screen: ScreenGui, UIController)
 end
 
 return PatchNotesUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="75">
-          <Properties>
-            <string name="Name">PetUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "PetUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -8411,13 +8227,9 @@ function PetUI.Init(screen: ScreenGui, UIController)
 end
 
 return PetUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="76">
-          <Properties>
-            <string name="Name">PlotUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "PlotUI", "ModuleScript", [=[
+--!strict
 --[[
 	PlotUI — wires up clicks on rival brainrots to the Steal action, and a
 	"target nearest player" Infect button. Also pops a small interaction
@@ -8572,13 +8384,9 @@ function PlotUI.Init(screen: ScreenGui)
 end
 
 return PlotUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="77">
-          <Properties>
-            <string name="Name">QuestUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "QuestUI", "ModuleScript", [[
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
@@ -8690,13 +8498,9 @@ function QuestUI.Init(screen: ScreenGui, UIController)
 end
 
 return QuestUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="78">
-          <Properties>
-            <string name="Name">ShopUI</string>
-            <string name="Source"><![CDATA[--!strict
+]])
+	ensurePath(root, "ShopUI", "ModuleScript", [=[
+--!strict
 --[[
 	ShopUI — gamepass + dev product storefront. Reads Config so it
 	autopopulates whenever you add a new product.
@@ -8842,13 +8646,9 @@ function ShopUI.Init(screen: ScreenGui, UIController)
 end
 
 return ShopUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="79">
-          <Properties>
-            <string name="Name">SoundController</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "SoundController", "ModuleScript", [=[
+--!strict
 --[[
 	SoundController — registers the SFX library. Asset IDs are placeholders;
 	swap them in Studio (or upload your own audio) for full meme effect.
@@ -8906,13 +8706,9 @@ function SoundController.Init()
 end
 
 return SoundController
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="80">
-          <Properties>
-            <string name="Name">TradeUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "TradeUI", "ModuleScript", [=[
+--!strict
 --[[
 	TradeUI — minimal but functional trade window. Two columns (you / them),
 	each showing offered brainrots + cash. Click an inventory entry to add
@@ -9294,13 +9090,9 @@ function TradeUI.Init(screen: ScreenGui, UIController)
 end
 
 return TradeUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="81">
-          <Properties>
-            <string name="Name">TutorialUI</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "TutorialUI", "ModuleScript", [=[
+--!strict
 --[[
 	TutorialUI — a 6-step floating overlay shown only on first session.
 	Critical for D1 conversion: tells the player exactly which buttons to
@@ -9452,13 +9244,9 @@ function TutorialUI.Init(screen: ScreenGui)
 end
 
 return TutorialUI
-]]></string>
-          </Properties>
-        </Item>
-        <Item class="ModuleScript" referent="82">
-          <Properties>
-            <string name="Name">UIController</string>
-            <string name="Source"><![CDATA[--!strict
+]=])
+	ensurePath(root, "UIController", "ModuleScript", [=[
+--!strict
 --[[
 	UIController — shared toggle bar + screen registration. Each panel
 	registers via Register(name, frame) and is opened by ToggleScreen(name).
@@ -9591,46 +9379,7 @@ function UIController.Init(screen: ScreenGui)
 end
 
 return UIController
-]]></string>
-          </Properties>
-        </Item>
-      </Item>
-    </Item>
-  </Item>
-  <Item class="Workspace" referent="83">
-    <Properties>
-      <string name="Name">Workspace</string>
-      <bool name="FilteringEnabled">true</bool>
-      <float name="Gravity">196.2</float>
-      <bool name="NeedsPivotMigration">false</bool>
-    </Properties>
-    <Item class="Part" referent="84">
-      <Properties>
-        <string name="Name">Baseplate</string>
-        <bool name="Anchored">true</bool>
-        <Color3uint8 name="Color3uint8">3381581</Color3uint8>
-        <token name="Material">1280</token>
-        <Vector3 name="Position">
-          <X>0</X>
-          <Y>-1</Y>
-          <Z>0</Z>
-        </Vector3>
-        <Vector3 name="size">
-          <X>2048</X>
-          <Y>1</Y>
-          <Z>2048</Z>
-        </Vector3>
-      </Properties>
-    </Item>
-    <Item class="Folder" referent="85">
-      <Properties>
-        <string name="Name">Brainrots</string>
-      </Properties>
-    </Item>
-    <Item class="Folder" referent="86">
-      <Properties>
-        <string name="Name">Plots</string>
-      </Properties>
-    </Item>
-  </Item>
-</roblox>
+]=])
+end
+
+print("[BrainrotLab Installer] Install complete. Save the place or press Play to test.")

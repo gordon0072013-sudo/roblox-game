@@ -1,84 +1,90 @@
 --!strict
---[[
-	Server bootstrap — orders the service Init calls so dependencies are
-	satisfied before they're used, then wires PlayerAdded/Removing fanout.
-]]
 
-local Players = game:GetService("Players")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Shared  = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
 
--- Create remote folder up-front so clients don't race.
 Remotes.InitServer()
 
-local DataService = require(script.DataService)
-local EconomyService = require(script.EconomyService)
-local LabService = require(script.LabService)
-local CaptureService = require(script.CaptureService)
-local MutationService = require(script.MutationService)
-local StealService = require(script.StealService)
-local InfectionService = require(script.InfectionService)
-local OutbreakService = require(script.OutbreakService)
-local MonetizationService = require(script.MonetizationService)
-local BattlePassService = require(script.BattlePassService)
-local DailyRewardService = require(script.DailyRewardService)
-local LeaderboardService = require(script.LeaderboardService)
-local AnalyticsService = require(script.AnalyticsService)
-local CodeService = require(script.CodeService)
-local GroupRewardService = require(script.GroupRewardService)
-local TrailService = require(script.TrailService)
-local AchievementService = require(script.AchievementService)
-local QuestService = require(script.QuestService)
-local TradeService = require(script.TradeService)
-local BadgeService = require(script.BadgeService)
-local GlobalLeaderboardService = require(script.GlobalLeaderboardService)
-local AfkService = require(script.AfkService)
-local BossEventService = require(script.BossEventService)
-local AnnouncementService = require(script.AnnouncementService)
-local PetService = require(script.PetService)
-local PlayerLevelService = require(script.PlayerLevelService)
-local SeasonService = require(script.SeasonService)
-local DecorationService = require(script.DecorationService)
-local InviteService = require(script.InviteService)
-local WebhookService = require(script.WebhookService)
+local AntiCheat               = require(script.AntiCheat)
+local DataService             = require(script.DataService)
+local EconomyService          = require(script.EconomyService)
+local LabService              = require(script.LabService)
+local CaptureService          = require(script.CaptureService)
+local MutationService         = require(script.MutationService)
+local StealService            = require(script.StealService)
+local InfectionService        = require(script.InfectionService)
+local OutbreakService         = require(script.OutbreakService)
+local MonetizationService     = require(script.MonetizationService)
+local BattlePassService       = require(script.BattlePassService)
+local DailyRewardService      = require(script.DailyRewardService)
+local LeaderboardService      = require(script.LeaderboardService)
+local AnalyticsService        = require(script.AnalyticsService)
+local CodeService             = require(script.CodeService)
+local GroupRewardService      = require(script.GroupRewardService)
+local TrailService            = require(script.TrailService)
+local AchievementService      = require(script.AchievementService)
+local QuestService            = require(script.QuestService)
+local TradeService            = require(script.TradeService)
+local BadgeService            = require(script.BadgeService)
+local GlobalLeaderboardService= require(script.GlobalLeaderboardService)
+local AfkService              = require(script.AfkService)
+local BossEventService        = require(script.BossEventService)
+local AnnouncementService     = require(script.AnnouncementService)
+local PetService              = require(script.PetService)
+local PlayerLevelService      = require(script.PlayerLevelService)
+local SeasonService           = require(script.SeasonService)
+local DecorationService       = require(script.DecorationService)
+local InviteService           = require(script.InviteService)
+local WebhookService          = require(script.WebhookService)
 
--- Init order: data first, content next, monetization/UI services last.
-DataService.Init()
-EconomyService.Init()
-LabService.Init()
-CaptureService.Init()
-BattlePassService.Init()
-DailyRewardService.Init()
-MutationService.Init()
-InfectionService.Init()
-StealService.Init()
-OutbreakService.Init()
-MonetizationService.Init()
-LeaderboardService.Init()
-AnalyticsService.Init()
-CodeService.Init()
-GroupRewardService.Init()
-TrailService.Init()
-AchievementService.Init()
-QuestService.Init()
-TradeService.Init()
-BadgeService.Init()
-GlobalLeaderboardService.Init()
-AfkService.Init()
-BossEventService.Init()
-AnnouncementService.Init()
-PetService.Init()
-PlayerLevelService.Init()
-SeasonService.Init()
-DecorationService.Init()
-InviteService.Init()
-WebhookService.Init()
+-- Boot order is significant: persistence first, content domain next,
+-- monetization and observability last so they can observe domain state.
+local bootOrder = {
+	{ "AntiCheat",            AntiCheat.Init             },
+	{ "DataService",          DataService.Init           },
+	{ "EconomyService",       EconomyService.Init        },
+	{ "LabService",           LabService.Init            },
+	{ "CaptureService",       CaptureService.Init        },
+	{ "BattlePassService",    BattlePassService.Init     },
+	{ "DailyRewardService",   DailyRewardService.Init    },
+	{ "PetService",           PetService.Init            },
+	{ "MutationService",      MutationService.Init       },
+	{ "InfectionService",     InfectionService.Init      },
+	{ "StealService",         StealService.Init          },
+	{ "OutbreakService",      OutbreakService.Init       },
+	{ "BossEventService",     BossEventService.Init      },
+	{ "MonetizationService",  MonetizationService.Init   },
+	{ "LeaderboardService",   LeaderboardService.Init    },
+	{ "GlobalLeaderboardService", GlobalLeaderboardService.Init },
+	{ "AnalyticsService",     AnalyticsService.Init      },
+	{ "CodeService",          CodeService.Init           },
+	{ "GroupRewardService",   GroupRewardService.Init    },
+	{ "TrailService",         TrailService.Init          },
+	{ "AchievementService",   AchievementService.Init    },
+	{ "QuestService",         QuestService.Init          },
+	{ "TradeService",         TradeService.Init          },
+	{ "BadgeService",         BadgeService.Init          },
+	{ "AfkService",           AfkService.Init            },
+	{ "AnnouncementService",  AnnouncementService.Init   },
+	{ "PlayerLevelService",   PlayerLevelService.Init    },
+	{ "SeasonService",        SeasonService.Init         },
+	{ "DecorationService",    DecorationService.Init     },
+	{ "InviteService",        InviteService.Init         },
+	{ "WebhookService",       WebhookService.Init        },
+}
+
+for _, entry in ipairs(bootOrder) do
+	local ok, err = pcall(entry[2])
+	if not ok then Log.Error("Boot", "%s.Init failed: %s", entry[1], tostring(err)) end
+end
 
 local function onPlayerAdded(player: Player)
+	AntiCheat.OnPlayerAdded(player)
 	DataService.LoadProfile(player)
-	-- Profile loaded callbacks already wired; downstream services need the data.
 	DataService.OnProfileLoaded(player, function()
 		LabService.OnPlayerAdded(player)
 		StealService.OnPlayerAdded(player)
@@ -111,6 +117,7 @@ local function onPlayerRemoving(player: Player)
 	GlobalLeaderboardService.OnPlayerRemoving(player)
 	AfkService.OnPlayerRemoving(player)
 	DecorationService.OnPlayerRemoving(player)
+	AntiCheat.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
@@ -120,113 +127,146 @@ for _, p in ipairs(Players:GetPlayers()) do
 	task.spawn(onPlayerAdded, p)
 end
 
--- ============================================================
--- Remote request handlers
--- ============================================================
-local function handler(name: string, fn: (Player, ...any) -> ())
-	Remotes.Event(name).OnServerEvent:Connect(function(player, ...)
-		local ok, err = pcall(fn, player, ...)
-		if not ok then warn(`[Remote ${name}] ${err}`) end
-	end)
+-- Remote handlers. Every handler is rate-limited and sanitized via AntiCheat
+-- before reaching the service layer; services trust their inputs.
+
+local function bind(name: string, fn: (Player, ...any) -> ())
+	AntiCheat.WrapRemote(Remotes.Event(name), name, fn)
 end
 
-handler(Remotes.Names.RequestCapture, function(player)
+local function asUid(player: Player, value: any, context: string): string?
+	return AntiCheat.SanitizeUid(player, value, context)
+end
+
+local function asString(player: Player, value: any, context: string): string?
+	return AntiCheat.SanitizeString(player, value, context)
+end
+
+local function asNumber(player: Player, value: any, context: string): number?
+	return AntiCheat.SanitizeNumber(player, value, context)
+end
+
+bind(Remotes.Names.RequestCapture, function(player)
 	CaptureService.AttemptCapture(player)
 end)
 
-handler(Remotes.Names.RequestPlaceBrainrot, function(player, uid)
-	if typeof(uid) == "string" then LabService.PlaceBrainrot(player, uid) end
+bind(Remotes.Names.RequestPlaceBrainrot, function(player, uid)
+	local u = asUid(player, uid, "PlaceBrainrot.uid")
+	if u then LabService.PlaceBrainrot(player, u) end
 end)
 
-handler(Remotes.Names.RequestUnplaceBrainrot, function(player, uid)
-	if typeof(uid) == "string" then LabService.UnplaceBrainrot(player, uid) end
+bind(Remotes.Names.RequestUnplaceBrainrot, function(player, uid)
+	local u = asUid(player, uid, "UnplaceBrainrot.uid")
+	if u then LabService.UnplaceBrainrot(player, u) end
 end)
 
-handler(Remotes.Names.RequestSellBrainrot, function(player, uid)
-	if typeof(uid) == "string" then LabService.SellBrainrot(player, uid) end
+bind(Remotes.Names.RequestSellBrainrot, function(player, uid)
+	local u = asUid(player, uid, "SellBrainrot.uid")
+	if u then LabService.SellBrainrot(player, u) end
 end)
 
-handler(Remotes.Names.RequestRebirth, function(player)
+bind(Remotes.Names.RequestRebirth, function(player)
 	EconomyService.TryRebirth(player)
 end)
 
-handler(Remotes.Names.RequestSteal, function(player, victimUserId, uid)
-	if typeof(victimUserId) == "number" and typeof(uid) == "string" then
-		StealService.AttemptSteal(player, victimUserId, uid)
-	end
+bind(Remotes.Names.RequestSteal, function(player, victimUserId, uid)
+	local v = asNumber(player, victimUserId, "Steal.victimUserId")
+	local u = asUid(player, uid, "Steal.uid")
+	if v and u then StealService.AttemptSteal(player, v, u) end
 end)
 
-handler(Remotes.Names.RequestInfect, function(player, victimUserId)
-	if typeof(victimUserId) == "number" then
-		InfectionService.AttemptInfect(player, victimUserId)
-	end
+bind(Remotes.Names.RequestInfect, function(player, victimUserId)
+	local v = asNumber(player, victimUserId, "Infect.victimUserId")
+	if v then InfectionService.AttemptInfect(player, v) end
 end)
 
-handler(Remotes.Names.RequestClaimDaily, function(player)
+bind(Remotes.Names.RequestClaimDaily, function(player)
 	DailyRewardService.Claim(player)
 end)
 
-handler(Remotes.Names.RequestClaimBattlePassTier, function(player, tier)
-	if typeof(tier) == "number" then
-		BattlePassService.ClaimTier(player, tier)
-	end
+bind(Remotes.Names.RequestClaimBattlePassTier, function(player, tier)
+	local t = asNumber(player, tier, "ClaimBattlePassTier.tier")
+	if t then BattlePassService.ClaimTier(player, math.floor(t)) end
 end)
 
-handler(Remotes.Names.RequestPromptPurchase, function(player, kind, key)
-	if typeof(kind) == "string" and typeof(key) == "string" then
-		MonetizationService.PromptPurchase(player, kind, key)
-	end
+bind(Remotes.Names.RequestPromptPurchase, function(player, kind, key)
+	local k = asString(player, kind, "Purchase.kind")
+	local kk = asString(player, key, "Purchase.key")
+	if k and kk then MonetizationService.PromptPurchase(player, k, kk) end
 end)
 
-handler(Remotes.Names.RequestRedeemCode, function(player, code)
-	if typeof(code) == "string" then CodeService.Redeem(player, code) end
+bind(Remotes.Names.RequestRedeemCode, function(player, code)
+	local c = asString(player, code, "RedeemCode.code")
+	if c then CodeService.Redeem(player, c) end
 end)
 
-handler(Remotes.Names.RequestRecheckGroup, function(player)
+bind(Remotes.Names.RequestRecheckGroup, function(player)
 	GroupRewardService.Check(player)
 end)
 
-handler(Remotes.Names.RequestClaimAchievement, function(player, id)
-	if typeof(id) == "string" then AchievementService.Claim(player, id) end
+bind(Remotes.Names.RequestClaimAchievement, function(player, id)
+	local i = asString(player, id, "ClaimAchievement.id")
+	if i then AchievementService.Claim(player, i) end
 end)
 
-handler(Remotes.Names.RequestClaimQuest, function(player, id)
-	if typeof(id) == "string" then QuestService.Claim(player, id) end
+bind(Remotes.Names.RequestClaimQuest, function(player, id)
+	local i = asString(player, id, "ClaimQuest.id")
+	if i then QuestService.Claim(player, i) end
 end)
 
-handler(Remotes.Names.RequestTradeInvite, function(player, targetUserId)
-	if typeof(targetUserId) == "number" then TradeService.Invite(player, targetUserId) end
-end)
-handler(Remotes.Names.RequestTradeAccept, function(player) TradeService.Accept(player) end)
-handler(Remotes.Names.RequestTradeDecline, function(player) TradeService.Decline(player) end)
-handler(Remotes.Names.RequestTradeAddBrainrot, function(player, uid)
-	if typeof(uid) == "string" then TradeService.AddBrainrot(player, uid) end
-end)
-handler(Remotes.Names.RequestTradeRemoveBrainrot, function(player, uid)
-	if typeof(uid) == "string" then TradeService.RemoveBrainrot(player, uid) end
-end)
-handler(Remotes.Names.RequestTradeSetCash, function(player, n)
-	if typeof(n) == "number" then TradeService.SetCash(player, n) end
-end)
-handler(Remotes.Names.RequestTradeConfirm, function(player) TradeService.Confirm(player) end)
-handler(Remotes.Names.RequestTradeCancel, function(player) TradeService.Cancel(player) end)
-
-handler(Remotes.Names.RequestEquipPet, function(player, uid)
-	if typeof(uid) == "string" then PetService.Equip(player, uid) end
-end)
-handler(Remotes.Names.RequestUnequipPet, function(player) PetService.Unequip(player) end)
-handler(Remotes.Names.RequestClaimLevelReward, function(player, lvl)
-	if typeof(lvl) == "number" then PlayerLevelService.ClaimLevelReward(player, lvl) end
+bind(Remotes.Names.RequestTradeInvite, function(player, targetUserId)
+	local v = asNumber(player, targetUserId, "TradeInvite.targetUserId")
+	if v then TradeService.Invite(player, v) end
 end)
 
-handler(Remotes.Names.RequestBuyDecoration, function(player, id)
-	if typeof(id) == "string" then DecorationService.Buy(player, id) end
-end)
-handler(Remotes.Names.RequestSellDecoration, function(player, uid)
-	if typeof(uid) == "string" then DecorationService.Sell(player, uid) end
-end)
-handler(Remotes.Names.RequestRedeemInvite, function(player, code)
-	if typeof(code) == "string" then InviteService.Redeem(player, code) end
+bind(Remotes.Names.RequestTradeAccept, function(player) TradeService.Accept(player) end)
+bind(Remotes.Names.RequestTradeDecline, function(player) TradeService.Decline(player) end)
+
+bind(Remotes.Names.RequestTradeAddBrainrot, function(player, uid)
+	local u = asUid(player, uid, "TradeAdd.uid")
+	if u then TradeService.AddBrainrot(player, u) end
 end)
 
-print("[BrainrotLab] Server boot complete.")
+bind(Remotes.Names.RequestTradeRemoveBrainrot, function(player, uid)
+	local u = asUid(player, uid, "TradeRemove.uid")
+	if u then TradeService.RemoveBrainrot(player, u) end
+end)
+
+bind(Remotes.Names.RequestTradeSetCash, function(player, n)
+	local v = asNumber(player, n, "TradeSetCash.amount")
+	if v then TradeService.SetCash(player, math.max(0, math.floor(v))) end
+end)
+
+bind(Remotes.Names.RequestTradeConfirm, function(player) TradeService.Confirm(player) end)
+bind(Remotes.Names.RequestTradeCancel, function(player) TradeService.Cancel(player) end)
+
+bind(Remotes.Names.RequestEquipPet, function(player, uid)
+	local u = asUid(player, uid, "EquipPet.uid")
+	if u then PetService.Equip(player, u) end
+end)
+
+bind(Remotes.Names.RequestUnequipPet, function(player)
+	PetService.Unequip(player)
+end)
+
+bind(Remotes.Names.RequestClaimLevelReward, function(player, lvl)
+	local v = asNumber(player, lvl, "ClaimLevelReward.level")
+	if v then PlayerLevelService.ClaimLevelReward(player, math.floor(v)) end
+end)
+
+bind(Remotes.Names.RequestBuyDecoration, function(player, id)
+	local i = asString(player, id, "BuyDecoration.id")
+	if i then DecorationService.Buy(player, i) end
+end)
+
+bind(Remotes.Names.RequestSellDecoration, function(player, uid)
+	local u = asUid(player, uid, "SellDecoration.uid")
+	if u then DecorationService.Sell(player, u) end
+end)
+
+bind(Remotes.Names.RequestRedeemInvite, function(player, code)
+	local c = asString(player, code, "RedeemInvite.code")
+	if c then InviteService.Redeem(player, c) end
+end)
+
+Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)

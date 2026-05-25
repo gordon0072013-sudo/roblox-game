@@ -1,0 +1,70 @@
+# BrainrotLab — One-File Installer
+
+`BrainrotLab_Installer.luau` is a single self-contained Luau script that
+constructs every Folder, Script, ModuleScript, and LocalScript for the
+entire project into the correct Roblox services. No Rojo, no Wally, no
+external tooling — only Roblox Studio.
+
+## Use it
+
+1. **Open Roblox Studio.** Any place (Baseplate, blank, etc.) works.
+2. **View → Command Bar.**
+3. **Paste the entire contents of `BrainrotLab_Installer.luau`** into the
+   Command Bar and press Enter.
+4. The Output window prints:
+   ```
+   [BrainrotLab Installer] Beginning install...
+   [BrainrotLab Installer] Install complete. Save the place or press Play to test.
+   ```
+5. **File → Save** (or **Publish to Roblox** to ship it).
+
+The installer is idempotent: re-running on a place that's already been
+installed replaces existing scripts with the new versions. Safe to re-run
+each time you take a new copy from the repo.
+
+## What the installer creates
+
+| Service | Contents |
+|---|---|
+| `ReplicatedStorage/Shared` | Config, BrainrotData, MutationData, PetData, DecorationData, AchievementData, PatchNotes, Types, Remotes, Util, Log, LocalizationService |
+| `ReplicatedStorage/Assets` | Placeholder docs for swappable mesh/audio IDs |
+| `ServerScriptService/Server` | 33 service modules + the boot Script (AntiCheat, DataService, Economy, Lab, Mutation, Steal, Infection, Outbreak, Monetization, BattlePass, Trade, Quests, Achievements, Badges, GlobalLeaderboard, Pets, PlayerLevel, Season, Decoration, Invite, Webhook, Afk, BossEvent, Announcement, Analytics, …) |
+| `StarterPlayer.StarterPlayerScripts.Client` | UI controllers + LocalScripts (HUD, Shop, Inventory, Trade, Pets, Levels, Quests, Achievements, GlobalLeaderboard, Outbreak, BossUI, PatchNotes, Loading Screen, …) |
+| `Workspace` | Baseplate + `Plots` + `Brainrots` folders |
+| `Lighting` | Sensible defaults |
+| `HttpService` | Enabled (required for the optional Discord webhook) |
+
+## Regenerating the installer
+
+After editing any source file in `src/`, regenerate the installer:
+
+```bash
+python3 tools/build_installer.py
+```
+
+The script walks `src/`, embeds every Luau file as a long-bracket literal
+in the installer, and writes the result to `BrainrotLab_Installer.luau`
+at the repo root. The build is hermetic — no external dependencies beyond
+the Python 3 standard library.
+
+## How it works (skim)
+
+`tools/build_installer.py` reads the same directory layout
+`default.project.json` expects, then emits one `ensurePath` call per
+source file. Files named `init.server.luau` and `init.client.luau` use
+Rojo's container-promotion convention: the parent folder becomes a Script
+or LocalScript with the `init` source attached, so internal
+`require(script.X)` lookups continue to resolve correctly.
+
+Each embedded source uses a long-bracket level chosen to be safe against
+the contents of that specific source (the generator scans for the
+minimum `=` count not present in the source as a closing bracket).
+
+## Why this exists
+
+Rojo + Wally are best-in-class for Roblox dev environments — but they
+need a desktop installation, a CLI, and (for Wally) a network round
+trip. The installer trades all of that for a single 320 KB Luau script
+the user pastes once. Trade-off: you can't `rojo serve` for live-sync
+edits. Use Rojo when developing locally; use this installer to ship a
+build to anyone who only has Studio open.
