@@ -34,6 +34,7 @@ local RemoteNames = {
 	WheelSpinResult = "WheelSpinResult",
 	EventUpdate = "EventUpdate",
 	Cinematic = "Cinematic",
+	AutoSellUpdate = "AutoSellUpdate",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -67,6 +68,7 @@ local RemoteNames = {
 	RequestRedeemInvite = "RequestRedeemInvite",
 	RequestWheelSpin = "RequestWheelSpin",
 	RequestSocialInvite = "RequestSocialInvite",
+	RequestSetAutoSell = "RequestSetAutoSell",
 }
 
 local Remotes = {}

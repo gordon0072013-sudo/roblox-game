@@ -70,12 +70,17 @@ local function findNearestPlayerOwner(): number?
 end
 
 function PlotUI.Init(screen: ScreenGui)
-	-- Right-side action buttons
+	-- Right-side action buttons. Sized larger on touch devices because mouse
+	-- targets that are fine on desktop become miss-prone on a phone screen.
+	local isTouch = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+	local panelWidth = if isTouch then 220 else 180
+	local panelHeight = if isTouch then 260 else 200
+
 	local panel = Instance.new("Frame")
 	panel.Name = "Actions"
 	panel.AnchorPoint = Vector2.new(1, 0.5)
 	panel.Position = UDim2.new(1, -16, 0.5, 0)
-	panel.Size = UDim2.fromOffset(180, 200)
+	panel.Size = UDim2.fromOffset(panelWidth, panelHeight)
 	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
 	panel.BackgroundTransparency = 0.2
 	panel.BorderSizePixel = 0
@@ -92,9 +97,10 @@ function PlotUI.Init(screen: ScreenGui)
 	pad.PaddingLeft = UDim.new(0, 8); pad.PaddingRight = UDim.new(0, 8)
 	pad.Parent = panel
 
+	local btnHeight = if isTouch then 64 else 44
 	local function mkBtn(text: string, color: Color3, cb: () -> ()): TextButton
 		local b = Instance.new("TextButton")
-		b.Size = UDim2.new(1, 0, 0, 44)
+		b.Size = UDim2.new(1, 0, 0, btnHeight)
 		b.Font = Enum.Font.GothamBlack
 		b.TextScaled = true
 		b.BackgroundColor3 = color

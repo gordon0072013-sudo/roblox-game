@@ -51,6 +51,7 @@ local EventService            = require(script.EventService)
 local CinematicService        = require(script.CinematicService)
 local MilestoneAnnounceService= require(script.MilestoneAnnounceService)
 local VipServerService        = require(script.VipServerService)
+local AutoSellService         = require(script.AutoSellService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -97,6 +98,7 @@ local bootOrder = {
 	{ "CinematicService",     CinematicService.Init      },
 	{ "MilestoneAnnounceService", MilestoneAnnounceService.Init },
 	{ "VipServerService",     VipServerService.Init      },
+	{ "AutoSellService",      AutoSellService.Init       },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -142,6 +144,7 @@ local function onPlayerAdded(player: Player)
 		CinematicService.OnPlayerAdded(player)
 		MilestoneAnnounceService.OnPlayerAdded(player)
 		VipServerService.OnPlayerAdded(player)
+		AutoSellService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -315,6 +318,13 @@ end)
 
 bind(Remotes.Names.RequestSocialInvite, function(player)
 	SocialInviteService.Prompt(player)
+end)
+
+bind(Remotes.Names.RequestSetAutoSell, function(player, enabled, threshold, excludeMutated)
+	local t = asString(player, threshold, "AutoSell.threshold")
+	if t and typeof(enabled) == "boolean" and typeof(excludeMutated) == "boolean" then
+		AutoSellService.SetConfig(player, enabled, t, excludeMutated)
+	end
 end)
 
 Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)

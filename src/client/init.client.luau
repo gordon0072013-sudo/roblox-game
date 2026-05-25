@@ -103,6 +103,9 @@ LuckyWheelUI.Init(screen, UIController)
 local CinematicUI = require(script.CinematicUI)
 CinematicUI.Init(screen)
 
+local AutoSellUI = require(script.AutoSellUI)
+AutoSellUI.Init(screen, UIController)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 
