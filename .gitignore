@@ -1,0 +1,23 @@
+# Wally — ignore contents but keep folders (rojo expects them to exist).
+/Packages/*
+/ServerPackages/*
+/DevPackages/*
+!/Packages/.gitkeep
+!/ServerPackages/.gitkeep
+!/DevPackages/.gitkeep
+
+# Rojo build artifacts
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
