@@ -34,6 +34,7 @@ local QuestService = require(script.QuestService)
 local TradeService = require(script.TradeService)
 local BadgeService = require(script.BadgeService)
 local GlobalLeaderboardService = require(script.GlobalLeaderboardService)
+local AfkService = require(script.AfkService)
 
 -- Init order: data first, content next, monetization/UI services last.
 DataService.Init()
@@ -57,6 +58,7 @@ QuestService.Init()
 TradeService.Init()
 BadgeService.Init()
 GlobalLeaderboardService.Init()
+AfkService.Init()
 
 local function onPlayerAdded(player: Player)
 	DataService.LoadProfile(player)
@@ -74,6 +76,7 @@ local function onPlayerAdded(player: Player)
 		QuestService.OnPlayerAdded(player)
 		BadgeService.OnPlayerAdded(player)
 		GlobalLeaderboardService.OnPlayerAdded(player)
+		AfkService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -83,6 +86,7 @@ local function onPlayerRemoving(player: Player)
 	StealService.OnPlayerRemoving(player)
 	TradeService.OnPlayerRemoving(player)
 	GlobalLeaderboardService.OnPlayerRemoving(player)
+	AfkService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 

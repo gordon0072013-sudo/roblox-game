@@ -16,9 +16,40 @@ local function applyButtonStyle(btn: TextButton, active: boolean)
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 end
 
+-- Mobile-aware: keep panels inside the viewport. Adds a UISizeConstraint
+-- + UIScale so a 720×460 trade window on a phone shrinks instead of clipping.
+local function applyResponsiveSizing(frame: Frame)
+	-- Cap max size to 90% of viewport
+	local sizeConstraint = Instance.new("UISizeConstraint")
+	sizeConstraint.MaxSize = Vector2.new(1200, 800)
+	sizeConstraint.MinSize = Vector2.new(200, 120)
+	sizeConstraint.Parent = frame
+
+	-- Auto-shrink on small screens via UIScale
+	local scale = Instance.new("UIScale")
+	scale.Scale = 1
+	scale.Parent = frame
+
+	local Players = game:GetService("Players")
+	local cam = workspace.CurrentCamera
+	local function update()
+		if not cam then return end
+		local vs = cam.ViewportSize
+		-- Shrink if either dimension exceeds 85% of the viewport
+		local sx = (vs.X * 0.92) / frame.AbsoluteSize.X
+		local sy = (vs.Y * 0.78) / frame.AbsoluteSize.Y
+		scale.Scale = math.clamp(math.min(sx, sy, 1), 0.55, 1)
+	end
+	frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(update)
+	if cam then cam:GetPropertyChangedSignal("ViewportSize"):Connect(update) end
+	task.defer(update)
+	local _ = Players
+end
+
 function UIController.Register(name: string, frame: Frame, label: string, color: Color3?)
 	screens[name] = frame
 	frame.Visible = false
+	applyResponsiveSizing(frame)
 
 	if toggleBar then
 		local btn = Instance.new("TextButton")
