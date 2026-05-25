@@ -1318,6 +1318,8 @@ local OfflineCashService      = require(script.OfflineCashService)
 local WelcomeOfferService     = require(script.WelcomeOfferService)
 local LuckyWheelService       = require(script.LuckyWheelService)
 local SocialInviteService     = require(script.SocialInviteService)
+local HotStreakService        = require(script.HotStreakService)
+local PresenceService         = require(script.PresenceService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -1358,6 +1360,8 @@ local bootOrder = {
 	{ "WelcomeOfferService",  WelcomeOfferService.Init   },
 	{ "LuckyWheelService",    LuckyWheelService.Init     },
 	{ "SocialInviteService",  SocialInviteService.Init   },
+	{ "HotStreakService",     HotStreakService.Init      },
+	{ "PresenceService",      PresenceService.Init       },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1397,6 +1401,8 @@ local function onPlayerAdded(player: Player)
 		OfflineCashService.OnPlayerAdded(player)
 		WelcomeOfferService.OnPlayerAdded(player)
 		LuckyWheelService.OnPlayerAdded(player)
+		HotStreakService.OnPlayerAdded(player)
+		PresenceService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -1410,6 +1416,7 @@ local function onPlayerRemoving(player: Player)
 	DecorationService.OnPlayerRemoving(player)
 	AntiCheat.OnPlayerRemoving(player)
 	OfflineCashService.OnPlayerRemoving(player)
+	HotStreakService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
@@ -3726,6 +3733,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local petMult = 1
 	local okPet, PetService = pcall(require, script.Parent.PetService)
 	if okPet then petMult = PetService.GetCashMult(player) end
+	local hotMult = 1
+	local okHot, HotStreakService = pcall(require, script.Parent.HotStreakService)
+	if okHot then hotMult = HotStreakService.GetMultiplier() end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -3735,7 +3745,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
@@ -4052,6 +4062,82 @@ end
 
 return GroupRewardService
 ]=])
+	ensurePath(root, "HotStreakService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local HotStreakService = {}
+
+-- Cash multiplier ramps with concurrent player count. Drives social proof
+-- (high CCU server feels rewarding to be in) and counter-intuitively
+-- *retains* players when a server is full — they don't want to leave the
+-- party.
+local STREAK_TIERS = {
+	{ minPlayers = 2,  mult = 1.10, label = "Cozy"  },
+	{ minPlayers = 4,  mult = 1.25, label = "Warm"  },
+	{ minPlayers = 6,  mult = 1.50, label = "Hot"   },
+	{ minPlayers = 8,  mult = 1.75, label = "BLAZING"},
+}
+
+local currentMult = 1
+local currentLabel = ""
+
+local function recompute()
+	local n = #Players:GetPlayers()
+	local mult = 1
+	local label = ""
+	for _, tier in ipairs(STREAK_TIERS) do
+		if n >= tier.minPlayers then
+			mult = tier.mult
+			label = tier.label
+		end
+	end
+	if mult ~= currentMult then
+		Log.Info("HotStreak", "%d players → %s (%.2fx)", n, label, mult)
+		if label ~= "" and AnnouncementService then
+			AnnouncementService.Push(string.format("🔥 %s server — every player earns %.2fx cash!", label, mult),
+				{ 255, 120, 60 }, 30)
+		end
+	end
+	currentMult = mult
+	currentLabel = label
+end
+
+function HotStreakService.GetMultiplier(): number
+	return currentMult
+end
+
+function HotStreakService.GetLabel(): string
+	return currentLabel
+end
+
+function HotStreakService.OnPlayerAdded(_: Player)
+	recompute()
+end
+
+function HotStreakService.OnPlayerRemoving(_: Player)
+	task.defer(recompute)
+end
+
+function HotStreakService.Init()
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	Players.PlayerAdded:Connect(function() recompute() end)
+	Players.PlayerRemoving:Connect(function() task.defer(recompute) end)
+	recompute()
+	-- Suppress unused
+	local _ = Remotes
+end
+
+return HotStreakService
+]])
 	ensurePath(root, "InfectionService", "ModuleScript", [=[
 --!strict
 --[[
@@ -6005,6 +6091,98 @@ function PlayerLevelService.Init() end
 
 return PlayerLevelService
 ]=])
+	ensurePath(root, "PresenceService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local TextChatService   = game:GetService("TextChatService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Util = require(Shared.Util)
+
+local DataService   = require(script.Parent.DataService)
+local AdminService  = require(script.Parent.AdminService)
+
+local PresenceService = {}
+
+local LEADERSTATS_REFRESH = 2 -- seconds
+
+-- ============================================================
+-- Roblox default player-list leaderstats
+-- ============================================================
+local function ensureLeaderstats(player: Player)
+	local existing = player:FindFirstChild("leaderstats")
+	if existing then return existing :: Folder end
+	local folder = Instance.new("Folder")
+	folder.Name = "leaderstats"
+	folder.Parent = player
+
+	local cash = Instance.new("StringValue")
+	cash.Name = "Cash"
+	cash.Value = "0"
+	cash.Parent = folder
+
+	local rebirths = Instance.new("IntValue")
+	rebirths.Name = "Rebirths"
+	rebirths.Value = 0
+	rebirths.Parent = folder
+
+	return folder
+end
+
+local function updateLeaderstats(player: Player)
+	local folder = player:FindFirstChild("leaderstats")
+	if not folder then return end
+	local data = DataService.Get(player)
+	if not data then return end
+	local cash = folder:FindFirstChild("Cash") :: StringValue?
+	local rebirths = folder:FindFirstChild("Rebirths") :: IntValue?
+	if cash then cash.Value = Util.FormatShortNumber(data.cash) end
+	if rebirths then rebirths.Value = data.rebirths end
+end
+
+-- ============================================================
+-- Owner / admin chat tag (new TextChatService)
+-- ============================================================
+local function applyChatTags()
+	if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then return end
+	TextChatService.OnIncomingMessage = function(message: TextChatMessage)
+		local props = Instance.new("TextChatMessageProperties")
+		local src = message.TextSource
+		if not src then return props end
+		local player = Players:GetPlayerByUserId(src.UserId)
+		if not player then return props end
+		if AdminService.IsOwner(player) then
+			props.PrefixText = `<font color="rgb(255,215,80)">[OWNER]</font> ${message.PrefixText}`
+		elseif AdminService.IsAdmin(player) then
+			props.PrefixText = `<font color="rgb(120,220,120)">[ADMIN]</font> ${message.PrefixText}`
+		end
+		return props
+	end
+end
+
+function PresenceService.OnPlayerAdded(player: Player)
+	ensureLeaderstats(player)
+	DataService.OnProfileLoaded(player, function()
+		updateLeaderstats(player)
+	end)
+end
+
+function PresenceService.Init()
+	applyChatTags()
+	task.spawn(function()
+		while true do
+			task.wait(LEADERSTATS_REFRESH)
+			for _, p in ipairs(Players:GetPlayers()) do
+				updateLeaderstats(p)
+			end
+		end
+	end)
+end
+
+return PresenceService
+]])
 	ensurePath(root, "QuestService", "ModuleScript", [=[
 --!strict
 --[[

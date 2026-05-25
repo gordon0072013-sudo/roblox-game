@@ -45,6 +45,8 @@ local OfflineCashService      = require(script.OfflineCashService)
 local WelcomeOfferService     = require(script.WelcomeOfferService)
 local LuckyWheelService       = require(script.LuckyWheelService)
 local SocialInviteService     = require(script.SocialInviteService)
+local HotStreakService        = require(script.HotStreakService)
+local PresenceService         = require(script.PresenceService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -85,6 +87,8 @@ local bootOrder = {
 	{ "WelcomeOfferService",  WelcomeOfferService.Init   },
 	{ "LuckyWheelService",    LuckyWheelService.Init     },
 	{ "SocialInviteService",  SocialInviteService.Init   },
+	{ "HotStreakService",     HotStreakService.Init      },
+	{ "PresenceService",      PresenceService.Init       },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -124,6 +128,8 @@ local function onPlayerAdded(player: Player)
 		OfflineCashService.OnPlayerAdded(player)
 		WelcomeOfferService.OnPlayerAdded(player)
 		LuckyWheelService.OnPlayerAdded(player)
+		HotStreakService.OnPlayerAdded(player)
+		PresenceService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -137,6 +143,7 @@ local function onPlayerRemoving(player: Player)
 	DecorationService.OnPlayerRemoving(player)
 	AntiCheat.OnPlayerRemoving(player)
 	OfflineCashService.OnPlayerRemoving(player)
+	HotStreakService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
