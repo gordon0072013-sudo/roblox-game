@@ -26,7 +26,7 @@ Config.DATASTORE_SCOPE = "BrainrotLab_v1"
 -- ============================================================
 -- ECONOMY
 -- ============================================================
-Config.STARTING_CASH = 100
+Config.STARTING_CASH = 500
 Config.STARTING_CAPACITY = 4 -- brainrot slots per plot at tier 0
 Config.CAPACITY_PER_REBIRTH = 2
 Config.REBIRTH_CASH_REQUIREMENT = function(rebirths: number): number

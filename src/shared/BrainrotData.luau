@@ -69,6 +69,13 @@ local catalog: { Types.BrainrotDefinition } = {
 	{ id="frigocamelona", displayName="Frigo Camelona Suprema",       rarity="Legendary", baseIncomePerSecond=160, color=c3(255,255,255), primaryShape="Block",    sizeStuds=Vector3.new(5,6,5),   tagline="Holds the cold and the truth." },
 	{ id="balerinamamma", displayName="Ballerina Mamma Mia",          rarity="Mythic",    baseIncomePerSecond=320, color=c3(255,200,220), primaryShape="Block",    sizeStuds=Vector3.new(4,6,4),   tagline="Dances on dimensions." },
 	{ id="lalilelilu",    displayName="La Lili Le Li Lu",             rarity="Mythic",    baseIncomePerSecond=380, color=c3(180,0,255),   primaryShape="Cylinder", sizeStuds=Vector3.new(4,7,4),   tagline="Numbers became sounds, sounds became him." },
+
+	-- v3 expansion — five more species, one per main tier for depth
+	{ id="pipinino",   displayName="Pipinino Pipinone",      rarity="Common",    baseIncomePerSecond=2.1, color=c3(200,160,80),  primaryShape="Ball",     sizeStuds=Vector3.new(3,3,3), tagline="Pip pip pip pip pip." },
+	{ id="brarbar",    displayName="Brar Brar Lopop",        rarity="Uncommon",  baseIncomePerSecond=4.8, color=c3(100,200,180), primaryShape="Cylinder", sizeStuds=Vector3.new(3,3,3), tagline="A door with attitude." },
+	{ id="trentino",   displayName="Trentino Mentolino",     rarity="Rare",      baseIncomePerSecond=14,  color=c3(180,255,180), primaryShape="Block",    sizeStuds=Vector3.new(4,4,4), tagline="Refreshingly minty." },
+	{ id="bobini",     displayName="Bobini Crocco",          rarity="Epic",      baseIncomePerSecond=34,  color=c3(60,160,80),   primaryShape="Cylinder", sizeStuds=Vector3.new(5,2,5), tagline="Bob with a crocodile problem." },
+	{ id="supremo",    displayName="Supremo Brainrotissimo", rarity="Legendary", baseIncomePerSecond=125, color=c3(255,80,40),   primaryShape="Wedge",    sizeStuds=Vector3.new(5,5,5), tagline="Top of the chain. For now." },
 }
 
 local byId: { [string]: Types.BrainrotDefinition } = {}
