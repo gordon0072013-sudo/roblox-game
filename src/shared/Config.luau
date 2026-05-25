@@ -130,6 +130,9 @@ Config.DEV_PRODUCTS = {
 	-- Pets (the high-ARPU mechanic)
 	PetEgg            = { id = 0, price = 99,  name = "Pet Egg",            kind = "pet_egg" },
 	PetEggGolden      = { id = 0, price = 399, name = "Golden Pet Egg (luckier)", kind = "pet_egg_lucky" },
+	-- Wheel
+	WheelSpinPack5    = { id = 0, price = 79,  name = "5 Wheel Spins",       kind = "wheel_spins", amount = 5 },
+	WheelSpinPack25   = { id = 0, price = 299, name = "25 Wheel Spins",      kind = "wheel_spins", amount = 25 },
 }
 
 -- ============================================================

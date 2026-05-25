@@ -31,6 +31,7 @@ local CaptureService = require(script.Parent.CaptureService)
 local MutationService = require(script.Parent.MutationService)
 local InfectionService = require(script.Parent.InfectionService)
 local PetService = require(script.Parent.PetService)
+local LuckyWheelService -- forward
 local BattlePassService -- forward
 local AnalyticsService -- forward
 local TrailService -- forward
@@ -108,6 +109,8 @@ local function deliverProduct(player: Player, key: string): boolean
 		PetService.Hatch(player, false)
 	elseif def.kind == "pet_egg_lucky" then
 		PetService.Hatch(player, true)
+	elseif def.kind == "wheel_spins" then
+		if LuckyWheelService then LuckyWheelService.GrantSpins(player, def.amount or 1) end
 	else
 		warn(`[Monetization] Unknown product kind: ${tostring(def.kind)}`)
 		return false
@@ -150,6 +153,7 @@ end
 
 function MonetizationService.Init()
 	BattlePassService = require(script.Parent.BattlePassService)
+	LuckyWheelService = require(script.Parent.LuckyWheelService)
 	AnalyticsService = require(script.Parent.AnalyticsService)
 	TrailService = require(script.Parent.TrailService)
 	rebuildIndexes()

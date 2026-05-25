@@ -30,6 +30,8 @@ local RemoteNames = {
 	DecorationUpdate = "DecorationUpdate",
 	InviteUpdate = "InviteUpdate",
 	WelcomeOffer = "WelcomeOffer",
+	WheelUpdate = "WheelUpdate",
+	WheelSpinResult = "WheelSpinResult",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -61,6 +63,8 @@ local RemoteNames = {
 	RequestBuyDecoration = "RequestBuyDecoration",
 	RequestSellDecoration = "RequestSellDecoration",
 	RequestRedeemInvite = "RequestRedeemInvite",
+	RequestWheelSpin = "RequestWheelSpin",
+	RequestSocialInvite = "RequestSocialInvite",
 }
 
 local Remotes = {}

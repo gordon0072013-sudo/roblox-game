@@ -43,6 +43,8 @@ local WebhookService          = require(script.WebhookService)
 local AdminService            = require(script.AdminService)
 local OfflineCashService      = require(script.OfflineCashService)
 local WelcomeOfferService     = require(script.WelcomeOfferService)
+local LuckyWheelService       = require(script.LuckyWheelService)
+local SocialInviteService     = require(script.SocialInviteService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -81,6 +83,8 @@ local bootOrder = {
 	{ "AdminService",         AdminService.Init          },
 	{ "OfflineCashService",   OfflineCashService.Init    },
 	{ "WelcomeOfferService",  WelcomeOfferService.Init   },
+	{ "LuckyWheelService",    LuckyWheelService.Init     },
+	{ "SocialInviteService",  SocialInviteService.Init   },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -119,6 +123,7 @@ local function onPlayerAdded(player: Player)
 		AdminService.OnPlayerAdded(player)
 		OfflineCashService.OnPlayerAdded(player)
 		WelcomeOfferService.OnPlayerAdded(player)
+		LuckyWheelService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -281,6 +286,15 @@ end)
 bind(Remotes.Names.RequestRedeemInvite, function(player, code)
 	local c = asString(player, code, "RedeemInvite.code")
 	if c then InviteService.Redeem(player, c) end
+end)
+
+bind(Remotes.Names.RequestWheelSpin, function(player, kind)
+	local k = asString(player, kind, "WheelSpin.kind")
+	if k then LuckyWheelService.Spin(player, k) end
+end)
+
+bind(Remotes.Names.RequestSocialInvite, function(player)
+	SocialInviteService.Prompt(player)
 end)
 
 Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)
