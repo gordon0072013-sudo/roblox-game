@@ -17,6 +17,7 @@ local RemoteNames = {
 	BattlePassUpdate = "BattlePassUpdate",
 	DailyRewardUpdate = "DailyRewardUpdate",
 	LeaderboardUpdate = "LeaderboardUpdate",
+	AchievementUpdate = "AchievementUpdate",
 	PlayInfectionAnim = "PlayInfectionAnim",
 
 	-- Client -> server actions
@@ -32,6 +33,7 @@ local RemoteNames = {
 	RequestPromptPurchase = "RequestPromptPurchase",
 	RequestRedeemCode = "RequestRedeemCode",
 	RequestRecheckGroup = "RequestRecheckGroup",
+	RequestClaimAchievement = "RequestClaimAchievement",
 }
 
 local Remotes = {}

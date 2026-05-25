@@ -142,6 +142,22 @@ local function updatePlotSign(plot: Plot, ownerName: string?, info: string?)
 	end
 end
 
+local function applyPlotCosmetics(player: Player, plot: Plot)
+	local data = DataService.Get(player)
+	if not data then return end
+	local floor = plot.folder:FindFirstChild("Floor") :: BasePart?
+	if not floor then return end
+	if data.gamepasses["GoldenPlot"] then
+		floor.Color = Color3.fromRGB(255, 215, 60)
+		floor.Material = Enum.Material.Neon
+		plot.signPart.Color = Color3.fromRGB(200, 160, 30)
+	else
+		floor.Color = Color3.fromRGB(60, 60, 80)
+		floor.Material = Enum.Material.SmoothPlastic
+		plot.signPart.Color = Color3.fromRGB(40, 40, 60)
+	end
+end
+
 local function assignPlot(player: Player): number?
 	for id = 1, PLOT_COUNT do
 		if plotOwner[id] == nil then
@@ -149,10 +165,17 @@ local function assignPlot(player: Player): number?
 			playerPlot[player] = id
 			placedModels[player] = {}
 			updatePlotSign(plots[id], player.DisplayName, "")
+			applyPlotCosmetics(player, plots[id])
 			return id
 		end
 	end
 	return nil
+end
+
+function LabService.RefreshPlotCosmetics(player: Player)
+	local id = playerPlot[player]
+	if not id then return end
+	applyPlotCosmetics(player, plots[id])
 end
 
 local function releasePlot(player: Player)

@@ -80,6 +80,9 @@ local function grantGamepass(player: Player, key: string)
 	if TrailService then
 		TrailService.OnGamepassGranted(player, key)
 	end
+	if key == "GoldenPlot" then
+		LabService.RefreshPlotCosmetics(player)
+	end
 	if AnalyticsService then
 		AnalyticsService.LogPurchase(player, "gamepass", key, (Config.GAMEPASSES[key] or {}).price or 0)
 	end

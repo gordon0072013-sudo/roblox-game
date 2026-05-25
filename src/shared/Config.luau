@@ -104,6 +104,7 @@ Config.GAMEPASSES = {
 	LuckyMutations  = { id = 0, price = 349, name = "Lucky Mutations" },
 	TripleCapture   = { id = 0, price = 399, name = "Triple Capture" },
 	RainbowTrail    = { id = 0, price = 149, name = "Rainbow Trail" }, -- cosmetic, high-margin whale slot
+	GoldenPlot      = { id = 0, price = 199, name = "Golden Plot" },   -- cosmetic floor + sign upgrade
 }
 
 Config.DEV_PRODUCTS = {

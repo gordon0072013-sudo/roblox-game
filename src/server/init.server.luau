@@ -29,6 +29,7 @@ local AnalyticsService = require(script.AnalyticsService)
 local CodeService = require(script.CodeService)
 local GroupRewardService = require(script.GroupRewardService)
 local TrailService = require(script.TrailService)
+local AchievementService = require(script.AchievementService)
 
 -- Init order: data first, content next, monetization/UI services last.
 DataService.Init()
@@ -47,6 +48,7 @@ AnalyticsService.Init()
 CodeService.Init()
 GroupRewardService.Init()
 TrailService.Init()
+AchievementService.Init()
 
 local function onPlayerAdded(player: Player)
 	DataService.LoadProfile(player)
@@ -60,6 +62,7 @@ local function onPlayerAdded(player: Player)
 		DailyRewardService.OnPlayerAdded(player)
 		GroupRewardService.OnPlayerAdded(player)
 		TrailService.OnPlayerAdded(player)
+		AchievementService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -140,6 +143,10 @@ end)
 
 handler(Remotes.Names.RequestRecheckGroup, function(player)
 	GroupRewardService.Check(player)
+end)
+
+handler(Remotes.Names.RequestClaimAchievement, function(player, id)
+	if typeof(id) == "string" then AchievementService.Claim(player, id) end
 end)
 
 print("[BrainrotLab] Server boot complete.")

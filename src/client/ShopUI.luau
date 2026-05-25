@@ -102,6 +102,7 @@ local function buildPanel(parent: Frame)
 		LuckyMutations = "Mutation rolls biased toward rare suffixes",
 		TripleCapture = "Capture button gives 3 brainrots per click",
 		RainbowTrail = "Equip a rainbow trail (flex flex flex)",
+		GoldenPlot = "Your lab floor turns gold + glowing sign",
 	}
 
 	for key, gp in pairs(Config.GAMEPASSES) do

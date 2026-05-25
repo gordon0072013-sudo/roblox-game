@@ -58,6 +58,9 @@ GroupBannerUI.Init(screen)
 local TutorialUI = require(script.TutorialUI)
 TutorialUI.Init(screen)
 
+local AchievementUI = require(script.AchievementUI)
+AchievementUI.Init(screen, UIController)
+
 local SoundController = require(script.SoundController)
 SoundController.Init()
 
