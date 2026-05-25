@@ -468,6 +468,10 @@ function LabService.GiveBrainrot(player: Player, brainrot: Types.OwnedBrainrot)
 		kind = "capture",
 		text = `Captured ${BrainrotData.Get(brainrot.speciesId) and BrainrotData.Get(brainrot.speciesId).displayName or "?"}!`,
 	})
+	if data.stats.totalCaptured == 1 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(player, "first_capture") end
+	end
 end
 
 function LabService.TransferBrainrot(fromPlayer: Player, toPlayer: Player, uid: string): boolean

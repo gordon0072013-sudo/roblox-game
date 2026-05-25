@@ -90,6 +90,8 @@ local function spawnOne()
 		touched = true
 		CaptureService.GiveOutbreakBrainrot(player, def.id)
 		if BattlePassService then BattlePassService.AwardXp(player, "outbreak_brainrot") end
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(player, "first_outbreak") end
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind="capture",
 			text=`OUTBREAK CAPTURE: ${def.displayName}!`,

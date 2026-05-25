@@ -47,6 +47,7 @@ end
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
 	local data = DataService.Get(player)
 	if not data then return end
+	local prevEarned = data.stats.totalCashEarned
 	data.cash += amount
 	data.stats.totalCashEarned += math.max(0, amount)
 	EconomyService.PushHud(player)
@@ -55,6 +56,18 @@ function EconomyService.AwardCash(player: Player, amount: number, reason: string
 			kind = "cash",
 			text = `+${amount} cash (${reason})`,
 		})
+	end
+	-- Badge triggers cross the 100k and 1m thresholds
+	if amount > 0 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then
+			if prevEarned < 100000 and data.stats.totalCashEarned >= 100000 then
+				BadgeService.Fire(player, "cash_100k")
+			end
+			if prevEarned < 1000000 and data.stats.totalCashEarned >= 1000000 then
+				BadgeService.Fire(player, "cash_1m")
+			end
+		end
 	end
 end
 
@@ -86,6 +99,10 @@ function EconomyService.TryRebirth(player: Player): boolean
 		text = `Rebirth ${data.rebirths}! Income multiplier ${string.format("%.2fx", Config.REBIRTH_INCOME_MULT(data.rebirths))}`,
 	})
 	EconomyService.PushHud(player)
+	if data.rebirths == 1 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(player, "first_rebirth") end
+	end
 	return true
 end
 

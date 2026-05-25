@@ -19,6 +19,7 @@ local Remotes = require(Shared.Remotes)
 local DataService = require(script.Parent.DataService)
 local LabService = require(script.Parent.LabService)
 local BattlePassService -- forward
+local BadgeService -- forward
 
 local MutationService = {}
 
@@ -55,6 +56,14 @@ local function rollOne(player: Player, brainrotUid: string)
 			if BattlePassService then
 				BattlePassService.AwardXp(player, "mutation")
 			end
+			if BadgeService then
+				if data.stats.totalMutations == 1 then
+					BadgeService.Fire(player, "first_mutation")
+				end
+				if b.mutationTier >= Config.MUTATION_MAX_TIER then
+					BadgeService.Fire(player, "apex_mutation")
+				end
+			end
 			return
 		end
 	end
@@ -79,6 +88,7 @@ end
 
 function MutationService.Init()
 	BattlePassService = require(script.Parent.BattlePassService)
+	BadgeService = require(script.Parent.BadgeService)
 	task.spawn(function()
 		while true do
 			for _, player in ipairs(Players:GetPlayers()) do

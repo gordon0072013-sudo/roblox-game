@@ -32,6 +32,7 @@ local TrailService = require(script.TrailService)
 local AchievementService = require(script.AchievementService)
 local QuestService = require(script.QuestService)
 local TradeService = require(script.TradeService)
+local BadgeService = require(script.BadgeService)
 
 -- Init order: data first, content next, monetization/UI services last.
 DataService.Init()
@@ -53,6 +54,7 @@ TrailService.Init()
 AchievementService.Init()
 QuestService.Init()
 TradeService.Init()
+BadgeService.Init()
 
 local function onPlayerAdded(player: Player)
 	DataService.LoadProfile(player)
@@ -68,6 +70,7 @@ local function onPlayerAdded(player: Player)
 		TrailService.OnPlayerAdded(player)
 		AchievementService.OnPlayerAdded(player)
 		QuestService.OnPlayerAdded(player)
+		BadgeService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end

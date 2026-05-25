@@ -130,6 +130,10 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 		if BattlePassService then
 			BattlePassService.AwardXp(attacker, "steal")
 		end
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok and atkData and atkData.stats.totalSteals == 1 then
+			BadgeService.Fire(attacker, "first_steal")
+		end
 	end
 end
 

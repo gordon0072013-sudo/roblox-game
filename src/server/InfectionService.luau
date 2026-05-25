@@ -72,6 +72,10 @@ function InfectionService.AttemptInfect(attacker: Player, victimUserId: number)
 	victimData.infectedUntil = math.max(victimData.infectedUntil, os.time()) + Config.INFECTION_DEBUFF_DURATION
 	atkData.stats.totalInfections += 1
 	if BattlePassService then BattlePassService.AwardXp(attacker, "infection") end
+	if atkData.stats.totalInfections == 1 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(attacker, "first_infect") end
+	end
 
 	local victimPlot = LabService.GetPlotIdForPlayer(victim)
 	if victimPlot then playInfectionVfx(victimPlot) end
