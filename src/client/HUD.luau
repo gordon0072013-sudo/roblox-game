@@ -96,8 +96,31 @@ function HUD.Init(screen: ScreenGui)
 		end)
 	end)
 
+	-- Cash tween — animates the displayed number toward the authoritative
+	-- server value over ~500ms so increments feel earned instead of stamped.
+	-- Floor each frame to avoid decimal flicker.
+	local displayedCash = 0
+	local targetCash = 0
+	local RunService = game:GetService("RunService")
+	RunService.Heartbeat:Connect(function(dt)
+		if displayedCash == targetCash then return end
+		local delta = targetCash - displayedCash
+		local step = math.sign(delta) * math.max(math.abs(delta) * dt * 8, 1)
+		if math.abs(delta) <= math.abs(step) then
+			displayedCash = targetCash
+		else
+			displayedCash += step
+		end
+		cashLabel.Text = `${Util.FormatShortNumber(math.floor(displayedCash))} cash`
+	end)
+
 	Remotes.Event(Remotes.Names.HudUpdate).OnClientEvent:Connect(function(payload)
-		cashLabel.Text = `${Util.FormatShortNumber(payload.cash)} cash`
+		targetCash = payload.cash
+		-- Big jumps (e.g. login bonus, rebirth) snap immediately; small ticks tween.
+		if math.abs(targetCash - displayedCash) > targetCash * 0.5 + 1000 then
+			displayedCash = targetCash
+			cashLabel.Text = `${Util.FormatShortNumber(payload.cash)} cash`
+		end
 		rebirthLabel.Text = `Rebirth ${payload.rebirths}  (need ${Util.FormatShortNumber(payload.nextRebirthCost)})`
 		local parts = {}
 		if payload.cashMult and payload.cashMult > 1 then table.insert(parts, `${payload.cashMult}x cash`) end
