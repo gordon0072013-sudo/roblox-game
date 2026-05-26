@@ -47,6 +47,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local hourMult = 1
 	local okHour, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
 	if okHour then hourMult = TopOfHourService.GetCashMult() end
+	local firstSessionMult = 1
+	local okFs, FirstSessionService = pcall(require, script.Parent.FirstSessionService)
+	if okFs then firstSessionMult = FirstSessionService.GetCashMult(player) end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -56,7 +59,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * firstSessionMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)

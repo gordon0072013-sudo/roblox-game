@@ -60,6 +60,7 @@ local DailyDealService        = require(script.DailyDealService)
 local LoginStreakService      = require(script.LoginStreakService)
 local HealthCheckService      = require(script.HealthCheckService)
 local GraceShutdownService    = require(script.GraceShutdownService)
+local FirstSessionService     = require(script.FirstSessionService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -115,6 +116,7 @@ local bootOrder = {
 	{ "LoginStreakService",   LoginStreakService.Init    },
 	{ "HealthCheckService",   HealthCheckService.Init    },
 	{ "GraceShutdownService", GraceShutdownService.Init  },
+	{ "FirstSessionService",  FirstSessionService.Init   },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -164,6 +166,7 @@ local function onPlayerAdded(player: Player)
 		DailyDealService.OnPlayerAdded(player)
 		LoginStreakService.OnPlayerAdded(player)
 		HealthCheckService.OnPlayerAdded(player)
+		FirstSessionService.OnPlayerAdded(player)
 		EconomyService.PushHud(player)
 	end)
 end
@@ -179,6 +182,7 @@ local function onPlayerRemoving(player: Player)
 	OfflineCashService.OnPlayerRemoving(player)
 	HotStreakService.OnPlayerRemoving(player)
 	MilestoneAnnounceService.OnPlayerRemoving(player)
+	FirstSessionService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
