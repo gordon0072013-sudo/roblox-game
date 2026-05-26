@@ -273,6 +273,12 @@ end
 do
 	local container = resolveContainer("ServerScriptService")
 	local root = container and container:FindFirstChild("Server")
+	local inst = root and resolveChild(root, "HealthCheckService")
+	check("ServerScriptService/Server/HealthCheckService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("ServerScriptService")
+	local root = container and container:FindFirstChild("Server")
 	local inst = root and resolveChild(root, "HotStreakService")
 	check("ServerScriptService/Server/HotStreakService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end
