@@ -113,6 +113,19 @@ local function deliverProduct(player: Player, key: string): boolean
 		PetService.Hatch(player, true)
 	elseif def.kind == "wheel_spins" then
 		if LuckyWheelService then LuckyWheelService.GrantSpins(player, def.amount or 1) end
+	elseif def.kind == "tip" then
+		-- Tips deliver nothing tangible — that's the point. Mark the profile
+		-- so chat tags / leaderboard recognize the tipper, and award a small
+		-- cash thank-you so it's not entirely empty.
+		local data = DataService.Get(player)
+		if data then
+			(data :: any)._totalTipped = ((data :: any)._totalTipped or 0) + (def.amount or 0)
+		end
+		EconomyService.AwardCash(player, (def.amount or 0) * 100, "tip thank-you")
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("💖 Thank you for the %d R$ tip! You're amazing.", def.amount or 0),
+		})
 	else
 		warn(`[Monetization] Unknown product kind: ${tostring(def.kind)}`)
 		return false

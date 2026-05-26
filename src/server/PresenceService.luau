@@ -63,6 +63,11 @@ local function applyChatTags()
 			props.PrefixText = `<font color="rgb(255,215,80)">[OWNER]</font> ${message.PrefixText}`
 		elseif AdminService.IsAdmin(player) then
 			props.PrefixText = `<font color="rgb(120,220,120)">[ADMIN]</font> ${message.PrefixText}`
+		else
+			local d = DataService.Get(player)
+			if d and (d :: any)._totalTipped and (d :: any)._totalTipped >= 200 then
+				props.PrefixText = `<font color="rgb(255,120,180)">[TIPPER]</font> ${message.PrefixText}`
+			end
 		end
 		return props
 	end

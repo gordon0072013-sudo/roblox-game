@@ -414,6 +414,10 @@ Config.DEV_PRODUCTS = {
 	-- Wheel
 	WheelSpinPack5    = { id = 0, price = 79,  name = "5 Wheel Spins",       kind = "wheel_spins", amount = 5 },
 	WheelSpinPack25   = { id = 0, price = 299, name = "25 Wheel Spins",      kind = "wheel_spins", amount = 25 },
+	-- Tips (developer support)
+	TipSmall          = { id = 0, price = 50,  name = "Tip the Dev (Small)", kind = "tip", amount = 50  },
+	TipMedium         = { id = 0, price = 200, name = "Tip the Dev",         kind = "tip", amount = 200 },
+	TipLarge          = { id = 0, price = 1000,name = "Tip the Dev (Mega)",  kind = "tip", amount = 1000},
 }
 
 -- ============================================================
@@ -6488,6 +6492,19 @@ local function deliverProduct(player: Player, key: string): boolean
 		PetService.Hatch(player, true)
 	elseif def.kind == "wheel_spins" then
 		if LuckyWheelService then LuckyWheelService.GrantSpins(player, def.amount or 1) end
+	elseif def.kind == "tip" then
+		-- Tips deliver nothing tangible — that's the point. Mark the profile
+		-- so chat tags / leaderboard recognize the tipper, and award a small
+		-- cash thank-you so it's not entirely empty.
+		local data = DataService.Get(player)
+		if data then
+			(data :: any)._totalTipped = ((data :: any)._totalTipped or 0) + (def.amount or 0)
+		end
+		EconomyService.AwardCash(player, (def.amount or 0) * 100, "tip thank-you")
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("💖 Thank you for the %d R$ tip! You're amazing.", def.amount or 0),
+		})
 	else
 		warn(`[Monetization] Unknown product kind: ${tostring(def.kind)}`)
 		return false
@@ -7519,6 +7536,11 @@ local function applyChatTags()
 			props.PrefixText = `<font color="rgb(255,215,80)">[OWNER]</font> ${message.PrefixText}`
 		elseif AdminService.IsAdmin(player) then
 			props.PrefixText = `<font color="rgb(120,220,120)">[ADMIN]</font> ${message.PrefixText}`
+		else
+			local d = DataService.Get(player)
+			if d and (d :: any)._totalTipped and (d :: any)._totalTipped >= 200 then
+				props.PrefixText = `<font color="rgb(255,120,180)">[TIPPER]</font> ${message.PrefixText}`
+			end
 		end
 		return props
 	end

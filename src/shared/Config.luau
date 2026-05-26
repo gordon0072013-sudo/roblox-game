@@ -133,6 +133,10 @@ Config.DEV_PRODUCTS = {
 	-- Wheel
 	WheelSpinPack5    = { id = 0, price = 79,  name = "5 Wheel Spins",       kind = "wheel_spins", amount = 5 },
 	WheelSpinPack25   = { id = 0, price = 299, name = "25 Wheel Spins",      kind = "wheel_spins", amount = 25 },
+	-- Tips (developer support)
+	TipSmall          = { id = 0, price = 50,  name = "Tip the Dev (Small)", kind = "tip", amount = 50  },
+	TipMedium         = { id = 0, price = 200, name = "Tip the Dev",         kind = "tip", amount = 200 },
+	TipLarge          = { id = 0, price = 1000,name = "Tip the Dev (Mega)",  kind = "tip", amount = 1000},
 }
 
 -- ============================================================
