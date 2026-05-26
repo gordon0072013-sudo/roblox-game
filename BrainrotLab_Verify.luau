@@ -267,6 +267,12 @@ end
 do
 	local container = resolveContainer("ServerScriptService")
 	local root = container and container:FindFirstChild("Server")
+	local inst = root and resolveChild(root, "GraceShutdownService")
+	check("ServerScriptService/Server/GraceShutdownService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("ServerScriptService")
+	local root = container and container:FindFirstChild("Server")
 	local inst = root and resolveChild(root, "GroupRewardService")
 	check("ServerScriptService/Server/GroupRewardService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end

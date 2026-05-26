@@ -59,6 +59,7 @@ local TopOfHourService        = require(script.TopOfHourService)
 local DailyDealService        = require(script.DailyDealService)
 local LoginStreakService      = require(script.LoginStreakService)
 local HealthCheckService      = require(script.HealthCheckService)
+local GraceShutdownService    = require(script.GraceShutdownService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -113,6 +114,7 @@ local bootOrder = {
 	{ "DailyDealService",     DailyDealService.Init      },
 	{ "LoginStreakService",   LoginStreakService.Init    },
 	{ "HealthCheckService",   HealthCheckService.Init    },
+	{ "GraceShutdownService", GraceShutdownService.Init  },
 }
 
 for _, entry in ipairs(bootOrder) do
