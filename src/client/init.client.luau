@@ -106,6 +106,9 @@ CinematicUI.Init(screen)
 local AutoSellUI = require(script.AutoSellUI)
 AutoSellUI.Init(screen, UIController)
 
+local NextEventUI = require(script.NextEventUI)
+NextEventUI.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 

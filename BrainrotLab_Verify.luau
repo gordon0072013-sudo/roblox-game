@@ -572,6 +572,12 @@ end
 do
 	local container = resolveContainer("StarterPlayer.StarterPlayerScripts")
 	local root = container and container:FindFirstChild("Client")
+	local inst = root and resolveChild(root, "NextEventUI")
+	check("StarterPlayer.StarterPlayerScripts/Client/NextEventUI :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("StarterPlayer.StarterPlayerScripts")
+	local root = container and container:FindFirstChild("Client")
 	local inst = root and resolveChild(root, "NotificationUI")
 	check("StarterPlayer.StarterPlayerScripts/Client/NotificationUI :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end
