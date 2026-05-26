@@ -5,7 +5,32 @@ constructs every Folder, Script, ModuleScript, and LocalScript for the
 entire project into the correct Roblox services. No Rojo, no Wally, no
 external tooling — only Roblox Studio.
 
-## Use it
+There are now **three** ways to install. Pick whichever fits your
+workflow:
+
+| Method | File | Effort | Re-install |
+|---|---|---|---|
+| Studio Plugin (recommended) | `BrainrotLab_Plugin.rbxmx` | one-time drop into Plugins folder, then a toolbar click | one click |
+| Command Bar paste | `BrainrotLab_Installer.luau` | paste a 425 KB script into Command Bar | re-paste |
+| Manual Rojo sync | `default.project.json` | install Rojo + Wally | live sync |
+
+## Method 1: Studio Plugin (recommended — closest to zero-button)
+
+1. Download `BrainrotLab_Plugin.rbxmx` from the repo root.
+2. Drop the file into your Roblox Studio plugins folder:
+   - **Windows:** `%LOCALAPPDATA%\Roblox\Plugins\`
+   - **Mac:** `~/Documents/Roblox/Plugins/`
+3. Restart Roblox Studio.
+4. Open any place (Baseplate, blank, etc.).
+5. The toolbar shows a new **Brainrot Lab** button. Click **Install / Update**.
+6. The Output panel prints `[BrainrotLab Plugin] install / update complete`.
+7. **File → Save** (or **Publish to Roblox**).
+
+Re-installing later (after I push a code update): regenerate the plugin
+file (`python3 tools/build_plugin.py`), drop it into the same Plugins
+folder (overwrite), reload Studio, click the button again.
+
+## Method 2: Command Bar paste
 
 1. **Open Roblox Studio.** Any place (Baseplate, blank, etc.) works.
 2. **View → Command Bar.**
