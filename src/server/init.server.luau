@@ -61,6 +61,7 @@ local LoginStreakService      = require(script.LoginStreakService)
 local HealthCheckService      = require(script.HealthCheckService)
 local GraceShutdownService    = require(script.GraceShutdownService)
 local FirstSessionService     = require(script.FirstSessionService)
+local MutationRerollService   = require(script.MutationRerollService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -117,6 +118,7 @@ local bootOrder = {
 	{ "HealthCheckService",   HealthCheckService.Init    },
 	{ "GraceShutdownService", GraceShutdownService.Init  },
 	{ "FirstSessionService",  FirstSessionService.Init   },
+	{ "MutationRerollService", MutationRerollService.Init },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -358,6 +360,11 @@ bind(Remotes.Names.RequestFuse, function(player, uids)
 		if s then table.insert(cleaned, s) end
 	end
 	if #cleaned == 3 then FusionService.Attempt(player, cleaned) end
+end)
+
+bind(Remotes.Names.RequestRerollMutation, function(player, uid)
+	local u = asUid(player, uid, "RerollMutation.uid")
+	if u then MutationRerollService.Reroll(player, u) end
 end)
 
 Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)

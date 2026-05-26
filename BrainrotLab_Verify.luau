@@ -345,6 +345,12 @@ end
 do
 	local container = resolveContainer("ServerScriptService")
 	local root = container and container:FindFirstChild("Server")
+	local inst = root and resolveChild(root, "MutationRerollService")
+	check("ServerScriptService/Server/MutationRerollService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("ServerScriptService")
+	local root = container and container:FindFirstChild("Server")
 	local inst = root and resolveChild(root, "MutationService")
 	check("ServerScriptService/Server/MutationService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end

@@ -71,6 +71,7 @@ local RemoteNames = {
 	RequestSocialInvite = "RequestSocialInvite",
 	RequestSetAutoSell = "RequestSetAutoSell",
 	RequestFuse = "RequestFuse",
+	RequestRerollMutation = "RequestRerollMutation",
 }
 
 local Remotes = {}
