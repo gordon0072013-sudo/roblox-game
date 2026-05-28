@@ -1,0 +1,4 @@
+# Rokit toolchain manifest — run `rokit install` to get the tools.
+# Rojo syncs these source files into Roblox Studio.
+[tools]
+rojo = "rojo-rbx/rojo@7.4.4"

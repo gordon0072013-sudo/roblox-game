@@ -1,0 +1,11 @@
+# Rokit / Rojo
+/.rokit/
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+*.lock
+
+# OS
+.DS_Store
+Thumbs.db
