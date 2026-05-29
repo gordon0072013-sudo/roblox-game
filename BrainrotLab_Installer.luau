@@ -2000,6 +2000,34 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "playerinfo",
+	usage = "/playerinfo <player>",
+	help = "Detailed profile snapshot for one player.",
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /playerinfo <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local gpKeys = {}
+		for k, _ in pairs(data.gamepasses) do table.insert(gpKeys, k) end
+		table.sort(gpKeys)
+		local stats = data.stats
+		local tipped = (data :: any)._totalTipped or 0
+		local streak = (data :: any)._streak and (data :: any)._streak.count or 0
+		return string.format(
+			"%s (uid=%d) — cash=%d rebirths=%d inv=%d created=%ds-ago\n" ..
+			"  stats: cap=%d mut=%d steals=%d infs=%d earned=%d\n" ..
+			"  gamepasses: %s\n" ..
+			"  streak=%d tipped=%dR\$",
+			target.Name, target.UserId, data.cash, data.rebirths, #data.inventory,
+			os.time() - (data.createdAt or os.time()),
+			stats.totalCaptured, stats.totalMutations, stats.totalSteals,
+			stats.totalInfections, stats.totalCashEarned,
+			#gpKeys > 0 and table.concat(gpKeys, ",") or "(none)",
+			streak, tipped)
+	end,
+})
+
+table.insert(commands, {
 	name = "wheelgift",
 	usage = "/wheelgift <count>",
 	help = "Grant N free wheel spins to every online player.",
