@@ -2075,6 +2075,22 @@ table.insert(commands, {
 	end,
 })
 
+table.insert(commands, {
+	name = "revenue",
+	usage = "/revenue",
+	help = "Show this server's purchase summary.",
+	fn = function()
+		local ok, AnalyticsService = pcall(require, script.Parent.AnalyticsService)
+		if not ok then return "AnalyticsService unavailable" end
+		local s = AnalyticsService.Summary()
+		local rate = if s.count > 0 then s.totalRobux / s.count else 0
+		return string.format(
+			"server revenue: %d R$ across %d purchases (avg %.1f R$). " ..
+			"Devex est: ~$%.2f (~70%% of gross after Roblox cut).",
+			s.totalRobux, s.count, rate, (s.totalRobux * 0.7) / 350)
+	end,
+})
+
 -- ============================================================
 -- BAN STORE (persistent across servers)
 -- ============================================================
