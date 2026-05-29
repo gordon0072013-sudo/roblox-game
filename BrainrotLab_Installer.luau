@@ -2582,6 +2582,25 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "speed",
+	usage = "/speed <player> <walkspeed>",
+	help = "Set walk speed (default 16, max 60).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local n = asNumber(args[2])
+		if not target or not target.Character or not n then
+			return "usage: /speed <player> <walkspeed>"
+		end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		local clamped = math.clamp(math.floor(n), 0, 60)
+		hum.WalkSpeed = clamped
+		return string.format("set %s walkspeed to %d", target.Name, clamped)
+	end,
+})
+
+table.insert(commands, {
 	name = "godmode",
 	usage = "/godmode <player> [on|off]",
 	help = "Toggle invulnerability on a player's character.",
