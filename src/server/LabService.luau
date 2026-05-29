@@ -476,6 +476,8 @@ function LabService.GiveBrainrot(player: Player, brainrot: Types.OwnedBrainrot)
 	if okL then PlayerLevelService.AwardXp(player, "capture") end
 	local okA, AutoSellService = pcall(require, script.Parent.AutoSellService)
 	if okA then AutoSellService.OnCapture(player, brainrot.uid) end
+	local okM, MythicCelebrationService = pcall(require, script.Parent.MythicCelebrationService)
+	if okM then MythicCelebrationService.OnCapture(player, brainrot.speciesId) end
 end
 
 function LabService.TransferBrainrot(fromPlayer: Player, toPlayer: Player, uid: string): boolean

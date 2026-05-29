@@ -62,6 +62,7 @@ local HealthCheckService      = require(script.HealthCheckService)
 local GraceShutdownService    = require(script.GraceShutdownService)
 local FirstSessionService     = require(script.FirstSessionService)
 local MutationRerollService   = require(script.MutationRerollService)
+local MythicCelebrationService = require(script.MythicCelebrationService)
 
 -- Boot order is significant: persistence first, content domain next,
 -- monetization and observability last so they can observe domain state.
@@ -119,6 +120,7 @@ local bootOrder = {
 	{ "GraceShutdownService", GraceShutdownService.Init  },
 	{ "FirstSessionService",  FirstSessionService.Init   },
 	{ "MutationRerollService", MutationRerollService.Init },
+	{ "MythicCelebrationService", MythicCelebrationService.Init },
 }
 
 for _, entry in ipairs(bootOrder) do

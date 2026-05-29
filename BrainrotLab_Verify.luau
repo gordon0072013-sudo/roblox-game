@@ -357,6 +357,12 @@ end
 do
 	local container = resolveContainer("ServerScriptService")
 	local root = container and container:FindFirstChild("Server")
+	local inst = root and resolveChild(root, "MythicCelebrationService")
+	check("ServerScriptService/Server/MythicCelebrationService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("ServerScriptService")
+	local root = container and container:FindFirstChild("Server")
 	local inst = root and resolveChild(root, "OfflineCashService")
 	check("ServerScriptService/Server/OfflineCashService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end
