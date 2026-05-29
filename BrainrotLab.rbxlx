@@ -4797,10 +4797,15 @@ end
 -- Flush all profiles on shutdown so purchases aren't lost.
 game:BindToClose(function()
 	if RunService:IsStudio() then return end
+	-- ProfileService:Release fires our ListenToRelease callback which nils
+	-- profiles[player]. Whether that runs synchronously is internal to
+	-- ProfileService, so snapshot first to be safe under pairs() rules.
+	local toRelease: { any } = {}
 	for _, profile in pairs(profiles) do
-		if not profile._isFallback then
-			pcall(function() profile:Release() end)
-		end
+		if not profile._isFallback then table.insert(toRelease, profile) end
+	end
+	for _, profile in ipairs(toRelease) do
+		pcall(function() profile:Release() end)
 	end
 	task.wait(2)
 end)
