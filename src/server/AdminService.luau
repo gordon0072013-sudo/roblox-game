@@ -129,6 +129,22 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "setcash",
+	usage = "/setcash <player> <amount>",
+	help = "Set a player's cash to an exact amount.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local amount = asNumber(args[2])
+		if not target or not amount then return "usage: /setcash <player> <amount>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		data.cash = math.max(0, math.floor(amount))
+		EconomyService.PushHud(target)
+		return string.format("%s cash = %d", target.Name, data.cash)
+	end,
+})
+
+table.insert(commands, {
 	name = "rebirths",
 	usage = "/rebirths <player> <count>",
 	help = "Set a player's rebirth count.",
