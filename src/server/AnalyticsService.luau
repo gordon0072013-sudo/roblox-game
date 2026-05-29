@@ -20,9 +20,14 @@ pcall(function()
 	end
 end)
 
+local MAX_PURCHASES_IN_MEMORY = 1000
+
 function AnalyticsService.LogPurchase(player: Player, kind: string, key: string, price: number)
 	local entry = { userId = player.UserId, kind = kind, key = key, price = price, at = os.time() }
 	table.insert(purchases, entry)
+	if #purchases > MAX_PURCHASES_IN_MEMORY then
+		table.remove(purchases, 1)
+	end
 	print(string.format("[ANALYTICS] %s bought %s (%s) for %d R$ — total purchases this server: %d",
 		player.DisplayName, key, kind, price, #purchases))
 	if store then
