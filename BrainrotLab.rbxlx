@@ -5078,8 +5078,13 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
 		if data.gamepasses["InfectionShield"] then
-			-- shield reduces the penalty severity
+			-- Full shield reduction.
 			penalty = penalty + (1 - penalty) * Config.INFECTION_SHIELD_GAMEPASS_REDUCTION
+		elseif data.gamepasses["VIPLab"] then
+			-- VIPLab gives a partial reduction (half the InfectionShield amount)
+			-- to match the shop description's 'partial steal/infection
+			-- protection' claim.
+			penalty = penalty + (1 - penalty) * (Config.INFECTION_SHIELD_GAMEPASS_REDUCTION * 0.5)
 		end
 		infectionMult = penalty
 	end
