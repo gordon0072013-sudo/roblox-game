@@ -223,6 +223,18 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "health",
+	usage = "/health",
+	help = "Run HealthCheckService probes now and report.",
+	fn = function()
+		local ok, HealthCheckService = pcall(require, script.Parent.HealthCheckService)
+		if not ok then return "HealthCheckService unavailable" end
+		local report = (HealthCheckService :: any).RunOnce and (HealthCheckService :: any).RunOnce()
+		return report or "health probes ran (see Output)"
+	end,
+})
+
+table.insert(commands, {
 	name = "test-purchase",
 	usage = "/test-purchase <product-key>",
 	help = "Deliver a dev product without charging — verify the receipt path.",

@@ -82,6 +82,21 @@ function HealthCheckService.AddProbe(name: string, check: () -> (boolean, string
 	addProbe(name, check)
 end
 
+function HealthCheckService.RunOnce(): string
+	local results: { string } = {}
+	for _, probe in ipairs(probes) do
+		local ok, healthy, detail = pcall(probe.check)
+		if not ok then
+			table.insert(results, string.format("%s: ERROR %s", probe.name, tostring(healthy)))
+		elseif not healthy then
+			table.insert(results, string.format("%s: FAIL %s", probe.name, tostring(detail or "")))
+		else
+			table.insert(results, string.format("%s: ok", probe.name))
+		end
+	end
+	return table.concat(results, " | ")
+end
+
 function HealthCheckService.Init()
 	task.spawn(function()
 		while true do
