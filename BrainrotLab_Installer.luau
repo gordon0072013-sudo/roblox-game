@@ -2582,6 +2582,33 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "maxmutate",
+	usage = "/maxmutate <player>",
+	help = "Fast-track all placed brainrots to apex tier.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /maxmutate <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local rolls = 0
+		for _, b in ipairs(data.inventory) do
+			if b.placed then
+				while b.mutationTier < Config.MUTATION_MAX_TIER and rolls < 200 do
+					MutationService.ForceInstantMutation(target)
+					rolls += 1
+					-- ForceInstantMutation picks the highest-tier placed brainrot;
+					-- we trust the loop to advance the target one tier per call.
+					-- Refresh b's tier from the inventory since the reference still
+					-- points to the same table.
+				end
+			end
+		end
+		return string.format("max-mutated %s (%d rolls fired)", target.Name, rolls)
+	end,
+})
+
+table.insert(commands, {
 	name = "mute",
 	usage = "/mute <player> <seconds>",
 	help = "Mute a player's chat for N seconds.",
