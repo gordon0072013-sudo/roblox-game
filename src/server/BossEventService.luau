@@ -136,8 +136,12 @@ local function spawnBoss()
 	local cd = Instance.new("ClickDetector")
 	cd.MaxActivationDistance = 60
 	cd.Parent = body
+	local lastClickAt: { [number]: number } = {}
 	cd.MouseClick:Connect(function(player)
 		if not activeBoss then return end
+		local now = os.clock()
+		if lastClickAt[player.UserId] and now - lastClickAt[player.UserId] < 0.2 then return end
+		lastClickAt[player.UserId] = now
 		local data = DataService.Get(player)
 		if not data then return end
 		local dmg = 100 + data.rebirths * 80
