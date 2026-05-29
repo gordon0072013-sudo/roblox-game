@@ -2625,18 +2625,19 @@ table.insert(commands, {
 		if not target then return "usage: /maxmutate <player>" end
 		local data = DataService.Get(target); if not data then return "no profile" end
 		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
-		local rolls = 0
-		for _, b in ipairs(data.inventory) do
-			if b.placed then
-				while b.mutationTier < Config.MUTATION_MAX_TIER and rolls < 200 do
-					MutationService.ForceInstantMutation(target)
-					rolls += 1
-					-- ForceInstantMutation picks the highest-tier placed brainrot;
-					-- we trust the loop to advance the target one tier per call.
-					-- Refresh b's tier from the inventory since the reference still
-					-- points to the same table.
-				end
+		local function anyBelowMax(): boolean
+			for _, b in ipairs(data.inventory) do
+				if b.placed and b.mutationTier < Config.MUTATION_MAX_TIER then return true end
 			end
+			return false
+		end
+		-- ForceInstantMutation always advances the *highest-tier* placed
+		-- brainrot, so once one hits MAX it shifts to the next-highest. Drive
+		-- one roll at a time until everything's at MAX or we hit the cap.
+		local rolls = 0
+		while anyBelowMax() and rolls < 200 do
+			MutationService.ForceInstantMutation(target)
+			rolls += 1
 		end
 		return string.format("max-mutated %s (%d rolls fired)", target.Name, rolls)
 	end,
