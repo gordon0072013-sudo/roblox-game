@@ -781,6 +781,33 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "mute",
+	usage = "/mute <player> <seconds>",
+	help = "Mute a player's chat for N seconds.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local seconds = asNumber(args[2])
+		if not target or not seconds then return "usage: /mute <player> <seconds>" end
+		local TextChatService = game:GetService("TextChatService")
+		if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then
+			return "TextChatService not active — mute requires the new chat"
+		end
+		local source: TextSource?
+		for _, channel in ipairs(TextChatService:WaitForChild("TextChannels"):GetChildren()) do
+			source = (channel :: any):FindFirstChild("TextSource_" .. target.UserId)
+			if source then break end
+		end
+		if not source then return "no chat source for " .. target.Name end
+		source.CanSend = false
+		task.delay(math.floor(seconds), function()
+			if source and source.Parent then source.CanSend = true end
+		end)
+		return string.format("muted %s for %ds", target.Name, math.floor(seconds))
+	end,
+})
+
+table.insert(commands, {
 	name = "buff",
 	usage = "/buff <player> <income|mutation> <mult> <seconds>",
 	help = "Apply a temporary personal buff.",
