@@ -54,6 +54,37 @@ local function endEvent()
 	activeUntil = 0
 end
 
+function TopOfHourService.ForceStart(indexOrName: any?)
+	local pick = nil
+	if typeof(indexOrName) == "number" then
+		pick = EVENT_TYPES[math.clamp(indexOrName, 1, #EVENT_TYPES)]
+	elseif typeof(indexOrName) == "string" then
+		local lower = string.lower(indexOrName)
+		for _, e in ipairs(EVENT_TYPES) do
+			if string.find(string.lower(e.label), lower, 1, true) then pick = e; break end
+		end
+	end
+	if pick then
+		currentEvent = pick
+		activeUntil = os.time() + EVENT_DURATION
+		currentMult = currentEvent.cashMult or 1
+		if AnnouncementService then
+			AnnouncementService.Push(currentEvent.label, currentEvent.color, EVENT_DURATION)
+		end
+		if currentEvent.freeSpins then
+			local ok, LuckyWheelService = pcall(require, script.Parent.LuckyWheelService)
+			if ok then
+				for _, p in ipairs(Players:GetPlayers()) do
+					LuckyWheelService.GrantSpins(p, currentEvent.freeSpins)
+				end
+			end
+		end
+		return true
+	end
+	startEvent()
+	return true
+end
+
 function TopOfHourService.GetCashMult(): number
 	if os.time() < activeUntil then return currentMult end
 	return 1

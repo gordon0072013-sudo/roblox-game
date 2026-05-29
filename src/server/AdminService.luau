@@ -223,6 +223,24 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "event",
+	usage = "/event [golden|mutation|spin|random]",
+	help = "Fire a Top-of-Hour-style event immediately.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local kind = args[1] or "random"
+		local ok, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+		if not ok then return "TopOfHourService unavailable" end
+		if kind == "random" then
+			(TopOfHourService :: any).ForceStart()
+		else
+			(TopOfHourService :: any).ForceStart(kind)
+		end
+		return "event fired: " .. kind
+	end,
+})
+
+table.insert(commands, {
 	name = "notify",
 	usage = "/notify <player> <text...>",
 	help = "Send a personal toast to a specific player.",
