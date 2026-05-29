@@ -2090,6 +2090,15 @@ table.insert(commands, {
 		local target = findPlayer(args[1] or "")
 		if not target then return "usage: /reset <player>" end
 		local data = DataService.Get(target); if not data then return "no profile" end
+		-- Despawn placed brainrot models before wiping inventory so the
+		-- visible plot is consistent with the new profile state. Iterate
+		-- over a UID copy because Unplace mutates placedModels under us.
+		local LabService = require(script.Parent.LabService)
+		local uids: { string } = {}
+		for _, b in ipairs(data.inventory) do
+			if b.placed then table.insert(uids, b.uid) end
+		end
+		for _, uid in ipairs(uids) do LabService.UnplaceBrainrot(target, uid) end
 		data.cash = 500
 		data.rebirths = 0
 		data.inventory = {}
@@ -2100,6 +2109,7 @@ table.insert(commands, {
 			totalCaptured = 0, totalMutations = 0, totalSteals = 0,
 			totalInfections = 0, totalCashEarned = 0,
 		}
+		LabService.PushInventory(target)
 		EconomyService.PushHud(target)
 		Remotes.Event(Remotes.Names.Notify):FireClient(target, {
 			kind = "error",
