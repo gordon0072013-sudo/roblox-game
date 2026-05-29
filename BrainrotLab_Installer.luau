@@ -7468,6 +7468,21 @@ local function intervalForPlayer(player: Player): number
 		local petMult = PetService.GetMutationSpeedMult(player)
 		if petMult > 1 then interval = interval / petMult end
 	end
+	local okHour, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+	if okHour then
+		local hourMult = TopOfHourService.GetMutationMult()
+		if hourMult > 1 then interval = interval / hourMult end
+	end
+	local okEvt, EventService = pcall(require, script.Parent.EventService)
+	if okEvt then
+		local eventMult = EventService.GetMutationSpeedMult()
+		if eventMult > 1 then interval = interval / eventMult end
+	end
+	local okBf, BuffService = pcall(require, script.Parent.BuffService)
+	if okBf then
+		local buffMult = BuffService.GetMutationMult(player)
+		if buffMult > 1 then interval = interval / buffMult end
+	end
 	return interval
 end
 
