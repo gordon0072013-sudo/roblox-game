@@ -59,8 +59,13 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 		return
 	end
 
-	-- Grace period
-	if joinTimes[victim] and os.clock() - joinTimes[victim] < Config.STEAL_GRACE_PERIOD_AFTER_JOIN then
+	-- Grace period — treat a missing record as 'just-joined' rather than
+	-- 'unprotected'. There's a brief window between Players.PlayerAdded and
+	-- StealService.OnPlayerAdded (which waits on profile load) where
+	-- joinTimes[victim] is nil; previously the `and` short-circuit let the
+	-- check pass, allowing a steal in that window.
+	local victimJoinedAt = joinTimes[victim]
+	if not victimJoinedAt or os.clock() - victimJoinedAt < Config.STEAL_GRACE_PERIOD_AFTER_JOIN then
 		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Target is in grace period." })
 		return
 	end
