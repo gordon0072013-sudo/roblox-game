@@ -802,6 +802,28 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "godmode",
+	usage = "/godmode <player> [on|off]",
+	help = "Toggle invulnerability on a player's character.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /godmode <player> [on|off]" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		local mode = string.lower(args[2] or "on")
+		if mode == "off" then
+			hum.MaxHealth = 100
+			hum.Health = 100
+			return string.format("godmode OFF for %s", target.Name)
+		end
+		hum.MaxHealth = math.huge
+		hum.Health = math.huge
+		return string.format("godmode ON for %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
 	name = "gather",
 	usage = "/gather",
 	help = "Teleport every online player to your position.",
