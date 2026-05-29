@@ -40,9 +40,9 @@ local function rebuild(payload: any)
 		lbl.TextScaled = true
 		lbl.TextXAlignment = Enum.TextXAlignment.Left
 		lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-		local claimedFree = payload.claimed[`f:${tier}`] and "✓" or "·"
-		local claimedPrem = payload.claimed[`p:${tier}`] and "✓" or "·"
-		lbl.Text = `Tier ${tier} [free ${claimedFree}] [prem ${claimedPrem}]`
+		local claimedFree = payload.claimed[`f:{tier}`] and "✓" or "·"
+		local claimedPrem = payload.claimed[`p:{tier}`] and "✓" or "·"
+		lbl.Text = `Tier {tier} [free {claimedFree}] [prem {claimedPrem}]`
 		lbl.Parent = row
 
 		local btn = Instance.new("TextButton")

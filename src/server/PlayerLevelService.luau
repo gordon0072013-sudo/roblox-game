@@ -66,7 +66,7 @@ function PlayerLevelService.AwardXp(player: Player, source: string, amount: numb
 		data._level.level = newLevel
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "rebirth",
-			text = `⭐ LEVEL UP — now level ${newLevel}! Claim reward in Levels tab.`,
+			text = `⭐ LEVEL UP — now level {newLevel}! Claim reward in Levels tab.`,
 		})
 	end
 	pushUpdate(player)
@@ -80,7 +80,7 @@ function PlayerLevelService.ClaimLevelReward(player: Player, level: number)
 	if data._level.claimed[tostring(level)] then return end
 	data._level.claimed[tostring(level)] = true
 	local cash = level * 500
-	EconomyService.AwardCash(player, cash, `level ${level} reward`)
+	EconomyService.AwardCash(player, cash, `level {level} reward`)
 	pushUpdate(player)
 end
 

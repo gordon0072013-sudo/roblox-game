@@ -77,7 +77,7 @@ local function payoutAndEnd(victory: boolean)
 				end
 				Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 					kind = victory and "capture" or "info",
-					text = victory and `Boss defeated! +${share} cash` or `Boss escaped. +${share} cash`,
+					text = victory and `Boss defeated! +{share} cash` or `Boss escaped. +{share} cash`,
 				})
 			end
 		end

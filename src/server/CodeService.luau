@@ -31,7 +31,7 @@ local runtimeCodes: { [string]: any } = {}
 
 local function deliverReward(player: Player, code: string, reward: any): boolean
 	if reward.kind == "cash" then
-		EconomyService.AwardCash(player, reward.amount or 0, `code ${code}`)
+		EconomyService.AwardCash(player, reward.amount or 0, `code {code}`)
 	elseif reward.kind == "infection_bomb" then
 		InfectionService.AddBombs(player, reward.amount or 1)
 	elseif reward.kind == "rare_egg" then
@@ -41,7 +41,7 @@ local function deliverReward(player: Player, code: string, reward: any): boolean
 			MutationService.ForceInstantMutation(player)
 		end
 	else
-		warn(`[CodeService] Unknown reward kind: ${tostring(reward.kind)}`)
+		warn(`[CodeService] Unknown reward kind: {tostring(reward.kind)}`)
 		return false
 	end
 	return true
@@ -52,11 +52,11 @@ function CodeService.Redeem(player: Player, codeRaw: string)
 	local code = string.upper(string.gsub(codeRaw, "%s", ""))
 	local reward = (Config.REDEMPTION_CODES :: any)[code] or runtimeCodes[code]
 	if not reward then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Invalid code: ${code}` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Invalid code: {code}` })
 		return
 	end
 	if reward.expiresAt and os.time() > reward.expiresAt then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code expired: ${code}` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code expired: {code}` })
 		return
 	end
 	local data = DataService.Get(player)
@@ -64,7 +64,7 @@ function CodeService.Redeem(player: Player, codeRaw: string)
 	(data :: any)._redeemedCodes = (data :: any)._redeemedCodes or {}
 	local log = (data :: any)._redeemedCodes :: { [string]: boolean }
 	if log[code] then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Already redeemed: ${code}` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Already redeemed: {code}` })
 		return
 	end
 	local ok = deliverReward(player, code, reward)
@@ -72,7 +72,7 @@ function CodeService.Redeem(player: Player, codeRaw: string)
 	log[code] = true
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `Code ${code} — ${reward.label or "reward"} granted!`,
+		text = `Code {code} — {reward.label or "reward"} granted!`,
 	})
 end
 

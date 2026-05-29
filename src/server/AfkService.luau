@@ -64,7 +64,7 @@ function AfkService.Init()
 					warned[player] = true
 					Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 						kind = "error",
-						text = `AFK kick in ${WARN_SECONDS}s — move to reset.`,
+						text = `AFK kick in {WARN_SECONDS}s — move to reset.`,
 					})
 				end
 			end

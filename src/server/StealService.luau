@@ -69,7 +69,7 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 	local atk = cooldowns[attacker.UserId]
 	if atk and atk[victimUserId] and os.clock() - atk[victimUserId] < Config.STEAL_COOLDOWN then
 		local rem = Config.STEAL_COOLDOWN - (os.clock() - atk[victimUserId])
-		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text=`Cooldown: ${math.ceil(rem)}s` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text=`Cooldown: {math.ceil(rem)}s` })
 		return
 	end
 
@@ -78,7 +78,7 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 	if victimData and (victimData.gamepasses["InfectionShield"] or victimData.gamepasses["VIPLab"]) then
 		if math.random() < 0.5 then
 			Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Their security blocked you." })
-			Remotes.Event(Remotes.Names.Notify):FireClient(victim, { kind="info", text=`${attacker.DisplayName} tried to raid you — blocked!` })
+			Remotes.Event(Remotes.Names.Notify):FireClient(victim, { kind="info", text=`{attacker.DisplayName} tried to raid you — blocked!` })
 			cooldowns[attacker.UserId] = cooldowns[attacker.UserId] or {}
 			cooldowns[attacker.UserId][victimUserId] = os.clock()
 			return
@@ -121,11 +121,11 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 		local def = BrainrotData.Get(target.speciesId)
 		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, {
 			kind="capture",
-			text=`STOLE ${def and def.displayName or "brainrot"}!`,
+			text=`STOLE {def and def.displayName or "brainrot"}!`,
 		})
 		Remotes.Event(Remotes.Names.Notify):FireClient(victim, {
 			kind="error",
-			text=`${attacker.DisplayName} stole your ${def and def.displayName or "brainrot"}!`,
+			text=`{attacker.DisplayName} stole your {def and def.displayName or "brainrot"}!`,
 		})
 		if BattlePassService then
 			BattlePassService.AwardXp(attacker, "steal")

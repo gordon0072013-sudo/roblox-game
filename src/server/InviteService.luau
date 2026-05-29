@@ -85,13 +85,13 @@ function InviteService.Redeem(player: Player, codeRaw: string)
 		pcall(function() referrerUserId = codeStore:GetAsync(code) end)
 	end
 	if not referrerUserId then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code ${code} not found.` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code {code} not found.` })
 		return
 	end
 
 	data._refRedeemed = true
 	EconomyService.AwardCash(player, REFEREE_CASH, "referral")
-	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Referral redeemed — +${REFEREE_CASH} cash` })
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Referral redeemed — +{REFEREE_CASH} cash` })
 	pushUpdate(player)
 
 	-- Reward referrer if in this server
@@ -105,7 +105,7 @@ function InviteService.Redeem(player: Player, codeRaw: string)
 			if InfectionService then InfectionService.AddBombs(referrer, REFERRER_BOMBS) end
 			Remotes.Event(Remotes.Names.Notify):FireClient(referrer, {
 				kind = "capture",
-				text = `${player.DisplayName} used your referral! +${REFERRER_CASH} cash, +${REFERRER_BOMBS} bombs`,
+				text = `{player.DisplayName} used your referral! +{REFERRER_CASH} cash, +{REFERRER_BOMBS} bombs`,
 			})
 			pushUpdate(referrer)
 		end

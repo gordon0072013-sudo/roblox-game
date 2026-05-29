@@ -124,7 +124,7 @@ function TutorialUI.Init(screen: ScreenGui)
 		local step = STEPS[i]
 		title.Text = step.title
 		body.Text = step.body
-		stepLabel.Text = `${i}/${#STEPS}`
+		stepLabel.Text = `{i}/{#STEPS}`
 		nextBtn.Text = if i == #STEPS then "DONE ✓" else "NEXT ▶"
 	end
 	show(idx)

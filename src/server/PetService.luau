@@ -128,7 +128,7 @@ function PetService.Hatch(player: Player, lucky: boolean?)
 	end
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `🥚 Hatched: ${def.name} [${def.rarity}] — ${def.tagline}`,
+		text = `🥚 Hatched: {def.name} [{def.rarity}] — {def.tagline}`,
 	})
 	pushUpdate(player)
 end

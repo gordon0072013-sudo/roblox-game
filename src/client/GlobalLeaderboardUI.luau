@@ -37,7 +37,7 @@ local function fill(col: Frame, title: string, entries: any, valueLabel: string)
 			elseif i == 2 then Color3.fromRGB(200, 200, 200)
 			elseif i == 3 then Color3.fromRGB(200, 140, 80)
 			else Color3.fromRGB(220, 220, 220)
-		row.Text = `${i}. ${e.name} — ${Util.FormatShortNumber(e.value)} ${valueLabel}`
+		row.Text = `{i}. {e.name} — {Util.FormatShortNumber(e.value)} {valueLabel}`
 		row.Parent = col
 	end
 
@@ -95,7 +95,7 @@ function GlobalLeaderboardUI.Init(screen: ScreenGui, UIController)
 
 	Remotes.Event(Remotes.Names.GlobalLeaderboardUpdate).OnClientEvent:Connect(function(payload)
 		local hrs = math.floor(payload.nextResetIn / 3600)
-		headerLabel.Text = `🌍 GLOBAL · Week ${payload.weekId} · resets in ${hrs}h`
+		headerLabel.Text = `🌍 GLOBAL · Week {payload.weekId} · resets in {hrs}h`
 		fill(cashCol, "💰 TOP CASH", payload.cash, "cash")
 		fill(mutCol, "🧬 TOP MUTATIONS", payload.mutations, "mut")
 		fill(stealCol, "🥷 TOP THIEVES", payload.steals, "steals")

@@ -50,7 +50,7 @@ function DailyRewardService.Claim(player: Player)
 	data.dailyReward.lastClaimDay = today
 	local r = Config.DAILY_REWARDS[streak]
 	if r.kind == "cash" then
-		EconomyService.AwardCash(player, r.amount, `daily reward day ${streak}`)
+		EconomyService.AwardCash(player, r.amount, `daily reward day {streak}`)
 		if r.premium_bonus and player.MembershipType == Enum.MembershipType.Premium then
 			EconomyService.AwardCash(player, r.premium_bonus, "Premium bonus")
 		end

@@ -77,7 +77,7 @@ local function grantGamepass(player: Player, key: string)
 	data.gamepasses[key] = true
 	EconomyService.PushHud(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
-		kind = "info", text = `Gamepass unlocked: ${(Config.GAMEPASSES[key] or {name=key}).name}`,
+		kind = "info", text = `Gamepass unlocked: {(Config.GAMEPASSES[key] or {name=key}).name}`,
 	})
 	if TrailService then
 		TrailService.OnGamepassGranted(player, key)
@@ -127,7 +127,7 @@ local function deliverProduct(player: Player, key: string): boolean
 			text = string.format("💖 Thank you for the %d R$ tip! You're amazing.", def.amount or 0),
 		})
 	else
-		warn(`[Monetization] Unknown product kind: ${tostring(def.kind)}`)
+		warn(`[Monetization] Unknown product kind: {tostring(def.kind)}`)
 		return false
 	end
 	if AnalyticsService then
@@ -144,9 +144,9 @@ function MonetizationService.PromptPurchase(player: Player, kind: string, key: s
 		else
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind="error",
-				text=`${(gp and gp.name) or key}: gamepass not configured (set ID in Config.luau).`,
+				text=`{(gp and gp.name) or key}: gamepass not configured (set ID in Config.luau).`,
 			})
-			warn(`[Monetization] PromptPurchase requested for unconfigured gamepass ${key}`)
+			warn(`[Monetization] PromptPurchase requested for unconfigured gamepass {key}`)
 		end
 	elseif kind == "product" then
 		local dp = Config.DEV_PRODUCTS[key]
@@ -155,9 +155,9 @@ function MonetizationService.PromptPurchase(player: Player, kind: string, key: s
 		else
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind="error",
-				text=`${(dp and dp.name) or key}: dev product not configured (set ID in Config.luau).`,
+				text=`{(dp and dp.name) or key}: dev product not configured (set ID in Config.luau).`,
 			})
-			warn(`[Monetization] PromptPurchase requested for unconfigured product ${key}`)
+			warn(`[Monetization] PromptPurchase requested for unconfigured product {key}`)
 		end
 	end
 end
@@ -185,7 +185,7 @@ function MonetizationService.Init()
 		if not player then return Enum.ProductPurchaseDecision.NotProcessedYet end
 		local entry = productById[receiptInfo.ProductId]
 		if not entry then
-			warn(`[Monetization] ProcessReceipt: unknown product ${receiptInfo.ProductId}`)
+			warn(`[Monetization] ProcessReceipt: unknown product {receiptInfo.ProductId}`)
 			return Enum.ProductPurchaseDecision.NotProcessedYet
 		end
 
@@ -202,7 +202,7 @@ function MonetizationService.Init()
 
 		local ok, delivered = pcall(deliverProduct, player, entry.key)
 		if not ok or not delivered then
-			warn(`[Monetization] Delivery failed for ${entry.key}: ${tostring(delivered)}`)
+			warn(`[Monetization] Delivery failed for {entry.key}: {tostring(delivered)}`)
 			return Enum.ProductPurchaseDecision.NotProcessedYet
 		end
 

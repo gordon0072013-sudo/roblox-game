@@ -52,7 +52,7 @@ function LoginStreakService.OnPlayerAdded(player: Player)
 		end
 		local bonus = MILESTONES[data._streak.count]
 		if bonus then
-			EconomyService.AwardCash(player, bonus, `${data._streak.count}-day streak`)
+			EconomyService.AwardCash(player, bonus, `{data._streak.count}-day streak`)
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind = "capture",
 				text = string.format("🔥 %d-day streak — bonus +%s cash!",

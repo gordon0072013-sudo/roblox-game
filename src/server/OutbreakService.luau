@@ -70,7 +70,7 @@ local function spawnOne()
 	lbl.Font = Enum.Font.GothamBlack
 	lbl.TextColor3 = Color3.fromRGB(255,80,80)
 	lbl.TextStrokeTransparency = 0
-	lbl.Text = `OUTBREAK!\n${def.displayName}\n[${def.rarity}]`
+	lbl.Text = `OUTBREAK!\n{def.displayName}\n[{def.rarity}]`
 	lbl.Parent = bb
 
 	local fire = Instance.new("Fire")
@@ -92,13 +92,13 @@ local function spawnOne()
 		if ok then BadgeService.Fire(player, "first_outbreak") end
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind="capture",
-			text=`OUTBREAK CAPTURE: ${def.displayName}!`,
+			text=`OUTBREAK CAPTURE: {def.displayName}!`,
 		})
 		for _, other in ipairs(Players:GetPlayers()) do
 			if other ~= player then
 				Remotes.Event(Remotes.Names.Notify):FireClient(other, {
 					kind="info",
-					text=`${player.DisplayName} captured ${def.displayName}!`,
+					text=`{player.DisplayName} captured {def.displayName}!`,
 				})
 			end
 		end
@@ -122,7 +122,7 @@ local function startOutbreak()
 	for _, p in ipairs(Players:GetPlayers()) do
 		Remotes.Event(Remotes.Names.Notify):FireClient(p, {
 			kind="info",
-			text=`OUTBREAK at the plaza! ${Config.OUTBREAK_SPAWN_COUNT} rare brainrots spawned.`,
+			text=`OUTBREAK at the plaza! {Config.OUTBREAK_SPAWN_COUNT} rare brainrots spawned.`,
 		})
 	end
 	pushOutbreakState()

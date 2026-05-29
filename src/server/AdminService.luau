@@ -989,7 +989,7 @@ table.insert(commands, {
 			if d then table.insert(rows, { name = p.DisplayName, value = getter(d) }) end
 		end
 		table.sort(rows, function(a, b) return a.value > b.value end)
-		local lines = { `top by ${metric}:` }
+		local lines = { `top by {metric}:` }
 		for i = 1, math.min(5, #rows) do
 			table.insert(lines, string.format("  %d. %s — %d", i, rows[i].name, rows[i].value))
 		end

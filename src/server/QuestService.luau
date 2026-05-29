@@ -149,7 +149,7 @@ function QuestService.Claim(player: Player, id: string)
 	end
 	q.claimed[id] = true
 	deliver(player, t.reward)
-	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Quest done: ${t.label}` })
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Quest done: {t.label}` })
 	QuestService.Push(player)
 end
 

@@ -38,10 +38,10 @@ function OutbreakUI.Init(screen: ScreenGui)
 
 	Remotes.Event(Remotes.Names.OutbreakUpdate).OnClientEvent:Connect(function(payload)
 		if payload.active then
-			label.Text = `🚨 OUTBREAK LIVE @ PLAZA · ${Util.SecondsToClock(payload.secondsLeft)} left · ${payload.spawnsRemaining} brainrots`
+			label.Text = `🚨 OUTBREAK LIVE @ PLAZA · {Util.SecondsToClock(payload.secondsLeft)} left · {payload.spawnsRemaining} brainrots`
 			label.TextColor3 = Color3.fromRGB(120, 255, 120)
 		else
-			label.Text = `Next Outbreak in ${Util.SecondsToClock(payload.secondsToStart)}`
+			label.Text = `Next Outbreak in {Util.SecondsToClock(payload.secondsToStart)}`
 			label.TextColor3 = Color3.fromRGB(255, 200, 120)
 		end
 	end)

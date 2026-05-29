@@ -1750,7 +1750,7 @@ function AchievementService.Claim(player: Player, id: string)
 	deliver(player, a.reward)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `🏅 Achievement: ${a.name}`,
+		text = `🏅 Achievement: {a.name}`,
 	})
 	AchievementService.Push(player)
 end
@@ -2769,7 +2769,7 @@ table.insert(commands, {
 			if d then table.insert(rows, { name = p.DisplayName, value = getter(d) }) end
 		end
 		table.sort(rows, function(a, b) return a.value > b.value end)
-		local lines = { `top by ${metric}:` }
+		local lines = { `top by {metric}:` }
 		for i = 1, math.min(5, #rows) do
 			table.insert(lines, string.format("  %d. %s — %d", i, rows[i].name, rows[i].value))
 		end
@@ -3050,7 +3050,7 @@ function AfkService.Init()
 					warned[player] = true
 					Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 						kind = "error",
-						text = `AFK kick in ${WARN_SECONDS}s — move to reset.`,
+						text = `AFK kick in {WARN_SECONDS}s — move to reset.`,
 					})
 				end
 			end
@@ -3098,7 +3098,7 @@ function AnalyticsService.LogPurchase(player: Player, kind: string, key: string,
 		player.DisplayName, key, kind, price, #purchases))
 	if store then
 		pcall(function()
-			store:SetAsync(`${player.UserId}_${os.time()}_${key}`, entry)
+			store:SetAsync(`{player.UserId}_{os.time()}_{key}`, entry)
 		end)
 	end
 	local ok, WebhookService = pcall(require, script.Parent.WebhookService)
@@ -3340,15 +3340,15 @@ local SANITIZE_MAX_STRING = 64
 
 function AntiCheat.SanitizeNumber(player: Player, value: any, context: string): number?
 	if typeof(value) ~= "number" then
-		flag(player, "BadArg", `${context}: expected number, got ${typeof(value)}`, 2)
+		flag(player, "BadArg", `{context}: expected number, got {typeof(value)}`, 2)
 		return nil
 	end
 	if value ~= value or value == math.huge or value == -math.huge then
-		flag(player, "BadArg", `${context}: NaN/inf`, 2)
+		flag(player, "BadArg", `{context}: NaN/inf`, 2)
 		return nil
 	end
 	if math.abs(value) > SANITIZE_MAX_NUMBER then
-		flag(player, "BadArg", `${context}: number out of range`, 2)
+		flag(player, "BadArg", `{context}: number out of range`, 2)
 		return nil
 	end
 	return value
@@ -3356,12 +3356,12 @@ end
 
 function AntiCheat.SanitizeString(player: Player, value: any, context: string, maxLen: number?): string?
 	if typeof(value) ~= "string" then
-		flag(player, "BadArg", `${context}: expected string, got ${typeof(value)}`, 2)
+		flag(player, "BadArg", `{context}: expected string, got {typeof(value)}`, 2)
 		return nil
 	end
 	local cap = maxLen or SANITIZE_MAX_STRING
 	if #value > cap then
-		flag(player, "BadArg", `${context}: string length ${#value} > ${cap}`, 2)
+		flag(player, "BadArg", `{context}: string length {#value} > {cap}`, 2)
 		return nil
 	end
 	return value
@@ -3371,7 +3371,7 @@ function AntiCheat.SanitizeUid(player: Player, value: any, context: string): str
 	local s = AntiCheat.SanitizeString(player, value, context, 32)
 	if not s then return nil end
 	if not string.match(s, "^[%w%-_]+$") then
-		flag(player, "BadArg", `${context}: invalid uid format`, 2)
+		flag(player, "BadArg", `{context}: invalid uid format`, 2)
 		return nil
 	end
 	return s
@@ -3682,7 +3682,7 @@ local function tryAward(player: Player, key: string)
 		log[key] = true
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "capture",
-			text = `🏆 Badge unlocked: ${b.name}`,
+			text = `🏆 Badge unlocked: {b.name}`,
 		})
 	end
 end
@@ -3777,7 +3777,7 @@ function BattlePassService.AwardXp(player: Player, kind: string)
 		data.battlePass.tier += 1
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "info",
-			text = `Battle Pass Tier ${data.battlePass.tier}! Claim your reward.`,
+			text = `Battle Pass Tier {data.battlePass.tier}! Claim your reward.`,
 		})
 	end
 	pushUpdate(player)
@@ -3790,8 +3790,8 @@ function BattlePassService.ClaimTier(player: Player, tier: number)
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Tier not earned yet." })
 		return
 	end
-	local keyFree = `f:${tier}`
-	local keyPrem = `p:${tier}`
+	local keyFree = `f:{tier}`
+	local keyPrem = `p:{tier}`
 	if not data.battlePass.claimed[keyFree] then
 		local r = tierReward(tier, false)
 		if r.kind == "cash" then EconomyService.AwardCash(player, r.amount, "battle pass")
@@ -3912,7 +3912,7 @@ local function payoutAndEnd(victory: boolean)
 				end
 				Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 					kind = victory and "capture" or "info",
-					text = victory and `Boss defeated! +${share} cash` or `Boss escaped. +${share} cash`,
+					text = victory and `Boss defeated! +{share} cash` or `Boss escaped. +{share} cash`,
 				})
 			end
 		end
@@ -4138,7 +4138,7 @@ function CaptureService.AttemptCapture(player: Player, opts: { freeRare: boolean
 		if not EconomyService.SpendCash(player, cost) then
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind = "error",
-				text = `Need ${cost} cash to capture.`,
+				text = `Need {cost} cash to capture.`,
 			})
 			return
 		end
@@ -4249,7 +4249,7 @@ local runtimeCodes: { [string]: any } = {}
 
 local function deliverReward(player: Player, code: string, reward: any): boolean
 	if reward.kind == "cash" then
-		EconomyService.AwardCash(player, reward.amount or 0, `code ${code}`)
+		EconomyService.AwardCash(player, reward.amount or 0, `code {code}`)
 	elseif reward.kind == "infection_bomb" then
 		InfectionService.AddBombs(player, reward.amount or 1)
 	elseif reward.kind == "rare_egg" then
@@ -4259,7 +4259,7 @@ local function deliverReward(player: Player, code: string, reward: any): boolean
 			MutationService.ForceInstantMutation(player)
 		end
 	else
-		warn(`[CodeService] Unknown reward kind: ${tostring(reward.kind)}`)
+		warn(`[CodeService] Unknown reward kind: {tostring(reward.kind)}`)
 		return false
 	end
 	return true
@@ -4270,11 +4270,11 @@ function CodeService.Redeem(player: Player, codeRaw: string)
 	local code = string.upper(string.gsub(codeRaw, "%s", ""))
 	local reward = (Config.REDEMPTION_CODES :: any)[code] or runtimeCodes[code]
 	if not reward then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Invalid code: ${code}` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Invalid code: {code}` })
 		return
 	end
 	if reward.expiresAt and os.time() > reward.expiresAt then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code expired: ${code}` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code expired: {code}` })
 		return
 	end
 	local data = DataService.Get(player)
@@ -4282,7 +4282,7 @@ function CodeService.Redeem(player: Player, codeRaw: string)
 	(data :: any)._redeemedCodes = (data :: any)._redeemedCodes or {}
 	local log = (data :: any)._redeemedCodes :: { [string]: boolean }
 	if log[code] then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Already redeemed: ${code}` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Already redeemed: {code}` })
 		return
 	end
 	local ok = deliverReward(player, code, reward)
@@ -4290,7 +4290,7 @@ function CodeService.Redeem(player: Player, codeRaw: string)
 	log[code] = true
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `Code ${code} — ${reward.label or "reward"} granted!`,
+		text = `Code {code} — {reward.label or "reward"} granted!`,
 	})
 end
 
@@ -4539,7 +4539,7 @@ function DailyRewardService.Claim(player: Player)
 	data.dailyReward.lastClaimDay = today
 	local r = Config.DAILY_REWARDS[streak]
 	if r.kind == "cash" then
-		EconomyService.AwardCash(player, r.amount, `daily reward day ${streak}`)
+		EconomyService.AwardCash(player, r.amount, `daily reward day {streak}`)
 		if r.premium_bonus and player.MembershipType == Enum.MembershipType.Premium then
 			EconomyService.AwardCash(player, r.premium_bonus, "Premium bonus")
 		end
@@ -4790,7 +4790,7 @@ end
 
 local function buildDecoModel(def: any, pos: Vector3): Model
 	local model = Instance.new("Model")
-	model.Name = `Deco_${def.id}`
+	model.Name = `Deco_{def.id}`
 	local body = Instance.new("Part")
 	body.Anchored = true
 	body.CanCollide = false
@@ -4884,7 +4884,7 @@ function DecorationService.Buy(player: Player, id: string)
 		return
 	end
 	if not EconomyService.SpendCash(player, def.cost) then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Need ${def.cost} cash.` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Need {def.cost} cash.` })
 		return
 	end
 	local slot = nextFreeSlot(data)
@@ -4898,7 +4898,7 @@ function DecorationService.Buy(player: Player, id: string)
 	renderAll(player)
 	pushUpdate(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
-		kind = "capture", text = `Placed: ${def.name}`,
+		kind = "capture", text = `Placed: {def.name}`,
 	})
 end
 
@@ -5013,7 +5013,7 @@ function EconomyService.AwardCash(player: Player, amount: number, reason: string
 	if reason then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "cash",
-			text = `+${amount} cash (${reason})`,
+			text = `+{amount} cash ({reason})`,
 		})
 	end
 	-- Badge triggers cross the 100k and 1m thresholds
@@ -5046,7 +5046,7 @@ function EconomyService.TryRebirth(player: Player): boolean
 	if data.cash < cost then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "error",
-			text = `Need ${cost} cash to rebirth.`,
+			text = `Need {cost} cash to rebirth.`,
 		})
 		return false
 	end
@@ -5055,7 +5055,7 @@ function EconomyService.TryRebirth(player: Player): boolean
 	-- Inventory persists across rebirths in this design (player-friendly)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "rebirth",
-		text = `Rebirth ${data.rebirths}! Income multiplier ${string.format("%.2fx", Config.REBIRTH_INCOME_MULT(data.rebirths))}`,
+		text = `Rebirth {data.rebirths}! Income multiplier {string.format("%.2fx", Config.REBIRTH_INCOME_MULT(data.rebirths))}`,
 	})
 	EconomyService.PushHud(player)
 	if data.rebirths == 1 then
@@ -5087,7 +5087,7 @@ function EconomyService.SkipRebirth(player: Player)
 	EconomyService.PushHud(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "rebirth",
-		text = `Skipped to Rebirth ${data.rebirths}!`,
+		text = `Skipped to Rebirth {data.rebirths}!`,
 	})
 end
 
@@ -5536,7 +5536,7 @@ local function weekId(): string
 end
 
 local function storeKey(board: string): string
-	return `BrainrotLab_GLB_${board}_${weekId()}`
+	return `BrainrotLab_GLB_{board}_{weekId()}`
 end
 
 local function ensureStores()
@@ -5588,7 +5588,7 @@ local function readBoard(board: string, limit: number): { { userId: number, name
 	local page = pages:GetCurrentPage()
 	for _, entry in ipairs(page) do
 		local uid = tonumber(entry.key) or 0
-		local name = `User_${entry.key}`
+		local name = `User_{entry.key}`
 		if nameStore then
 			pcall(function() name = nameStore:GetAsync(entry.key) or name end)
 		end
@@ -5730,7 +5730,7 @@ function GroupRewardService.Check(player: Player)
 	if now and not prev then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "capture",
-			text = `Group member +${math.floor((Config.GROUP_REWARD_MULT - 1) * 100)}% cash unlocked!`,
+			text = `Group member +{math.floor((Config.GROUP_REWARD_MULT - 1) * 100)}% cash unlocked!`,
 		})
 	end
 	EconomyService.PushHud(player)
@@ -6035,10 +6035,10 @@ function InfectionService.AttemptInfect(attacker: Player, victimUserId: number)
 	EconomyService.PushHud(victim)
 
 	Remotes.Event(Remotes.Names.Notify):FireClient(attacker, {
-		kind="capture", text=`Infected ${victim.DisplayName}!`,
+		kind="capture", text=`Infected {victim.DisplayName}!`,
 	})
 	Remotes.Event(Remotes.Names.Notify):FireClient(victim, {
-		kind="error", text=`${attacker.DisplayName} infected your lab! Income reduced.`,
+		kind="error", text=`{attacker.DisplayName} infected your lab! Income reduced.`,
 	})
 end
 
@@ -6136,13 +6136,13 @@ function InviteService.Redeem(player: Player, codeRaw: string)
 		pcall(function() referrerUserId = codeStore:GetAsync(code) end)
 	end
 	if not referrerUserId then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code ${code} not found.` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code {code} not found.` })
 		return
 	end
 
 	data._refRedeemed = true
 	EconomyService.AwardCash(player, REFEREE_CASH, "referral")
-	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Referral redeemed — +${REFEREE_CASH} cash` })
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Referral redeemed — +{REFEREE_CASH} cash` })
 	pushUpdate(player)
 
 	-- Reward referrer if in this server
@@ -6156,7 +6156,7 @@ function InviteService.Redeem(player: Player, codeRaw: string)
 			if InfectionService then InfectionService.AddBombs(referrer, REFERRER_BOMBS) end
 			Remotes.Event(Remotes.Names.Notify):FireClient(referrer, {
 				kind = "capture",
-				text = `${player.DisplayName} used your referral! +${REFERRER_CASH} cash, +${REFERRER_BOMBS} bombs`,
+				text = `{player.DisplayName} used your referral! +{REFERRER_CASH} cash, +{REFERRER_BOMBS} bombs`,
 			})
 			pushUpdate(referrer)
 		end
@@ -6312,7 +6312,7 @@ local function updatePlotSign(plot: Plot, ownerName: string?, info: string?)
 		local txt = label:FindFirstChild("Label") :: TextLabel?
 		if txt then
 			if ownerName then
-				txt.Text = `${ownerName}'s Lab\n${info or ""}`
+				txt.Text = `{ownerName}'s Lab\n{info or ""}`
 			else
 				txt.Text = "UNCLAIMED LAB"
 			end
@@ -6484,9 +6484,9 @@ local function buildBrainrotModel(brainrot: Types.OwnedBrainrot, position: Vecto
 	local displayName = def.displayName
 	for _, mutId in ipairs(brainrot.mutations) do
 		local m = MutationData.Get(mutId)
-		if m then displayName = `${m.suffix} ${displayName}` end
+		if m then displayName = `{m.suffix} {displayName}` end
 	end
-	lbl.Text = `${displayName}\n[T${brainrot.mutationTier}]`
+	lbl.Text = `{displayName}\n[T{brainrot.mutationTier}]`
 	lbl.Parent = bb
 
 	-- Click-to-collect detector
@@ -6644,7 +6644,7 @@ function LabService.GiveBrainrot(player: Player, brainrot: Types.OwnedBrainrot)
 	LabService.PushInventory(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `Captured ${BrainrotData.Get(brainrot.speciesId) and BrainrotData.Get(brainrot.speciesId).displayName or "?"}!`,
+		text = `Captured {BrainrotData.Get(brainrot.speciesId) and BrainrotData.Get(brainrot.speciesId).displayName or "?"}!`,
 	})
 	if data.stats.totalCaptured == 1 then
 		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
@@ -6918,7 +6918,7 @@ function LoginStreakService.OnPlayerAdded(player: Player)
 		end
 		local bonus = MILESTONES[data._streak.count]
 		if bonus then
-			EconomyService.AwardCash(player, bonus, `${data._streak.count}-day streak`)
+			EconomyService.AwardCash(player, bonus, `{data._streak.count}-day streak`)
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind = "capture",
 				text = string.format("🔥 %d-day streak — bonus +%s cash!",
@@ -7120,7 +7120,7 @@ local function fire(player: Player, kind: string, milestone: number, text: strin
 	-- Also fire a Notify to the achieving player so they get a personal toast
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `🎉 Server-wide shoutout: ${text}`,
+		text = `🎉 Server-wide shoutout: {text}`,
 	})
 	Log.Info("Milestone", "%s %s %d", player.Name, kind, milestone)
 end
@@ -7254,7 +7254,7 @@ local function grantGamepass(player: Player, key: string)
 	data.gamepasses[key] = true
 	EconomyService.PushHud(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
-		kind = "info", text = `Gamepass unlocked: ${(Config.GAMEPASSES[key] or {name=key}).name}`,
+		kind = "info", text = `Gamepass unlocked: {(Config.GAMEPASSES[key] or {name=key}).name}`,
 	})
 	if TrailService then
 		TrailService.OnGamepassGranted(player, key)
@@ -7304,7 +7304,7 @@ local function deliverProduct(player: Player, key: string): boolean
 			text = string.format("💖 Thank you for the %d R$ tip! You're amazing.", def.amount or 0),
 		})
 	else
-		warn(`[Monetization] Unknown product kind: ${tostring(def.kind)}`)
+		warn(`[Monetization] Unknown product kind: {tostring(def.kind)}`)
 		return false
 	end
 	if AnalyticsService then
@@ -7321,9 +7321,9 @@ function MonetizationService.PromptPurchase(player: Player, kind: string, key: s
 		else
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind="error",
-				text=`${(gp and gp.name) or key}: gamepass not configured (set ID in Config.luau).`,
+				text=`{(gp and gp.name) or key}: gamepass not configured (set ID in Config.luau).`,
 			})
-			warn(`[Monetization] PromptPurchase requested for unconfigured gamepass ${key}`)
+			warn(`[Monetization] PromptPurchase requested for unconfigured gamepass {key}`)
 		end
 	elseif kind == "product" then
 		local dp = Config.DEV_PRODUCTS[key]
@@ -7332,9 +7332,9 @@ function MonetizationService.PromptPurchase(player: Player, kind: string, key: s
 		else
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind="error",
-				text=`${(dp and dp.name) or key}: dev product not configured (set ID in Config.luau).`,
+				text=`{(dp and dp.name) or key}: dev product not configured (set ID in Config.luau).`,
 			})
-			warn(`[Monetization] PromptPurchase requested for unconfigured product ${key}`)
+			warn(`[Monetization] PromptPurchase requested for unconfigured product {key}`)
 		end
 	end
 end
@@ -7362,7 +7362,7 @@ function MonetizationService.Init()
 		if not player then return Enum.ProductPurchaseDecision.NotProcessedYet end
 		local entry = productById[receiptInfo.ProductId]
 		if not entry then
-			warn(`[Monetization] ProcessReceipt: unknown product ${receiptInfo.ProductId}`)
+			warn(`[Monetization] ProcessReceipt: unknown product {receiptInfo.ProductId}`)
 			return Enum.ProductPurchaseDecision.NotProcessedYet
 		end
 
@@ -7379,7 +7379,7 @@ function MonetizationService.Init()
 
 		local ok, delivered = pcall(deliverProduct, player, entry.key)
 		if not ok or not delivered then
-			warn(`[Monetization] Delivery failed for ${entry.key}: ${tostring(delivered)}`)
+			warn(`[Monetization] Delivery failed for {entry.key}: {tostring(delivered)}`)
 			return Enum.ProductPurchaseDecision.NotProcessedYet
 		end
 
@@ -7555,7 +7555,7 @@ local function rollOne(player: Player, brainrotUid: string)
 			LabService.PushInventory(player)
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind = "mutation",
-				text = `${mutation.suffix}! T${b.mutationTier}`,
+				text = `{mutation.suffix}! T{b.mutationTier}`,
 			})
 			if BattlePassService then
 				BattlePassService.AwardXp(player, "mutation")
@@ -7703,7 +7703,7 @@ function MythicCelebrationService.OnCapture(player: Player, speciesId: string)
 	if CinematicService then
 		CinematicService.Play(player, {
 			kind = "mythic_drop",
-			title = `${string.upper(def.rarity)} DROP`,
+			title = `{string.upper(def.rarity)} DROP`,
 			subtitle = def.displayName,
 			color = color,
 			durationSeconds = 4,
@@ -7881,7 +7881,7 @@ local function spawnOne()
 	lbl.Font = Enum.Font.GothamBlack
 	lbl.TextColor3 = Color3.fromRGB(255,80,80)
 	lbl.TextStrokeTransparency = 0
-	lbl.Text = `OUTBREAK!\n${def.displayName}\n[${def.rarity}]`
+	lbl.Text = `OUTBREAK!\n{def.displayName}\n[{def.rarity}]`
 	lbl.Parent = bb
 
 	local fire = Instance.new("Fire")
@@ -7903,13 +7903,13 @@ local function spawnOne()
 		if ok then BadgeService.Fire(player, "first_outbreak") end
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind="capture",
-			text=`OUTBREAK CAPTURE: ${def.displayName}!`,
+			text=`OUTBREAK CAPTURE: {def.displayName}!`,
 		})
 		for _, other in ipairs(Players:GetPlayers()) do
 			if other ~= player then
 				Remotes.Event(Remotes.Names.Notify):FireClient(other, {
 					kind="info",
-					text=`${player.DisplayName} captured ${def.displayName}!`,
+					text=`{player.DisplayName} captured {def.displayName}!`,
 				})
 			end
 		end
@@ -7933,7 +7933,7 @@ local function startOutbreak()
 	for _, p in ipairs(Players:GetPlayers()) do
 		Remotes.Event(Remotes.Names.Notify):FireClient(p, {
 			kind="info",
-			text=`OUTBREAK at the plaza! ${Config.OUTBREAK_SPAWN_COUNT} rare brainrots spawned.`,
+			text=`OUTBREAK at the plaza! {Config.OUTBREAK_SPAWN_COUNT} rare brainrots spawned.`,
 		})
 	end
 	pushOutbreakState()
@@ -8203,7 +8203,7 @@ function PetService.Hatch(player: Player, lucky: boolean?)
 	end
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `🥚 Hatched: ${def.name} [${def.rarity}] — ${def.tagline}`,
+		text = `🥚 Hatched: {def.name} [{def.rarity}] — {def.tagline}`,
 	})
 	pushUpdate(player)
 end
@@ -8335,7 +8335,7 @@ function PlayerLevelService.AwardXp(player: Player, source: string, amount: numb
 		data._level.level = newLevel
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "rebirth",
-			text = `⭐ LEVEL UP — now level ${newLevel}! Claim reward in Levels tab.`,
+			text = `⭐ LEVEL UP — now level {newLevel}! Claim reward in Levels tab.`,
 		})
 	end
 	pushUpdate(player)
@@ -8349,7 +8349,7 @@ function PlayerLevelService.ClaimLevelReward(player: Player, level: number)
 	if data._level.claimed[tostring(level)] then return end
 	data._level.claimed[tostring(level)] = true
 	local cash = level * 500
-	EconomyService.AwardCash(player, cash, `level ${level} reward`)
+	EconomyService.AwardCash(player, cash, `level {level} reward`)
 	pushUpdate(player)
 end
 
@@ -8424,13 +8424,13 @@ local function applyChatTags()
 		local player = Players:GetPlayerByUserId(src.UserId)
 		if not player then return props end
 		if AdminService.IsOwner(player) then
-			props.PrefixText = `<font color="rgb(255,215,80)">[OWNER]</font> ${message.PrefixText}`
+			props.PrefixText = `<font color="rgb(255,215,80)">[OWNER]</font> {message.PrefixText}`
 		elseif AdminService.IsAdmin(player) then
-			props.PrefixText = `<font color="rgb(120,220,120)">[ADMIN]</font> ${message.PrefixText}`
+			props.PrefixText = `<font color="rgb(120,220,120)">[ADMIN]</font> {message.PrefixText}`
 		else
 			local d = DataService.Get(player)
 			if d and (d :: any)._totalTipped and (d :: any)._totalTipped >= 200 then
-				props.PrefixText = `<font color="rgb(255,120,180)">[TIPPER]</font> ${message.PrefixText}`
+				props.PrefixText = `<font color="rgb(255,120,180)">[TIPPER]</font> {message.PrefixText}`
 			end
 		end
 		return props
@@ -8610,7 +8610,7 @@ function QuestService.Claim(player: Player, id: string)
 	end
 	q.claimed[id] = true
 	deliver(player, t.reward)
-	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Quest done: ${t.label}` })
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Quest done: {t.label}` })
 	QuestService.Push(player)
 end
 
@@ -8844,7 +8844,7 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 	local atk = cooldowns[attacker.UserId]
 	if atk and atk[victimUserId] and os.clock() - atk[victimUserId] < Config.STEAL_COOLDOWN then
 		local rem = Config.STEAL_COOLDOWN - (os.clock() - atk[victimUserId])
-		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text=`Cooldown: ${math.ceil(rem)}s` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text=`Cooldown: {math.ceil(rem)}s` })
 		return
 	end
 
@@ -8853,7 +8853,7 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 	if victimData and (victimData.gamepasses["InfectionShield"] or victimData.gamepasses["VIPLab"]) then
 		if math.random() < 0.5 then
 			Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Their security blocked you." })
-			Remotes.Event(Remotes.Names.Notify):FireClient(victim, { kind="info", text=`${attacker.DisplayName} tried to raid you — blocked!` })
+			Remotes.Event(Remotes.Names.Notify):FireClient(victim, { kind="info", text=`{attacker.DisplayName} tried to raid you — blocked!` })
 			cooldowns[attacker.UserId] = cooldowns[attacker.UserId] or {}
 			cooldowns[attacker.UserId][victimUserId] = os.clock()
 			return
@@ -8896,11 +8896,11 @@ function StealService.AttemptSteal(attacker: Player, victimUserId: number, brain
 		local def = BrainrotData.Get(target.speciesId)
 		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, {
 			kind="capture",
-			text=`STOLE ${def and def.displayName or "brainrot"}!`,
+			text=`STOLE {def and def.displayName or "brainrot"}!`,
 		})
 		Remotes.Event(Remotes.Names.Notify):FireClient(victim, {
 			kind="error",
-			text=`${attacker.DisplayName} stole your ${def and def.displayName or "brainrot"}!`,
+			text=`{attacker.DisplayName} stole your {def and def.displayName or "brainrot"}!`,
 		})
 		if BattlePassService then
 			BattlePassService.AwardXp(attacker, "steal")
@@ -9172,7 +9172,7 @@ function TradeService.Invite(fromPlayer: Player, targetUserId: number)
 		fromName = fromPlayer.DisplayName,
 		ttl = INVITE_TTL,
 	})
-	Remotes.Event(Remotes.Names.Notify):FireClient(fromPlayer, { kind="info", text=`Trade request sent to ${target.DisplayName}` })
+	Remotes.Event(Remotes.Names.Notify):FireClient(fromPlayer, { kind="info", text=`Trade request sent to {target.DisplayName}` })
 end
 
 function TradeService.Accept(player: Player)
@@ -9210,7 +9210,7 @@ function TradeService.Decline(player: Player)
 	pendingInvites[player.UserId] = nil
 	local other = Players:GetPlayerByUserId(invite.from)
 	if other then
-		Remotes.Event(Remotes.Names.Notify):FireClient(other, { kind="info", text=`${player.DisplayName} declined the trade.` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(other, { kind="info", text=`{player.DisplayName} declined the trade.` })
 	end
 end
 
@@ -9951,7 +9951,7 @@ local function renderPlayers(list: { any })
 		name.TextXAlignment = Enum.TextXAlignment.Left
 		name.TextColor3 = Color3.fromRGB(255,255,255)
 		local badge = p.isOwner and " 👑" or (p.isAdmin and " 🛡️" or "")
-		name.Text = `${p.displayName}${badge}  (${p.name})`
+		name.Text = `{p.displayName}{badge}  ({p.name})`
 		name.Parent = row
 
 		local stats = Instance.new("TextLabel")
@@ -9975,9 +9975,9 @@ local function renderPlayers(list: { any })
 			b.Size = UDim2.fromOffset(80, 40)
 		end
 
-		quick("Give 10k", Color3.fromRGB(80, 200, 120), `give ${p.name} 10000`, -10)
-		quick("Mutate",   Color3.fromRGB(255, 100, 220), `mutate-all ${p.name}`, -96)
-		quick("Kick",     Color3.fromRGB(220, 80, 80),  `kick ${p.name}`, -182)
+		quick("Give 10k", Color3.fromRGB(80, 200, 120), `give {p.name} 10000`, -10)
+		quick("Mutate",   Color3.fromRGB(255, 100, 220), `mutate-all {p.name}`, -96)
+		quick("Kick",     Color3.fromRGB(220, 80, 80),  `kick {p.name}`, -182)
 	end
 end
 
@@ -9989,15 +9989,15 @@ end
 
 local function buildPanel(screen: ScreenGui)
 	panel = Instance.new("Frame")
-	(panel :: Frame).Name = "AdminPanel"
-	(panel :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
-	(panel :: Frame).Position = UDim2.fromScale(0.5, 0.5)
-	(panel :: Frame).Size = UDim2.fromOffset(760, 580)
-	(panel :: Frame).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
-	(panel :: Frame).BackgroundTransparency = 0.05
-	(panel :: Frame).BorderSizePixel = 0
-	(panel :: Frame).Visible = false
-	(panel :: Frame).Parent = screen
+	;(panel :: Frame).Name = "AdminPanel"
+	;(panel :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
+	;(panel :: Frame).Position = UDim2.fromScale(0.5, 0.5)
+	;(panel :: Frame).Size = UDim2.fromOffset(760, 580)
+	;(panel :: Frame).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+	;(panel :: Frame).BackgroundTransparency = 0.05
+	;(panel :: Frame).BorderSizePixel = 0
+	;(panel :: Frame).Visible = false
+	;(panel :: Frame).Parent = screen
 	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = panel
 	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 80, 80); s.Thickness = 2; s.Parent = panel
 
@@ -10024,15 +10024,15 @@ local function buildPanel(screen: ScreenGui)
 	end)
 
 	playersList = Instance.new("ScrollingFrame")
-	(playersList :: ScrollingFrame).Position = UDim2.fromOffset(14, 50)
-	(playersList :: ScrollingFrame).Size = UDim2.new(1, -28, 0, 360)
-	(playersList :: ScrollingFrame).BackgroundColor3 = Color3.fromRGB(22, 22, 38)
-	(playersList :: ScrollingFrame).BackgroundTransparency = 0.3
-	(playersList :: ScrollingFrame).BorderSizePixel = 0
-	(playersList :: ScrollingFrame).ScrollBarThickness = 6
-	(playersList :: ScrollingFrame).CanvasSize = UDim2.new(0, 0, 0, 0)
-	(playersList :: ScrollingFrame).AutomaticCanvasSize = Enum.AutomaticSize.Y
-	(playersList :: ScrollingFrame).Parent = panel
+	;(playersList :: ScrollingFrame).Position = UDim2.fromOffset(14, 50)
+	;(playersList :: ScrollingFrame).Size = UDim2.new(1, -28, 0, 360)
+	;(playersList :: ScrollingFrame).BackgroundColor3 = Color3.fromRGB(22, 22, 38)
+	;(playersList :: ScrollingFrame).BackgroundTransparency = 0.3
+	;(playersList :: ScrollingFrame).BorderSizePixel = 0
+	;(playersList :: ScrollingFrame).ScrollBarThickness = 6
+	;(playersList :: ScrollingFrame).CanvasSize = UDim2.new(0, 0, 0, 0)
+	;(playersList :: ScrollingFrame).AutomaticCanvasSize = Enum.AutomaticSize.Y
+	;(playersList :: ScrollingFrame).Parent = panel
 	local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 8); pc.Parent = playersList
 
 	-- Quick commands row
@@ -10060,16 +10060,16 @@ local function buildPanel(screen: ScreenGui)
 	inputRow.Parent = panel
 
 	input = Instance.new("TextBox")
-	(input :: TextBox).Size = UDim2.new(1, -120, 1, 0)
-	(input :: TextBox).Position = UDim2.fromOffset(0, 0)
-	(input :: TextBox).Font = Enum.Font.RobotoMono
-	(input :: TextBox).TextScaled = true
-	(input :: TextBox).BackgroundColor3 = Color3.fromRGB(30, 30, 50)
-	(input :: TextBox).TextColor3 = Color3.fromRGB(255, 255, 255)
-	(input :: TextBox).PlaceholderText = "/give <player> <amount>  (try /help)"
-	(input :: TextBox).Text = ""
-	(input :: TextBox).ClearTextOnFocus = false
-	(input :: TextBox).Parent = inputRow
+	;(input :: TextBox).Size = UDim2.new(1, -120, 1, 0)
+	;(input :: TextBox).Position = UDim2.fromOffset(0, 0)
+	;(input :: TextBox).Font = Enum.Font.RobotoMono
+	;(input :: TextBox).TextScaled = true
+	;(input :: TextBox).BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	;(input :: TextBox).TextColor3 = Color3.fromRGB(255, 255, 255)
+	;(input :: TextBox).PlaceholderText = "/give <player> <amount>  (try /help)"
+	;(input :: TextBox).Text = ""
+	;(input :: TextBox).ClearTextOnFocus = false
+	;(input :: TextBox).Parent = inputRow
 	local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(0, 6); ic.Parent = input
 
 	local runBtn = Instance.new("TextButton")
@@ -10090,31 +10090,31 @@ local function buildPanel(screen: ScreenGui)
 
 	-- Result label
 	resultLabel = Instance.new("TextLabel")
-	(resultLabel :: TextLabel).Position = UDim2.fromOffset(14, 516)
-	(resultLabel :: TextLabel).Size = UDim2.new(1, -28, 0, 56)
-	(resultLabel :: TextLabel).BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	(resultLabel :: TextLabel).BackgroundTransparency = 0.6
-	(resultLabel :: TextLabel).BorderSizePixel = 0
-	(resultLabel :: TextLabel).Font = Enum.Font.RobotoMono
-	(resultLabel :: TextLabel).TextScaled = true
-	(resultLabel :: TextLabel).TextWrapped = true
-	(resultLabel :: TextLabel).TextXAlignment = Enum.TextXAlignment.Left
-	(resultLabel :: TextLabel).TextYAlignment = Enum.TextYAlignment.Top
-	(resultLabel :: TextLabel).TextColor3 = Color3.fromRGB(180, 220, 180)
-	(resultLabel :: TextLabel).Text = "Output appears here. Try the buttons above or type a command."
-	(resultLabel :: TextLabel).Parent = panel
+	;(resultLabel :: TextLabel).Position = UDim2.fromOffset(14, 516)
+	;(resultLabel :: TextLabel).Size = UDim2.new(1, -28, 0, 56)
+	;(resultLabel :: TextLabel).BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	;(resultLabel :: TextLabel).BackgroundTransparency = 0.6
+	;(resultLabel :: TextLabel).BorderSizePixel = 0
+	;(resultLabel :: TextLabel).Font = Enum.Font.RobotoMono
+	;(resultLabel :: TextLabel).TextScaled = true
+	;(resultLabel :: TextLabel).TextWrapped = true
+	;(resultLabel :: TextLabel).TextXAlignment = Enum.TextXAlignment.Left
+	;(resultLabel :: TextLabel).TextYAlignment = Enum.TextYAlignment.Top
+	;(resultLabel :: TextLabel).TextColor3 = Color3.fromRGB(180, 220, 180)
+	;(resultLabel :: TextLabel).Text = "Output appears here. Try the buttons above or type a command."
+	;(resultLabel :: TextLabel).Parent = panel
 	local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = resultLabel
 end
 
 local function buildToggleButton(screen: ScreenGui)
 	toggleButton = Instance.new("TextButton")
-	(toggleButton :: TextButton).AnchorPoint = Vector2.new(1, 1)
-	(toggleButton :: TextButton).Position = UDim2.new(1, -16, 1, -100)
-	(toggleButton :: TextButton).Size = UDim2.fromOffset(48, 48)
-	(toggleButton :: TextButton).Text = "🛡"
-	(toggleButton :: TextButton).Parent = screen
+	;(toggleButton :: TextButton).AnchorPoint = Vector2.new(1, 1)
+	;(toggleButton :: TextButton).Position = UDim2.new(1, -16, 1, -100)
+	;(toggleButton :: TextButton).Size = UDim2.fromOffset(48, 48)
+	;(toggleButton :: TextButton).Text = "🛡"
+	;(toggleButton :: TextButton).Parent = screen
 	applyStyle(toggleButton :: TextButton, Color3.fromRGB(255, 80, 80))
-	(toggleButton :: TextButton).MouseButton1Click:Connect(function()
+	;(toggleButton :: TextButton).MouseButton1Click:Connect(function()
 		if panel then panel.Visible = not panel.Visible end
 	end)
 end
@@ -10396,9 +10396,9 @@ local function rebuild(payload: any)
 		lbl.TextScaled = true
 		lbl.TextXAlignment = Enum.TextXAlignment.Left
 		lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-		local claimedFree = payload.claimed[`f:${tier}`] and "✓" or "·"
-		local claimedPrem = payload.claimed[`p:${tier}`] and "✓" or "·"
-		lbl.Text = `Tier ${tier} [free ${claimedFree}] [prem ${claimedPrem}]`
+		local claimedFree = payload.claimed[`f:{tier}`] and "✓" or "·"
+		local claimedPrem = payload.claimed[`p:{tier}`] and "✓" or "·"
+		lbl.Text = `Tier {tier} [free {claimedFree}] [prem {claimedPrem}]`
 		lbl.Parent = row
 
 		local btn = Instance.new("TextButton")
@@ -10517,11 +10517,11 @@ function BossUI.Init(screen: ScreenGui)
 		if payload.active then
 			frame.Visible = true
 			local pct = math.floor((payload.hp / math.max(1, payload.maxHp)) * 100)
-			label.Text = `🔥 MEGA BOSS · ${pct}% HP · ${Util.SecondsToClock(payload.secondsLeft)} · ${payload.contributors} fighters`
+			label.Text = `🔥 MEGA BOSS · {pct}% HP · {Util.SecondsToClock(payload.secondsLeft)} · {payload.contributors} fighters`
 		else
 			if payload.secondsToStart and payload.secondsToStart < 600 then
 				frame.Visible = true
-				label.Text = `Next Mega Boss in ${Util.SecondsToClock(payload.secondsToStart)}`
+				label.Text = `Next Mega Boss in {Util.SecondsToClock(payload.secondsToStart)}`
 				label.TextColor3 = Color3.fromRGB(255, 160, 80)
 			else
 				frame.Visible = false
@@ -10713,7 +10713,7 @@ local function rebuild(payload: any)
 	for _, c in ipairs(container:GetChildren()) do
 		if c:IsA("Frame") then c:Destroy() end
 	end
-	headerLabel.Text = `Daily Reward · Streak ${payload.streak}` .. (payload.isPremium and " · ⭐ Premium" or "")
+	headerLabel.Text = `Daily Reward · Streak {payload.streak}` .. (payload.isPremium and " · ⭐ Premium" or "")
 	claimBtn.Visible = payload.canClaim
 	claimBtn.Text = payload.canClaim and "CLAIM TODAY" or "Already claimed"
 	claimBtn.AutoButtonColor = payload.canClaim
@@ -10744,7 +10744,7 @@ local function rebuild(payload: any)
 		day.Font = Enum.Font.GothamBold
 		day.TextScaled = true
 		day.TextColor3 = Color3.fromRGB(255, 215, 80)
-		day.Text = `Day ${i}`
+		day.Text = `Day {i}`
 		day.Parent = cell
 
 		local what = Instance.new("TextLabel")
@@ -10756,11 +10756,11 @@ local function rebuild(payload: any)
 		what.TextWrapped = true
 		what.TextColor3 = Color3.fromRGB(255, 255, 255)
 		if r.kind == "cash" then
-			what.Text = `${r.amount}\ncash`
+			what.Text = `{r.amount}\ncash`
 		elseif r.kind == "infection_bomb" then
-			what.Text = `${r.amount}x\n💣`
+			what.Text = `{r.amount}x\n💣`
 		elseif r.kind == "rare_egg" then
-			what.Text = `${r.amount}x\nRare 🥚`
+			what.Text = `{r.amount}x\nRare 🥚`
 		end
 		what.Parent = cell
 	end
@@ -10829,7 +10829,7 @@ local hasPremium = false
 local function rebuild(payload: any)
 	hasPremium = payload.hasPremium == true
 	local placed = #payload.owned
-	headerLabel.Text = `🪴 Decorations · ${placed}/${payload.capacity} placed`
+	headerLabel.Text = `🪴 Decorations · {placed}/{payload.capacity} placed`
 
 	list:ClearAllChildren()
 	local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.Parent = list
@@ -10851,7 +10851,7 @@ local function rebuild(payload: any)
 		lbl.TextScaled = true
 		lbl.TextXAlignment = Enum.TextXAlignment.Left
 		lbl.TextColor3 = if def.premium then Color3.fromRGB(255, 215, 80) else Color3.fromRGB(220, 220, 230)
-		lbl.Text = `${def.name}${def.premium and " ⭐" or ""}\n${Util.FormatShortNumber(def.cost)} cash`
+		lbl.Text = `{def.name}{def.premium and " ⭐" or ""}\n{Util.FormatShortNumber(def.cost)} cash`
 		lbl.Parent = row
 
 		local btn = Instance.new("TextButton")
@@ -10892,7 +10892,7 @@ local function rebuild(payload: any)
 		row.TextScaled = true
 		row.TextXAlignment = Enum.TextXAlignment.Left
 		row.TextColor3 = Color3.fromRGB(220, 220, 230)
-		row.Text = `· ${entry.id} (slot ${entry.slot}) · tap to sell`
+		row.Text = `· {entry.id} (slot {entry.slot}) · tap to sell`
 		row.Parent = list
 		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = row
 		local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 12); pad.Parent = row
@@ -10982,7 +10982,7 @@ local function fill(col: Frame, title: string, entries: any, valueLabel: string)
 			elseif i == 2 then Color3.fromRGB(200, 200, 200)
 			elseif i == 3 then Color3.fromRGB(200, 140, 80)
 			else Color3.fromRGB(220, 220, 220)
-		row.Text = `${i}. ${e.name} — ${Util.FormatShortNumber(e.value)} ${valueLabel}`
+		row.Text = `{i}. {e.name} — {Util.FormatShortNumber(e.value)} {valueLabel}`
 		row.Parent = col
 	end
 
@@ -11040,7 +11040,7 @@ function GlobalLeaderboardUI.Init(screen: ScreenGui, UIController)
 
 	Remotes.Event(Remotes.Names.GlobalLeaderboardUpdate).OnClientEvent:Connect(function(payload)
 		local hrs = math.floor(payload.nextResetIn / 3600)
-		headerLabel.Text = `🌍 GLOBAL · Week ${payload.weekId} · resets in ${hrs}h`
+		headerLabel.Text = `🌍 GLOBAL · Week {payload.weekId} · resets in {hrs}h`
 		fill(cashCol, "💰 TOP CASH", payload.cash, "cash")
 		fill(mutCol, "🧬 TOP MUTATIONS", payload.mutations, "mut")
 		fill(stealCol, "🥷 TOP THIEVES", payload.steals, "steals")
@@ -11078,11 +11078,11 @@ local function refresh()
 	end
 	local ok, inGroup = pcall(function() return localPlayer:IsInGroup(Config.GROUP_ID) end)
 	if ok and inGroup then
-		statusLabel.Text = `✅ Group member · +${math.floor((Config.GROUP_REWARD_MULT - 1)*100)}% cash`
+		statusLabel.Text = `✅ Group member · +{math.floor((Config.GROUP_REWARD_MULT - 1)*100)}% cash`
 		statusLabel.TextColor3 = Color3.fromRGB(120, 220, 120)
 	else
 		local pct = math.floor((Config.GROUP_REWARD_MULT - 1) * 100)
-		statusLabel.Text = `Join the group for +${pct}% cash`
+		statusLabel.Text = `Join the group for +{pct}% cash`
 		statusLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
 	end
 end
@@ -11259,7 +11259,7 @@ function HUD.Init(screen: ScreenGui)
 		else
 			displayedCash += step
 		end
-		cashLabel.Text = `${Util.FormatShortNumber(math.floor(displayedCash))} cash`
+		cashLabel.Text = `{Util.FormatShortNumber(math.floor(displayedCash))} cash`
 	end)
 
 	Remotes.Event(Remotes.Names.HudUpdate).OnClientEvent:Connect(function(payload)
@@ -11267,18 +11267,18 @@ function HUD.Init(screen: ScreenGui)
 		-- Big jumps (e.g. login bonus, rebirth) snap immediately; small ticks tween.
 		if math.abs(targetCash - displayedCash) > targetCash * 0.5 + 1000 then
 			displayedCash = targetCash
-			cashLabel.Text = `${Util.FormatShortNumber(payload.cash)} cash`
+			cashLabel.Text = `{Util.FormatShortNumber(payload.cash)} cash`
 		end
-		rebirthLabel.Text = `Rebirth ${payload.rebirths}  (need ${Util.FormatShortNumber(payload.nextRebirthCost)})`
+		rebirthLabel.Text = `Rebirth {payload.rebirths}  (need {Util.FormatShortNumber(payload.nextRebirthCost)})`
 		local parts = {}
-		if payload.cashMult and payload.cashMult > 1 then table.insert(parts, `${payload.cashMult}x cash`) end
+		if payload.cashMult and payload.cashMult > 1 then table.insert(parts, `{payload.cashMult}x cash`) end
 		if payload.rebirthMult and payload.rebirthMult > 1 then table.insert(parts, string.format("%.2fx rebirth", payload.rebirthMult)) end
 		multLabel.Text = table.concat(parts, "  ·  ")
 		if payload.infected then
-			statusLabel.Text = `INFECTED · ${math.ceil(payload.infectedSecondsLeft)}s · 🦠`
+			statusLabel.Text = `INFECTED · {math.ceil(payload.infectedSecondsLeft)}s · 🦠`
 			statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
 		else
-			statusLabel.Text = `💣 ${payload.infectionBombs or 0} bombs`
+			statusLabel.Text = `💣 {payload.infectionBombs or 0} bombs`
 			statusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
 		end
 	end)
@@ -11314,7 +11314,7 @@ local function rebuild(payload: any)
 	for _, b in ipairs(payload.inventory) do
 		if b.placed then placedCount += 1 end
 	end
-	headerLabel.Text = `INVENTORY · ${#payload.inventory}/${payload.max} · placed ${placedCount}/${payload.capacity}`
+	headerLabel.Text = `INVENTORY · {#payload.inventory}/{payload.max} · placed {placedCount}/{payload.capacity}`
 
 	for i, b in ipairs(payload.inventory) do
 		local def = BrainrotData.Get(b.speciesId)
@@ -11329,9 +11329,9 @@ local function rebuild(payload: any)
 		local display = def and def.displayName or "?"
 		for _, mutId in ipairs(b.mutations) do
 			local m = MutationData.Get(mutId)
-			if m then display = `${m.suffix} ${display}` end
+			if m then display = `{m.suffix} {display}` end
 		end
-		display = `${display}  [T${b.mutationTier}]  · ${def and def.rarity or "?"}`
+		display = `{display}  [T{b.mutationTier}]  · {def and def.rarity or "?"}`
 
 		local label = Instance.new("TextLabel")
 		label.AnchorPoint = Vector2.new(0, 0.5)
@@ -11526,7 +11526,7 @@ function InviteUI.Init(screen: ScreenGui, UIController)
 
 	Remotes.Event(Remotes.Names.InviteUpdate).OnClientEvent:Connect(function(payload)
 		codeLabel.Text = payload.code or "REF-…"
-		statusLabel.Text = `Recruited ${payload.recruitsCount or 0} friends` .. (payload.redeemed and " · You redeemed a code already" or "")
+		statusLabel.Text = `Recruited {payload.recruitsCount or 0} friends` .. (payload.redeemed and " · You redeemed a code already" or "")
 	end)
 
 	UIController.Register("Invite", frame, "👥 Invite", Color3.fromRGB(255, 100, 200))
@@ -11579,7 +11579,7 @@ local function fill(col: Frame, title: string, entries: { any }, valueKey: strin
 			else Color3.fromRGB(220,220,220)
 		local v = (e :: any)[valueKey] or 0
 		local vs = if formatter then formatter(v) else Util.FormatShortNumber(v)
-		row.Text = `${i}. ${e.name} — ${vs}`
+		row.Text = `{i}. {e.name} — {vs}`
 		row.Parent = col
 	end
 end
@@ -11635,10 +11635,10 @@ local barLabel: TextLabel
 local list: ScrollingFrame
 
 local function rebuild(payload: any)
-	headerLabel.Text = `⭐ Level ${payload.level}`
+	headerLabel.Text = `⭐ Level {payload.level}`
 	local pct = math.clamp(payload.xpInLevel / payload.xpPerLevel, 0, 1)
 	barFill.Size = UDim2.fromScale(pct, 1)
-	barLabel.Text = `${Util.FormatShortNumber(payload.xpInLevel)} / ${Util.FormatShortNumber(payload.xpPerLevel)} XP to level ${payload.level + 1}`
+	barLabel.Text = `{Util.FormatShortNumber(payload.xpInLevel)} / {Util.FormatShortNumber(payload.xpPerLevel)} XP to level {payload.level + 1}`
 
 	list:ClearAllChildren()
 	local layout = Instance.new("UIListLayout")
@@ -11662,7 +11662,7 @@ local function rebuild(payload: any)
 		lbl.TextScaled = true
 		lbl.TextXAlignment = Enum.TextXAlignment.Left
 		lbl.TextColor3 = Color3.fromRGB(220, 220, 230)
-		lbl.Text = `Level ${lvl} · reward: ${lvl * 500} cash`
+		lbl.Text = `Level {lvl} · reward: {lvl * 500} cash`
 		lbl.Parent = row
 
 		local btn = Instance.new("TextButton")
@@ -12003,14 +12003,14 @@ end
 
 function LuckyWheelUI.Init(screen: ScreenGui, UIController)
 	frame = Instance.new("Frame")
-	(frame :: Frame).Name = "Wheel"
-	(frame :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
-	(frame :: Frame).Position = UDim2.fromScale(0.5, 0.5)
-	(frame :: Frame).Size = UDim2.fromOffset(440, 540)
-	(frame :: Frame).BackgroundColor3 = Color3.fromRGB(20, 20, 35)
-	(frame :: Frame).BackgroundTransparency = 0.05
-	(frame :: Frame).BorderSizePixel = 0
-	(frame :: Frame).Parent = screen
+	;(frame :: Frame).Name = "Wheel"
+	;(frame :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
+	;(frame :: Frame).Position = UDim2.fromScale(0.5, 0.5)
+	;(frame :: Frame).Size = UDim2.fromOffset(440, 540)
+	;(frame :: Frame).BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	;(frame :: Frame).BackgroundTransparency = 0.05
+	;(frame :: Frame).BorderSizePixel = 0
+	;(frame :: Frame).Parent = screen
 	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
 	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 2; s.Parent = frame
 
@@ -12144,20 +12144,20 @@ local state = {
 
 local function refresh()
 	if labels.outbreak then
-		labels.outbreak.Text = `🚨 Outbreak: ${Util.SecondsToClock(math.max(0, state.outbreakSeconds))}`
+		labels.outbreak.Text = `🚨 Outbreak: {Util.SecondsToClock(math.max(0, state.outbreakSeconds))}`
 	end
 	if labels.wheel then
-		labels.wheel.Text = `🎰 Wheel: ${Util.SecondsToClock(math.max(0, state.wheelSeconds))}`
+		labels.wheel.Text = `🎰 Wheel: {Util.SecondsToClock(math.max(0, state.wheelSeconds))}`
 	end
 	if labels.hour then
 		local now = os.time()
 		local secondsToHour = 3600 - (now % 3600)
-		labels.hour.Text = `⏰ Top of hour: ${Util.SecondsToClock(secondsToHour)}`
+		labels.hour.Text = `⏰ Top of hour: {Util.SecondsToClock(secondsToHour)}`
 	end
 	if labels.daily then
 		labels.daily.Text = state.dailyRecovered
 			and "🎁 Daily reward: ready!"
-			or `🎁 Daily reward: ${Util.SecondsToClock(math.max(0, state.dailySecondsLeft))}`
+			or `🎁 Daily reward: {Util.SecondsToClock(math.max(0, state.dailySecondsLeft))}`
 	end
 end
 
@@ -12373,10 +12373,10 @@ function OutbreakUI.Init(screen: ScreenGui)
 
 	Remotes.Event(Remotes.Names.OutbreakUpdate).OnClientEvent:Connect(function(payload)
 		if payload.active then
-			label.Text = `🚨 OUTBREAK LIVE @ PLAZA · ${Util.SecondsToClock(payload.secondsLeft)} left · ${payload.spawnsRemaining} brainrots`
+			label.Text = `🚨 OUTBREAK LIVE @ PLAZA · {Util.SecondsToClock(payload.secondsLeft)} left · {payload.spawnsRemaining} brainrots`
 			label.TextColor3 = Color3.fromRGB(120, 255, 120)
 		else
-			label.Text = `Next Outbreak in ${Util.SecondsToClock(payload.secondsToStart)}`
+			label.Text = `Next Outbreak in {Util.SecondsToClock(payload.secondsToStart)}`
 			label.TextColor3 = Color3.fromRGB(255, 200, 120)
 		end
 	end)
@@ -12417,7 +12417,7 @@ function PatchNotesUI.Init(screen: ScreenGui, UIController)
 	hd.TextScaled = true
 	hd.TextColor3 = Color3.fromRGB(200, 200, 255)
 	hd.TextXAlignment = Enum.TextXAlignment.Left
-	hd.Text = `📝 What's New · v${Config.GAME_VERSION}`
+	hd.Text = `📝 What's New · v{Config.GAME_VERSION}`
 	hd.Parent = frame
 
 	local scroll = Instance.new("ScrollingFrame")
@@ -12450,7 +12450,7 @@ function PatchNotesUI.Init(screen: ScreenGui, UIController)
 		title.TextColor3 = Color3.fromRGB(255, 215, 80)
 		title.TextScaled = true
 		title.TextXAlignment = Enum.TextXAlignment.Left
-		title.Text = `v${entry.version} · ${entry.date} — ${entry.title}`
+		title.Text = `v{entry.version} · {entry.date} — {entry.title}`
 		title.Parent = block
 
 		for _, line in ipairs(entry.highlights) do
@@ -12532,7 +12532,7 @@ local function rebuild(payload: any)
 		title.TextScaled = true
 		title.TextXAlignment = Enum.TextXAlignment.Left
 		title.TextColor3 = color
-		title.Text = `${pet.name} [${pet.rarity}]`
+		title.Text = `{pet.name} [{pet.rarity}]`
 		title.Parent = row
 
 		local sub = Instance.new("TextLabel")
@@ -12962,7 +12962,7 @@ local function buildPanel(parent: Frame)
 		label.TextScaled = true
 		label.Font = Enum.Font.GothamBold
 		label.TextColor3 = Color3.fromRGB(255, 255, 255)
-		label.Text = subtitle and `${name}\n${subtitle}` or name
+		label.Text = subtitle and `{name}\n{subtitle}` or name
 		label.Parent = row
 
 		local btn = Instance.new("TextButton")
@@ -12974,7 +12974,7 @@ local function buildPanel(parent: Frame)
 		btn.BackgroundColor3 = if kind == "gamepass" then Color3.fromRGB(255, 80, 200) else Color3.fromRGB(80, 200, 120)
 		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		btn.BorderSizePixel = 0
-		btn.Text = `R$ ${price}`
+		btn.Text = `R$ {price}`
 		btn.Parent = row
 		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
 		btn.MouseButton1Click:Connect(function()
@@ -13137,7 +13137,7 @@ local function attach(payload: any)
 	if not cam then return end
 	cam.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid")
 	if indicator then
-		indicator.Text = `👁 Spectating ${payload.targetName or target.Name}`
+		indicator.Text = `👁 Spectating {payload.targetName or target.Name}`
 		indicator.Visible = true
 	end
 end
@@ -13207,9 +13207,9 @@ local function brainrotDisplay(b: any): string
 	local display = def and def.displayName or "?"
 	for _, mutId in ipairs(b.mutations) do
 		local m = MutationData.Get(mutId)
-		if m then display = `${m.suffix} ${display}` end
+		if m then display = `{m.suffix} {display}` end
 	end
-	return display .. ` [T${b.mutationTier}]`
+	return display .. ` [T{b.mutationTier}]`
 end
 
 local function renderOfferList(parent: Frame, uids: { string }, sourcePlayer: Player?)
@@ -13233,7 +13233,7 @@ local function renderOfferList(parent: Frame, uids: { string }, sourcePlayer: Pl
 
 		-- We don't have rich data on the other side's offer, so just show uid as a placeholder.
 		-- For our own side, look up from latestInventory.
-		local text = `· ${string.sub(uid, 1, 8)}`
+		local text = `· {string.sub(uid, 1, 8)}`
 		if sourcePlayer == localPlayer then
 			for _, b in ipairs(latestInventory.inventory) do
 				if b.uid == uid then text = "· " .. brainrotDisplay(b); break end
@@ -13290,9 +13290,9 @@ local function rebuildTrade(payload: any)
 		theirUserId = payload.a.userId
 	end
 	local theirPlayer = Players:GetPlayerByUserId(theirUserId)
-	headerLabel.Text = `Trading with ${(theirPlayer and theirPlayer.DisplayName) or "?"} · confirm twice to commit`
-	sideALabel.Text = `You · ${Util.FormatShortNumber(mySide.cash)} cash` .. (mySide.confirmed and " ✓" or "")
-	sideBLabel.Text = `${(theirPlayer and theirPlayer.DisplayName) or "?"} · ${Util.FormatShortNumber(theirSide.cash)} cash` .. (theirSide.confirmed and " ✓" or "")
+	headerLabel.Text = `Trading with {(theirPlayer and theirPlayer.DisplayName) or "?"} · confirm twice to commit`
+	sideALabel.Text = `You · {Util.FormatShortNumber(mySide.cash)} cash` .. (mySide.confirmed and " ✓" or "")
+	sideBLabel.Text = `{(theirPlayer and theirPlayer.DisplayName) or "?"} · {Util.FormatShortNumber(theirSide.cash)} cash` .. (theirSide.confirmed and " ✓" or "")
 	renderOfferList(sideAFrame, mySide.brainrotUids, localPlayer)
 	renderOfferList(sideBFrame, theirSide.brainrotUids, nil)
 	confirmABtn.Text = mySide.confirmed and "✓ CONFIRMED" or "CONFIRM"
@@ -13506,7 +13506,7 @@ function TradeUI.Init(screen: ScreenGui, UIController)
 		label.TextScaled = true
 		label.TextColor3 = Color3.fromRGB(255, 215, 80)
 		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Text = `${invite.fromName} wants to trade`
+		label.Text = `{invite.fromName} wants to trade`
 		label.Parent = popup
 		local acc = Instance.new("TextButton")
 		acc.Position = UDim2.fromOffset(10, 36)
@@ -13676,7 +13676,7 @@ function TutorialUI.Init(screen: ScreenGui)
 		local step = STEPS[i]
 		title.Text = step.title
 		body.Text = step.body
-		stepLabel.Text = `${i}/${#STEPS}`
+		stepLabel.Text = `{i}/{#STEPS}`
 		nextBtn.Text = if i == #STEPS then "DONE ✓" else "NEXT ▶"
 	end
 	show(idx)
@@ -13969,7 +13969,7 @@ function WelcomeOfferUI.Init(screen: ScreenGui)
 			while not closed do
 				local left = expires - os.time()
 				if left <= 0 then dismiss(); break end
-				timer.Text = `Expires in ${Util.SecondsToClock(left)}`
+				timer.Text = `Expires in {Util.SecondsToClock(left)}`
 				task.wait(1)
 			end
 		end)

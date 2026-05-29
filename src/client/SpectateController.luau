@@ -29,7 +29,7 @@ local function attach(payload: any)
 	if not cam then return end
 	cam.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid")
 	if indicator then
-		indicator.Text = `👁 Spectating ${payload.targetName or target.Name}`
+		indicator.Text = `👁 Spectating {payload.targetName or target.Name}`
 		indicator.Visible = true
 	end
 end

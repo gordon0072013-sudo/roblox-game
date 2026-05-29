@@ -81,7 +81,7 @@ function AchievementService.Claim(player: Player, id: string)
 	deliver(player, a.reward)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `🏅 Achievement: ${a.name}`,
+		text = `🏅 Achievement: {a.name}`,
 	})
 	AchievementService.Push(player)
 end

@@ -27,20 +27,20 @@ local state = {
 
 local function refresh()
 	if labels.outbreak then
-		labels.outbreak.Text = `🚨 Outbreak: ${Util.SecondsToClock(math.max(0, state.outbreakSeconds))}`
+		labels.outbreak.Text = `🚨 Outbreak: {Util.SecondsToClock(math.max(0, state.outbreakSeconds))}`
 	end
 	if labels.wheel then
-		labels.wheel.Text = `🎰 Wheel: ${Util.SecondsToClock(math.max(0, state.wheelSeconds))}`
+		labels.wheel.Text = `🎰 Wheel: {Util.SecondsToClock(math.max(0, state.wheelSeconds))}`
 	end
 	if labels.hour then
 		local now = os.time()
 		local secondsToHour = 3600 - (now % 3600)
-		labels.hour.Text = `⏰ Top of hour: ${Util.SecondsToClock(secondsToHour)}`
+		labels.hour.Text = `⏰ Top of hour: {Util.SecondsToClock(secondsToHour)}`
 	end
 	if labels.daily then
 		labels.daily.Text = state.dailyRecovered
 			and "🎁 Daily reward: ready!"
-			or `🎁 Daily reward: ${Util.SecondsToClock(math.max(0, state.dailySecondsLeft))}`
+			or `🎁 Daily reward: {Util.SecondsToClock(math.max(0, state.dailySecondsLeft))}`
 	end
 end
 

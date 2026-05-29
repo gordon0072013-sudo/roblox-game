@@ -68,7 +68,7 @@ local function renderPlayers(list: { any })
 		name.TextXAlignment = Enum.TextXAlignment.Left
 		name.TextColor3 = Color3.fromRGB(255,255,255)
 		local badge = p.isOwner and " 👑" or (p.isAdmin and " 🛡️" or "")
-		name.Text = `${p.displayName}${badge}  (${p.name})`
+		name.Text = `{p.displayName}{badge}  ({p.name})`
 		name.Parent = row
 
 		local stats = Instance.new("TextLabel")
@@ -92,9 +92,9 @@ local function renderPlayers(list: { any })
 			b.Size = UDim2.fromOffset(80, 40)
 		end
 
-		quick("Give 10k", Color3.fromRGB(80, 200, 120), `give ${p.name} 10000`, -10)
-		quick("Mutate",   Color3.fromRGB(255, 100, 220), `mutate-all ${p.name}`, -96)
-		quick("Kick",     Color3.fromRGB(220, 80, 80),  `kick ${p.name}`, -182)
+		quick("Give 10k", Color3.fromRGB(80, 200, 120), `give {p.name} 10000`, -10)
+		quick("Mutate",   Color3.fromRGB(255, 100, 220), `mutate-all {p.name}`, -96)
+		quick("Kick",     Color3.fromRGB(220, 80, 80),  `kick {p.name}`, -182)
 	end
 end
 
@@ -106,15 +106,15 @@ end
 
 local function buildPanel(screen: ScreenGui)
 	panel = Instance.new("Frame")
-	(panel :: Frame).Name = "AdminPanel"
-	(panel :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
-	(panel :: Frame).Position = UDim2.fromScale(0.5, 0.5)
-	(panel :: Frame).Size = UDim2.fromOffset(760, 580)
-	(panel :: Frame).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
-	(panel :: Frame).BackgroundTransparency = 0.05
-	(panel :: Frame).BorderSizePixel = 0
-	(panel :: Frame).Visible = false
-	(panel :: Frame).Parent = screen
+	;(panel :: Frame).Name = "AdminPanel"
+	;(panel :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
+	;(panel :: Frame).Position = UDim2.fromScale(0.5, 0.5)
+	;(panel :: Frame).Size = UDim2.fromOffset(760, 580)
+	;(panel :: Frame).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+	;(panel :: Frame).BackgroundTransparency = 0.05
+	;(panel :: Frame).BorderSizePixel = 0
+	;(panel :: Frame).Visible = false
+	;(panel :: Frame).Parent = screen
 	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = panel
 	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 80, 80); s.Thickness = 2; s.Parent = panel
 
@@ -141,15 +141,15 @@ local function buildPanel(screen: ScreenGui)
 	end)
 
 	playersList = Instance.new("ScrollingFrame")
-	(playersList :: ScrollingFrame).Position = UDim2.fromOffset(14, 50)
-	(playersList :: ScrollingFrame).Size = UDim2.new(1, -28, 0, 360)
-	(playersList :: ScrollingFrame).BackgroundColor3 = Color3.fromRGB(22, 22, 38)
-	(playersList :: ScrollingFrame).BackgroundTransparency = 0.3
-	(playersList :: ScrollingFrame).BorderSizePixel = 0
-	(playersList :: ScrollingFrame).ScrollBarThickness = 6
-	(playersList :: ScrollingFrame).CanvasSize = UDim2.new(0, 0, 0, 0)
-	(playersList :: ScrollingFrame).AutomaticCanvasSize = Enum.AutomaticSize.Y
-	(playersList :: ScrollingFrame).Parent = panel
+	;(playersList :: ScrollingFrame).Position = UDim2.fromOffset(14, 50)
+	;(playersList :: ScrollingFrame).Size = UDim2.new(1, -28, 0, 360)
+	;(playersList :: ScrollingFrame).BackgroundColor3 = Color3.fromRGB(22, 22, 38)
+	;(playersList :: ScrollingFrame).BackgroundTransparency = 0.3
+	;(playersList :: ScrollingFrame).BorderSizePixel = 0
+	;(playersList :: ScrollingFrame).ScrollBarThickness = 6
+	;(playersList :: ScrollingFrame).CanvasSize = UDim2.new(0, 0, 0, 0)
+	;(playersList :: ScrollingFrame).AutomaticCanvasSize = Enum.AutomaticSize.Y
+	;(playersList :: ScrollingFrame).Parent = panel
 	local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 8); pc.Parent = playersList
 
 	-- Quick commands row
@@ -177,16 +177,16 @@ local function buildPanel(screen: ScreenGui)
 	inputRow.Parent = panel
 
 	input = Instance.new("TextBox")
-	(input :: TextBox).Size = UDim2.new(1, -120, 1, 0)
-	(input :: TextBox).Position = UDim2.fromOffset(0, 0)
-	(input :: TextBox).Font = Enum.Font.RobotoMono
-	(input :: TextBox).TextScaled = true
-	(input :: TextBox).BackgroundColor3 = Color3.fromRGB(30, 30, 50)
-	(input :: TextBox).TextColor3 = Color3.fromRGB(255, 255, 255)
-	(input :: TextBox).PlaceholderText = "/give <player> <amount>  (try /help)"
-	(input :: TextBox).Text = ""
-	(input :: TextBox).ClearTextOnFocus = false
-	(input :: TextBox).Parent = inputRow
+	;(input :: TextBox).Size = UDim2.new(1, -120, 1, 0)
+	;(input :: TextBox).Position = UDim2.fromOffset(0, 0)
+	;(input :: TextBox).Font = Enum.Font.RobotoMono
+	;(input :: TextBox).TextScaled = true
+	;(input :: TextBox).BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	;(input :: TextBox).TextColor3 = Color3.fromRGB(255, 255, 255)
+	;(input :: TextBox).PlaceholderText = "/give <player> <amount>  (try /help)"
+	;(input :: TextBox).Text = ""
+	;(input :: TextBox).ClearTextOnFocus = false
+	;(input :: TextBox).Parent = inputRow
 	local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(0, 6); ic.Parent = input
 
 	local runBtn = Instance.new("TextButton")
@@ -207,31 +207,31 @@ local function buildPanel(screen: ScreenGui)
 
 	-- Result label
 	resultLabel = Instance.new("TextLabel")
-	(resultLabel :: TextLabel).Position = UDim2.fromOffset(14, 516)
-	(resultLabel :: TextLabel).Size = UDim2.new(1, -28, 0, 56)
-	(resultLabel :: TextLabel).BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	(resultLabel :: TextLabel).BackgroundTransparency = 0.6
-	(resultLabel :: TextLabel).BorderSizePixel = 0
-	(resultLabel :: TextLabel).Font = Enum.Font.RobotoMono
-	(resultLabel :: TextLabel).TextScaled = true
-	(resultLabel :: TextLabel).TextWrapped = true
-	(resultLabel :: TextLabel).TextXAlignment = Enum.TextXAlignment.Left
-	(resultLabel :: TextLabel).TextYAlignment = Enum.TextYAlignment.Top
-	(resultLabel :: TextLabel).TextColor3 = Color3.fromRGB(180, 220, 180)
-	(resultLabel :: TextLabel).Text = "Output appears here. Try the buttons above or type a command."
-	(resultLabel :: TextLabel).Parent = panel
+	;(resultLabel :: TextLabel).Position = UDim2.fromOffset(14, 516)
+	;(resultLabel :: TextLabel).Size = UDim2.new(1, -28, 0, 56)
+	;(resultLabel :: TextLabel).BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	;(resultLabel :: TextLabel).BackgroundTransparency = 0.6
+	;(resultLabel :: TextLabel).BorderSizePixel = 0
+	;(resultLabel :: TextLabel).Font = Enum.Font.RobotoMono
+	;(resultLabel :: TextLabel).TextScaled = true
+	;(resultLabel :: TextLabel).TextWrapped = true
+	;(resultLabel :: TextLabel).TextXAlignment = Enum.TextXAlignment.Left
+	;(resultLabel :: TextLabel).TextYAlignment = Enum.TextYAlignment.Top
+	;(resultLabel :: TextLabel).TextColor3 = Color3.fromRGB(180, 220, 180)
+	;(resultLabel :: TextLabel).Text = "Output appears here. Try the buttons above or type a command."
+	;(resultLabel :: TextLabel).Parent = panel
 	local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = resultLabel
 end
 
 local function buildToggleButton(screen: ScreenGui)
 	toggleButton = Instance.new("TextButton")
-	(toggleButton :: TextButton).AnchorPoint = Vector2.new(1, 1)
-	(toggleButton :: TextButton).Position = UDim2.new(1, -16, 1, -100)
-	(toggleButton :: TextButton).Size = UDim2.fromOffset(48, 48)
-	(toggleButton :: TextButton).Text = "🛡"
-	(toggleButton :: TextButton).Parent = screen
+	;(toggleButton :: TextButton).AnchorPoint = Vector2.new(1, 1)
+	;(toggleButton :: TextButton).Position = UDim2.new(1, -16, 1, -100)
+	;(toggleButton :: TextButton).Size = UDim2.fromOffset(48, 48)
+	;(toggleButton :: TextButton).Text = "🛡"
+	;(toggleButton :: TextButton).Parent = screen
 	applyStyle(toggleButton :: TextButton, Color3.fromRGB(255, 80, 80))
-	(toggleButton :: TextButton).MouseButton1Click:Connect(function()
+	;(toggleButton :: TextButton).MouseButton1Click:Connect(function()
 		if panel then panel.Visible = not panel.Visible end
 	end)
 end

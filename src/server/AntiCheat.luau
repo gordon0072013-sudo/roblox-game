@@ -130,15 +130,15 @@ local SANITIZE_MAX_STRING = 64
 
 function AntiCheat.SanitizeNumber(player: Player, value: any, context: string): number?
 	if typeof(value) ~= "number" then
-		flag(player, "BadArg", `${context}: expected number, got ${typeof(value)}`, 2)
+		flag(player, "BadArg", `{context}: expected number, got {typeof(value)}`, 2)
 		return nil
 	end
 	if value ~= value or value == math.huge or value == -math.huge then
-		flag(player, "BadArg", `${context}: NaN/inf`, 2)
+		flag(player, "BadArg", `{context}: NaN/inf`, 2)
 		return nil
 	end
 	if math.abs(value) > SANITIZE_MAX_NUMBER then
-		flag(player, "BadArg", `${context}: number out of range`, 2)
+		flag(player, "BadArg", `{context}: number out of range`, 2)
 		return nil
 	end
 	return value
@@ -146,12 +146,12 @@ end
 
 function AntiCheat.SanitizeString(player: Player, value: any, context: string, maxLen: number?): string?
 	if typeof(value) ~= "string" then
-		flag(player, "BadArg", `${context}: expected string, got ${typeof(value)}`, 2)
+		flag(player, "BadArg", `{context}: expected string, got {typeof(value)}`, 2)
 		return nil
 	end
 	local cap = maxLen or SANITIZE_MAX_STRING
 	if #value > cap then
-		flag(player, "BadArg", `${context}: string length ${#value} > ${cap}`, 2)
+		flag(player, "BadArg", `{context}: string length {#value} > {cap}`, 2)
 		return nil
 	end
 	return value
@@ -161,7 +161,7 @@ function AntiCheat.SanitizeUid(player: Player, value: any, context: string): str
 	local s = AntiCheat.SanitizeString(player, value, context, 32)
 	if not s then return nil end
 	if not string.match(s, "^[%w%-_]+$") then
-		flag(player, "BadArg", `${context}: invalid uid format`, 2)
+		flag(player, "BadArg", `{context}: invalid uid format`, 2)
 		return nil
 	end
 	return s

@@ -41,7 +41,7 @@ end
 
 local function buildDecoModel(def: any, pos: Vector3): Model
 	local model = Instance.new("Model")
-	model.Name = `Deco_${def.id}`
+	model.Name = `Deco_{def.id}`
 	local body = Instance.new("Part")
 	body.Anchored = true
 	body.CanCollide = false
@@ -135,7 +135,7 @@ function DecorationService.Buy(player: Player, id: string)
 		return
 	end
 	if not EconomyService.SpendCash(player, def.cost) then
-		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Need ${def.cost} cash.` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Need {def.cost} cash.` })
 		return
 	end
 	local slot = nextFreeSlot(data)
@@ -149,7 +149,7 @@ function DecorationService.Buy(player: Player, id: string)
 	renderAll(player)
 	pushUpdate(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
-		kind = "capture", text = `Placed: ${def.name}`,
+		kind = "capture", text = `Placed: {def.name}`,
 	})
 end
 

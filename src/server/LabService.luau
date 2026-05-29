@@ -134,7 +134,7 @@ local function updatePlotSign(plot: Plot, ownerName: string?, info: string?)
 		local txt = label:FindFirstChild("Label") :: TextLabel?
 		if txt then
 			if ownerName then
-				txt.Text = `${ownerName}'s Lab\n${info or ""}`
+				txt.Text = `{ownerName}'s Lab\n{info or ""}`
 			else
 				txt.Text = "UNCLAIMED LAB"
 			end
@@ -306,9 +306,9 @@ local function buildBrainrotModel(brainrot: Types.OwnedBrainrot, position: Vecto
 	local displayName = def.displayName
 	for _, mutId in ipairs(brainrot.mutations) do
 		local m = MutationData.Get(mutId)
-		if m then displayName = `${m.suffix} ${displayName}` end
+		if m then displayName = `{m.suffix} {displayName}` end
 	end
-	lbl.Text = `${displayName}\n[T${brainrot.mutationTier}]`
+	lbl.Text = `{displayName}\n[T{brainrot.mutationTier}]`
 	lbl.Parent = bb
 
 	-- Click-to-collect detector
@@ -466,7 +466,7 @@ function LabService.GiveBrainrot(player: Player, brainrot: Types.OwnedBrainrot)
 	LabService.PushInventory(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `Captured ${BrainrotData.Get(brainrot.speciesId) and BrainrotData.Get(brainrot.speciesId).displayName or "?"}!`,
+		text = `Captured {BrainrotData.Get(brainrot.speciesId) and BrainrotData.Get(brainrot.speciesId).displayName or "?"}!`,
 	})
 	if data.stats.totalCaptured == 1 then
 		local ok, BadgeService = pcall(require, script.Parent.BadgeService)

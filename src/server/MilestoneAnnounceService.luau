@@ -31,7 +31,7 @@ local function fire(player: Player, kind: string, milestone: number, text: strin
 	-- Also fire a Notify to the achieving player so they get a personal toast
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "capture",
-		text = `🎉 Server-wide shoutout: ${text}`,
+		text = `🎉 Server-wide shoutout: {text}`,
 	})
 	Log.Info("Milestone", "%s %s %d", player.Name, kind, milestone)
 end

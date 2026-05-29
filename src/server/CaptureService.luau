@@ -35,7 +35,7 @@ function CaptureService.AttemptCapture(player: Player, opts: { freeRare: boolean
 		if not EconomyService.SpendCash(player, cost) then
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind = "error",
-				text = `Need ${cost} cash to capture.`,
+				text = `Need {cost} cash to capture.`,
 			})
 			return
 		end

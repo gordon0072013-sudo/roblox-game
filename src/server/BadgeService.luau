@@ -74,7 +74,7 @@ local function tryAward(player: Player, key: string)
 		log[key] = true
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "capture",
-			text = `🏆 Badge unlocked: ${b.name}`,
+			text = `🏆 Badge unlocked: {b.name}`,
 		})
 	end
 end

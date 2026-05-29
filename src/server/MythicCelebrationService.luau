@@ -71,7 +71,7 @@ function MythicCelebrationService.OnCapture(player: Player, speciesId: string)
 	if CinematicService then
 		CinematicService.Play(player, {
 			kind = "mythic_drop",
-			title = `${string.upper(def.rarity)} DROP`,
+			title = `{string.upper(def.rarity)} DROP`,
 			subtitle = def.displayName,
 			color = color,
 			durationSeconds = 4,

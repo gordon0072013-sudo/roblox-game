@@ -128,7 +128,7 @@ function WelcomeOfferUI.Init(screen: ScreenGui)
 			while not closed do
 				local left = expires - os.time()
 				if left <= 0 then dismiss(); break end
-				timer.Text = `Expires in ${Util.SecondsToClock(left)}`
+				timer.Text = `Expires in {Util.SecondsToClock(left)}`
 				task.wait(1)
 			end
 		end)

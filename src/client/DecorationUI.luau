@@ -13,7 +13,7 @@ local hasPremium = false
 local function rebuild(payload: any)
 	hasPremium = payload.hasPremium == true
 	local placed = #payload.owned
-	headerLabel.Text = `🪴 Decorations · ${placed}/${payload.capacity} placed`
+	headerLabel.Text = `🪴 Decorations · {placed}/{payload.capacity} placed`
 
 	list:ClearAllChildren()
 	local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.Parent = list
@@ -35,7 +35,7 @@ local function rebuild(payload: any)
 		lbl.TextScaled = true
 		lbl.TextXAlignment = Enum.TextXAlignment.Left
 		lbl.TextColor3 = if def.premium then Color3.fromRGB(255, 215, 80) else Color3.fromRGB(220, 220, 230)
-		lbl.Text = `${def.name}${def.premium and " ⭐" or ""}\n${Util.FormatShortNumber(def.cost)} cash`
+		lbl.Text = `{def.name}{def.premium and " ⭐" or ""}\n{Util.FormatShortNumber(def.cost)} cash`
 		lbl.Parent = row
 
 		local btn = Instance.new("TextButton")
@@ -76,7 +76,7 @@ local function rebuild(payload: any)
 		row.TextScaled = true
 		row.TextXAlignment = Enum.TextXAlignment.Left
 		row.TextColor3 = Color3.fromRGB(220, 220, 230)
-		row.Text = `· ${entry.id} (slot ${entry.slot}) · tap to sell`
+		row.Text = `· {entry.id} (slot {entry.slot}) · tap to sell`
 		row.Parent = list
 		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = row
 		local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 12); pad.Parent = row

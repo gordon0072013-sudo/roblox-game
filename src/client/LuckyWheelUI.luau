@@ -98,14 +98,14 @@ end
 
 function LuckyWheelUI.Init(screen: ScreenGui, UIController)
 	frame = Instance.new("Frame")
-	(frame :: Frame).Name = "Wheel"
-	(frame :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
-	(frame :: Frame).Position = UDim2.fromScale(0.5, 0.5)
-	(frame :: Frame).Size = UDim2.fromOffset(440, 540)
-	(frame :: Frame).BackgroundColor3 = Color3.fromRGB(20, 20, 35)
-	(frame :: Frame).BackgroundTransparency = 0.05
-	(frame :: Frame).BorderSizePixel = 0
-	(frame :: Frame).Parent = screen
+	;(frame :: Frame).Name = "Wheel"
+	;(frame :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
+	;(frame :: Frame).Position = UDim2.fromScale(0.5, 0.5)
+	;(frame :: Frame).Size = UDim2.fromOffset(440, 540)
+	;(frame :: Frame).BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	;(frame :: Frame).BackgroundTransparency = 0.05
+	;(frame :: Frame).BorderSizePixel = 0
+	;(frame :: Frame).Parent = screen
 	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
 	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 2; s.Parent = frame
 

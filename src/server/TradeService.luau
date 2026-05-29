@@ -112,7 +112,7 @@ function TradeService.Invite(fromPlayer: Player, targetUserId: number)
 		fromName = fromPlayer.DisplayName,
 		ttl = INVITE_TTL,
 	})
-	Remotes.Event(Remotes.Names.Notify):FireClient(fromPlayer, { kind="info", text=`Trade request sent to ${target.DisplayName}` })
+	Remotes.Event(Remotes.Names.Notify):FireClient(fromPlayer, { kind="info", text=`Trade request sent to {target.DisplayName}` })
 end
 
 function TradeService.Accept(player: Player)
@@ -150,7 +150,7 @@ function TradeService.Decline(player: Player)
 	pendingInvites[player.UserId] = nil
 	local other = Players:GetPlayerByUserId(invite.from)
 	if other then
-		Remotes.Event(Remotes.Names.Notify):FireClient(other, { kind="info", text=`${player.DisplayName} declined the trade.` })
+		Remotes.Event(Remotes.Names.Notify):FireClient(other, { kind="info", text=`{player.DisplayName} declined the trade.` })
 	end
 end
 

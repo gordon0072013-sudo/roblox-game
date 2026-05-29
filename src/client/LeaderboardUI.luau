@@ -42,7 +42,7 @@ local function fill(col: Frame, title: string, entries: { any }, valueKey: strin
 			else Color3.fromRGB(220,220,220)
 		local v = (e :: any)[valueKey] or 0
 		local vs = if formatter then formatter(v) else Util.FormatShortNumber(v)
-		row.Text = `${i}. ${e.name} — ${vs}`
+		row.Text = `{i}. {e.name} — {vs}`
 		row.Parent = col
 	end
 end

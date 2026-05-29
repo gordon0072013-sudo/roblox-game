@@ -33,11 +33,11 @@ function BossUI.Init(screen: ScreenGui)
 		if payload.active then
 			frame.Visible = true
 			local pct = math.floor((payload.hp / math.max(1, payload.maxHp)) * 100)
-			label.Text = `🔥 MEGA BOSS · ${pct}% HP · ${Util.SecondsToClock(payload.secondsLeft)} · ${payload.contributors} fighters`
+			label.Text = `🔥 MEGA BOSS · {pct}% HP · {Util.SecondsToClock(payload.secondsLeft)} · {payload.contributors} fighters`
 		else
 			if payload.secondsToStart and payload.secondsToStart < 600 then
 				frame.Visible = true
-				label.Text = `Next Mega Boss in ${Util.SecondsToClock(payload.secondsToStart)}`
+				label.Text = `Next Mega Boss in {Util.SecondsToClock(payload.secondsToStart)}`
 				label.TextColor3 = Color3.fromRGB(255, 160, 80)
 			else
 				frame.Visible = false

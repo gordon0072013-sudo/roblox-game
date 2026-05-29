@@ -12,10 +12,10 @@ local barLabel: TextLabel
 local list: ScrollingFrame
 
 local function rebuild(payload: any)
-	headerLabel.Text = `⭐ Level ${payload.level}`
+	headerLabel.Text = `⭐ Level {payload.level}`
 	local pct = math.clamp(payload.xpInLevel / payload.xpPerLevel, 0, 1)
 	barFill.Size = UDim2.fromScale(pct, 1)
-	barLabel.Text = `${Util.FormatShortNumber(payload.xpInLevel)} / ${Util.FormatShortNumber(payload.xpPerLevel)} XP to level ${payload.level + 1}`
+	barLabel.Text = `{Util.FormatShortNumber(payload.xpInLevel)} / {Util.FormatShortNumber(payload.xpPerLevel)} XP to level {payload.level + 1}`
 
 	list:ClearAllChildren()
 	local layout = Instance.new("UIListLayout")
@@ -39,7 +39,7 @@ local function rebuild(payload: any)
 		lbl.TextScaled = true
 		lbl.TextXAlignment = Enum.TextXAlignment.Left
 		lbl.TextColor3 = Color3.fromRGB(220, 220, 230)
-		lbl.Text = `Level ${lvl} · reward: ${lvl * 500} cash`
+		lbl.Text = `Level {lvl} · reward: {lvl * 500} cash`
 		lbl.Parent = row
 
 		local btn = Instance.new("TextButton")

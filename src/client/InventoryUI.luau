@@ -25,7 +25,7 @@ local function rebuild(payload: any)
 	for _, b in ipairs(payload.inventory) do
 		if b.placed then placedCount += 1 end
 	end
-	headerLabel.Text = `INVENTORY · ${#payload.inventory}/${payload.max} · placed ${placedCount}/${payload.capacity}`
+	headerLabel.Text = `INVENTORY · {#payload.inventory}/{payload.max} · placed {placedCount}/{payload.capacity}`
 
 	for i, b in ipairs(payload.inventory) do
 		local def = BrainrotData.Get(b.speciesId)
@@ -40,9 +40,9 @@ local function rebuild(payload: any)
 		local display = def and def.displayName or "?"
 		for _, mutId in ipairs(b.mutations) do
 			local m = MutationData.Get(mutId)
-			if m then display = `${m.suffix} ${display}` end
+			if m then display = `{m.suffix} {display}` end
 		end
-		display = `${display}  [T${b.mutationTier}]  · ${def and def.rarity or "?"}`
+		display = `{display}  [T{b.mutationTier}]  · {def and def.rarity or "?"}`
 
 		local label = Instance.new("TextLabel")
 		label.AnchorPoint = Vector2.new(0, 0.5)

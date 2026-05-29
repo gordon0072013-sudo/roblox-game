@@ -40,7 +40,7 @@ local function weekId(): string
 end
 
 local function storeKey(board: string): string
-	return `BrainrotLab_GLB_${board}_${weekId()}`
+	return `BrainrotLab_GLB_{board}_{weekId()}`
 end
 
 local function ensureStores()
@@ -92,7 +92,7 @@ local function readBoard(board: string, limit: number): { { userId: number, name
 	local page = pages:GetCurrentPage()
 	for _, entry in ipairs(page) do
 		local uid = tonumber(entry.key) or 0
-		local name = `User_${entry.key}`
+		local name = `User_{entry.key}`
 		if nameStore then
 			pcall(function() name = nameStore:GetAsync(entry.key) or name end)
 		end

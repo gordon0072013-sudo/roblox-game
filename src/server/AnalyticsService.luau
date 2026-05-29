@@ -27,7 +27,7 @@ function AnalyticsService.LogPurchase(player: Player, kind: string, key: string,
 		player.DisplayName, key, kind, price, #purchases))
 	if store then
 		pcall(function()
-			store:SetAsync(`${player.UserId}_${os.time()}_${key}`, entry)
+			store:SetAsync(`{player.UserId}_{os.time()}_{key}`, entry)
 		end)
 	end
 	local ok, WebhookService = pcall(require, script.Parent.WebhookService)

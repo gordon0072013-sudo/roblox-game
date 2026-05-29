@@ -62,7 +62,7 @@ local function buildPanel(parent: Frame)
 		label.TextScaled = true
 		label.Font = Enum.Font.GothamBold
 		label.TextColor3 = Color3.fromRGB(255, 255, 255)
-		label.Text = subtitle and `${name}\n${subtitle}` or name
+		label.Text = subtitle and `{name}\n{subtitle}` or name
 		label.Parent = row
 
 		local btn = Instance.new("TextButton")
@@ -74,7 +74,7 @@ local function buildPanel(parent: Frame)
 		btn.BackgroundColor3 = if kind == "gamepass" then Color3.fromRGB(255, 80, 200) else Color3.fromRGB(80, 200, 120)
 		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		btn.BorderSizePixel = 0
-		btn.Text = `R$ ${price}`
+		btn.Text = `R$ {price}`
 		btn.Parent = row
 		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
 		btn.MouseButton1Click:Connect(function()

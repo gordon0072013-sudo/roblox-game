@@ -39,9 +39,9 @@ local function brainrotDisplay(b: any): string
 	local display = def and def.displayName or "?"
 	for _, mutId in ipairs(b.mutations) do
 		local m = MutationData.Get(mutId)
-		if m then display = `${m.suffix} ${display}` end
+		if m then display = `{m.suffix} {display}` end
 	end
-	return display .. ` [T${b.mutationTier}]`
+	return display .. ` [T{b.mutationTier}]`
 end
 
 local function renderOfferList(parent: Frame, uids: { string }, sourcePlayer: Player?)
@@ -65,7 +65,7 @@ local function renderOfferList(parent: Frame, uids: { string }, sourcePlayer: Pl
 
 		-- We don't have rich data on the other side's offer, so just show uid as a placeholder.
 		-- For our own side, look up from latestInventory.
-		local text = `· ${string.sub(uid, 1, 8)}`
+		local text = `· {string.sub(uid, 1, 8)}`
 		if sourcePlayer == localPlayer then
 			for _, b in ipairs(latestInventory.inventory) do
 				if b.uid == uid then text = "· " .. brainrotDisplay(b); break end
@@ -122,9 +122,9 @@ local function rebuildTrade(payload: any)
 		theirUserId = payload.a.userId
 	end
 	local theirPlayer = Players:GetPlayerByUserId(theirUserId)
-	headerLabel.Text = `Trading with ${(theirPlayer and theirPlayer.DisplayName) or "?"} · confirm twice to commit`
-	sideALabel.Text = `You · ${Util.FormatShortNumber(mySide.cash)} cash` .. (mySide.confirmed and " ✓" or "")
-	sideBLabel.Text = `${(theirPlayer and theirPlayer.DisplayName) or "?"} · ${Util.FormatShortNumber(theirSide.cash)} cash` .. (theirSide.confirmed and " ✓" or "")
+	headerLabel.Text = `Trading with {(theirPlayer and theirPlayer.DisplayName) or "?"} · confirm twice to commit`
+	sideALabel.Text = `You · {Util.FormatShortNumber(mySide.cash)} cash` .. (mySide.confirmed and " ✓" or "")
+	sideBLabel.Text = `{(theirPlayer and theirPlayer.DisplayName) or "?"} · {Util.FormatShortNumber(theirSide.cash)} cash` .. (theirSide.confirmed and " ✓" or "")
 	renderOfferList(sideAFrame, mySide.brainrotUids, localPlayer)
 	renderOfferList(sideBFrame, theirSide.brainrotUids, nil)
 	confirmABtn.Text = mySide.confirmed and "✓ CONFIRMED" or "CONFIRM"
@@ -338,7 +338,7 @@ function TradeUI.Init(screen: ScreenGui, UIController)
 		label.TextScaled = true
 		label.TextColor3 = Color3.fromRGB(255, 215, 80)
 		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Text = `${invite.fromName} wants to trade`
+		label.Text = `{invite.fromName} wants to trade`
 		label.Parent = popup
 		local acc = Instance.new("TextButton")
 		acc.Position = UDim2.fromOffset(10, 36)

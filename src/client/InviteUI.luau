@@ -105,7 +105,7 @@ function InviteUI.Init(screen: ScreenGui, UIController)
 
 	Remotes.Event(Remotes.Names.InviteUpdate).OnClientEvent:Connect(function(payload)
 		codeLabel.Text = payload.code or "REF-…"
-		statusLabel.Text = `Recruited ${payload.recruitsCount or 0} friends` .. (payload.redeemed and " · You redeemed a code already" or "")
+		statusLabel.Text = `Recruited {payload.recruitsCount or 0} friends` .. (payload.redeemed and " · You redeemed a code already" or "")
 	end)
 
 	UIController.Register("Invite", frame, "👥 Invite", Color3.fromRGB(255, 100, 200))

@@ -111,7 +111,7 @@ function HUD.Init(screen: ScreenGui)
 		else
 			displayedCash += step
 		end
-		cashLabel.Text = `${Util.FormatShortNumber(math.floor(displayedCash))} cash`
+		cashLabel.Text = `{Util.FormatShortNumber(math.floor(displayedCash))} cash`
 	end)
 
 	Remotes.Event(Remotes.Names.HudUpdate).OnClientEvent:Connect(function(payload)
@@ -119,18 +119,18 @@ function HUD.Init(screen: ScreenGui)
 		-- Big jumps (e.g. login bonus, rebirth) snap immediately; small ticks tween.
 		if math.abs(targetCash - displayedCash) > targetCash * 0.5 + 1000 then
 			displayedCash = targetCash
-			cashLabel.Text = `${Util.FormatShortNumber(payload.cash)} cash`
+			cashLabel.Text = `{Util.FormatShortNumber(payload.cash)} cash`
 		end
-		rebirthLabel.Text = `Rebirth ${payload.rebirths}  (need ${Util.FormatShortNumber(payload.nextRebirthCost)})`
+		rebirthLabel.Text = `Rebirth {payload.rebirths}  (need {Util.FormatShortNumber(payload.nextRebirthCost)})`
 		local parts = {}
-		if payload.cashMult and payload.cashMult > 1 then table.insert(parts, `${payload.cashMult}x cash`) end
+		if payload.cashMult and payload.cashMult > 1 then table.insert(parts, `{payload.cashMult}x cash`) end
 		if payload.rebirthMult and payload.rebirthMult > 1 then table.insert(parts, string.format("%.2fx rebirth", payload.rebirthMult)) end
 		multLabel.Text = table.concat(parts, "  ·  ")
 		if payload.infected then
-			statusLabel.Text = `INFECTED · ${math.ceil(payload.infectedSecondsLeft)}s · 🦠`
+			statusLabel.Text = `INFECTED · {math.ceil(payload.infectedSecondsLeft)}s · 🦠`
 			statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
 		else
-			statusLabel.Text = `💣 ${payload.infectionBombs or 0} bombs`
+			statusLabel.Text = `💣 {payload.infectionBombs or 0} bombs`
 			statusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
 		end
 	end)

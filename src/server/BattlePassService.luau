@@ -60,7 +60,7 @@ function BattlePassService.AwardXp(player: Player, kind: string)
 		data.battlePass.tier += 1
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "info",
-			text = `Battle Pass Tier ${data.battlePass.tier}! Claim your reward.`,
+			text = `Battle Pass Tier {data.battlePass.tier}! Claim your reward.`,
 		})
 	end
 	pushUpdate(player)
@@ -73,8 +73,8 @@ function BattlePassService.ClaimTier(player: Player, tier: number)
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Tier not earned yet." })
 		return
 	end
-	local keyFree = `f:${tier}`
-	local keyPrem = `p:${tier}`
+	local keyFree = `f:{tier}`
+	local keyPrem = `p:{tier}`
 	if not data.battlePass.claimed[keyFree] then
 		local r = tierReward(tier, false)
 		if r.kind == "cash" then EconomyService.AwardCash(player, r.amount, "battle pass")

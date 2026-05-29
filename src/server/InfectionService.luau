@@ -86,10 +86,10 @@ function InfectionService.AttemptInfect(attacker: Player, victimUserId: number)
 	EconomyService.PushHud(victim)
 
 	Remotes.Event(Remotes.Names.Notify):FireClient(attacker, {
-		kind="capture", text=`Infected ${victim.DisplayName}!`,
+		kind="capture", text=`Infected {victim.DisplayName}!`,
 	})
 	Remotes.Event(Remotes.Names.Notify):FireClient(victim, {
-		kind="error", text=`${attacker.DisplayName} infected your lab! Income reduced.`,
+		kind="error", text=`{attacker.DisplayName} infected your lab! Income reduced.`,
 	})
 end
 

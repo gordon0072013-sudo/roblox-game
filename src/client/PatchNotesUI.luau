@@ -30,7 +30,7 @@ function PatchNotesUI.Init(screen: ScreenGui, UIController)
 	hd.TextScaled = true
 	hd.TextColor3 = Color3.fromRGB(200, 200, 255)
 	hd.TextXAlignment = Enum.TextXAlignment.Left
-	hd.Text = `📝 What's New · v${Config.GAME_VERSION}`
+	hd.Text = `📝 What's New · v{Config.GAME_VERSION}`
 	hd.Parent = frame
 
 	local scroll = Instance.new("ScrollingFrame")
@@ -63,7 +63,7 @@ function PatchNotesUI.Init(screen: ScreenGui, UIController)
 		title.TextColor3 = Color3.fromRGB(255, 215, 80)
 		title.TextScaled = true
 		title.TextXAlignment = Enum.TextXAlignment.Left
-		title.Text = `v${entry.version} · ${entry.date} — ${entry.title}`
+		title.Text = `v{entry.version} · {entry.date} — {entry.title}`
 		title.Parent = block
 
 		for _, line in ipairs(entry.highlights) do

@@ -13,7 +13,7 @@ local function rebuild(payload: any)
 	for _, c in ipairs(container:GetChildren()) do
 		if c:IsA("Frame") then c:Destroy() end
 	end
-	headerLabel.Text = `Daily Reward · Streak ${payload.streak}` .. (payload.isPremium and " · ⭐ Premium" or "")
+	headerLabel.Text = `Daily Reward · Streak {payload.streak}` .. (payload.isPremium and " · ⭐ Premium" or "")
 	claimBtn.Visible = payload.canClaim
 	claimBtn.Text = payload.canClaim and "CLAIM TODAY" or "Already claimed"
 	claimBtn.AutoButtonColor = payload.canClaim
@@ -44,7 +44,7 @@ local function rebuild(payload: any)
 		day.Font = Enum.Font.GothamBold
 		day.TextScaled = true
 		day.TextColor3 = Color3.fromRGB(255, 215, 80)
-		day.Text = `Day ${i}`
+		day.Text = `Day {i}`
 		day.Parent = cell
 
 		local what = Instance.new("TextLabel")
@@ -56,11 +56,11 @@ local function rebuild(payload: any)
 		what.TextWrapped = true
 		what.TextColor3 = Color3.fromRGB(255, 255, 255)
 		if r.kind == "cash" then
-			what.Text = `${r.amount}\ncash`
+			what.Text = `{r.amount}\ncash`
 		elseif r.kind == "infection_bomb" then
-			what.Text = `${r.amount}x\n💣`
+			what.Text = `{r.amount}x\n💣`
 		elseif r.kind == "rare_egg" then
-			what.Text = `${r.amount}x\nRare 🥚`
+			what.Text = `{r.amount}x\nRare 🥚`
 		end
 		what.Parent = cell
 	end

@@ -71,7 +71,7 @@ local function rollOne(player: Player, brainrotUid: string)
 			LabService.PushInventory(player)
 			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 				kind = "mutation",
-				text = `${mutation.suffix}! T${b.mutationTier}`,
+				text = `{mutation.suffix}! T{b.mutationTier}`,
 			})
 			if BattlePassService then
 				BattlePassService.AwardXp(player, "mutation")

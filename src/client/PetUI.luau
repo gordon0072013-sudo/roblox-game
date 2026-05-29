@@ -39,7 +39,7 @@ local function rebuild(payload: any)
 		title.TextScaled = true
 		title.TextXAlignment = Enum.TextXAlignment.Left
 		title.TextColor3 = color
-		title.Text = `${pet.name} [${pet.rarity}]`
+		title.Text = `{pet.name} [{pet.rarity}]`
 		title.Parent = row
 
 		local sub = Instance.new("TextLabel")

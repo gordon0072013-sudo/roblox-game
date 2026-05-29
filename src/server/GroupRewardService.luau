@@ -34,7 +34,7 @@ function GroupRewardService.Check(player: Player)
 	if now and not prev then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "capture",
-			text = `Group member +${math.floor((Config.GROUP_REWARD_MULT - 1) * 100)}% cash unlocked!`,
+			text = `Group member +{math.floor((Config.GROUP_REWARD_MULT - 1) * 100)}% cash unlocked!`,
 		})
 	end
 	EconomyService.PushHud(player)

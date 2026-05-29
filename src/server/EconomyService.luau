@@ -75,7 +75,7 @@ function EconomyService.AwardCash(player: Player, amount: number, reason: string
 	if reason then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "cash",
-			text = `+${amount} cash (${reason})`,
+			text = `+{amount} cash ({reason})`,
 		})
 	end
 	-- Badge triggers cross the 100k and 1m thresholds
@@ -108,7 +108,7 @@ function EconomyService.TryRebirth(player: Player): boolean
 	if data.cash < cost then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "error",
-			text = `Need ${cost} cash to rebirth.`,
+			text = `Need {cost} cash to rebirth.`,
 		})
 		return false
 	end
@@ -117,7 +117,7 @@ function EconomyService.TryRebirth(player: Player): boolean
 	-- Inventory persists across rebirths in this design (player-friendly)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "rebirth",
-		text = `Rebirth ${data.rebirths}! Income multiplier ${string.format("%.2fx", Config.REBIRTH_INCOME_MULT(data.rebirths))}`,
+		text = `Rebirth {data.rebirths}! Income multiplier {string.format("%.2fx", Config.REBIRTH_INCOME_MULT(data.rebirths))}`,
 	})
 	EconomyService.PushHud(player)
 	if data.rebirths == 1 then
@@ -149,7 +149,7 @@ function EconomyService.SkipRebirth(player: Player)
 	EconomyService.PushHud(player)
 	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 		kind = "rebirth",
-		text = `Skipped to Rebirth ${data.rebirths}!`,
+		text = `Skipped to Rebirth {data.rebirths}!`,
 	})
 end
 

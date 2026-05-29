@@ -24,11 +24,11 @@ local function refresh()
 	end
 	local ok, inGroup = pcall(function() return localPlayer:IsInGroup(Config.GROUP_ID) end)
 	if ok and inGroup then
-		statusLabel.Text = `✅ Group member · +${math.floor((Config.GROUP_REWARD_MULT - 1)*100)}% cash`
+		statusLabel.Text = `✅ Group member · +{math.floor((Config.GROUP_REWARD_MULT - 1)*100)}% cash`
 		statusLabel.TextColor3 = Color3.fromRGB(120, 220, 120)
 	else
 		local pct = math.floor((Config.GROUP_REWARD_MULT - 1) * 100)
-		statusLabel.Text = `Join the group for +${pct}% cash`
+		statusLabel.Text = `Join the group for +{pct}% cash`
 		statusLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
 	end
 end
