@@ -244,6 +244,15 @@ function AntiCheat.WrapRemote(remote: RemoteEvent, name: string, handler: (Playe
 	end)
 end
 
+function AntiCheat.ClearFlags(player: Player): boolean
+	local r = records[player]
+	if not r then return false end
+	r.violations = 0
+	r.flagLog = {}
+	r.violationsLastDecayAt = os.clock()
+	return true
+end
+
 function AntiCheat.Snapshot(): { [string]: any }
 	local out = {}
 	for player, r in pairs(records) do

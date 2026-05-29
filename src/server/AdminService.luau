@@ -223,6 +223,20 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "clearflags",
+	usage = "/clearflags <player>",
+	help = "Wipe a player's AntiCheat violation history.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /clearflags <player>" end
+		local ok = AntiCheat.ClearFlags(target)
+		return ok and string.format("cleared flags for %s", target.Name)
+			or "target has no AntiCheat record"
+	end,
+})
+
+table.insert(commands, {
 	name = "reset",
 	usage = "/reset <player>",
 	help = "Wipe a player's profile back to defaults. Irreversible.",

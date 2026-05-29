@@ -1972,6 +1972,20 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "clearflags",
+	usage = "/clearflags <player>",
+	help = "Wipe a player's AntiCheat violation history.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /clearflags <player>" end
+		local ok = AntiCheat.ClearFlags(target)
+		return ok and string.format("cleared flags for %s", target.Name)
+			or "target has no AntiCheat record"
+	end,
+})
+
+table.insert(commands, {
 	name = "reset",
 	usage = "/reset <player>",
 	help = "Wipe a player's profile back to defaults. Irreversible.",
@@ -3096,6 +3110,15 @@ function AntiCheat.WrapRemote(remote: RemoteEvent, name: string, handler: (Playe
 			Log.Error("AntiCheat", "handler %s errored: %s", name, tostring(err))
 		end
 	end)
+end
+
+function AntiCheat.ClearFlags(player: Player): boolean
+	local r = records[player]
+	if not r then return false end
+	r.violations = 0
+	r.flagLog = {}
+	r.violationsLastDecayAt = os.clock()
+	return true
 end
 
 function AntiCheat.Snapshot(): { [string]: any }
