@@ -1972,6 +1972,29 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "pricecheck",
+	usage = "/pricecheck <key>",
+	help = "Show price + delivery for a gamepass or dev product key.",
+	fn = function(player, args)
+		local key = args[1]
+		if not key then return "usage: /pricecheck <key>" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local gp = Config.GAMEPASSES[key]
+		if gp then
+			return string.format("[gamepass] %s — %d R$, id=%d", gp.name, gp.price, gp.id)
+		end
+		local dp = Config.DEV_PRODUCTS[key]
+		if dp then
+			return string.format("[product] %s — %d R$, kind=%s%s, id=%d",
+				dp.name, dp.price, dp.kind,
+				dp.amount and (", amount=" .. dp.amount) or "",
+				dp.id)
+		end
+		return "unknown key: " .. key
+	end,
+})
+
+table.insert(commands, {
 	name = "revokepass",
 	usage = "/revokepass <player> <gamepass-key>",
 	help = "Remove a gamepass effect from a player.",
