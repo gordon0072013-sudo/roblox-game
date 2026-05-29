@@ -223,6 +223,23 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "revokepass",
+	usage = "/revokepass <player> <gamepass-key>",
+	help = "Remove a gamepass effect from a player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local key = args[2]
+		if not target or not key then return "usage: /revokepass <player> <gamepass-key>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		if not data.gamepasses[key] then return key .. " not granted to " .. target.Name end
+		data.gamepasses[key] = nil
+		EconomyService.PushHud(target)
+		return string.format("revoked %s from %s", key, target.Name)
+	end,
+})
+
+table.insert(commands, {
 	name = "grantpass",
 	usage = "/grantpass <player> <gamepass-key>",
 	help = "Manually grant a gamepass effect for free (whale gift / test).",
