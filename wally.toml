@@ -1,0 +1,12 @@
+[package]
+name = "brainrotlab/game"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+Promise = "evaera/promise@4.0.0"
+Signal = "sleitnick/signal@1.5.0"
+
+[server-dependencies]
+ProfileService = "loleris/profileservice@1.4.4"

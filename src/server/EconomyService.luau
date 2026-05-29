@@ -1,0 +1,181 @@
+--!strict
+--[[
+	EconomyService — cash, rebirths, income calculation, multipliers.
+
+	Income tick is driven from LabService (which owns placed brainrots), but
+	the math lives here so MonetizationService and BattlePassService can
+	consult it for previews and bonus calculations.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Types = require(Shared.Types)
+local BrainrotData = require(Shared.BrainrotData)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+
+local EconomyService = {}
+
+-- Compute income/sec for a single brainrot considering tier, mutations, and global multipliers.
+function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.OwnedBrainrot): number
+	local def = BrainrotData.Get(brainrot.speciesId)
+	if not def then return 0 end
+	local data = DataService.Get(player)
+	if not data then return 0 end
+
+	local base = def.baseIncomePerSecond
+	local tierMult = 1 + brainrot.mutationTier * Config.MUTATION_INCOME_MULT_PER_TIER
+	local rebirthMult = Config.REBIRTH_INCOME_MULT(data.rebirths)
+	local gamepassMult = if data.gamepasses["Cash2x"] then 2 else 1
+	local groupMult = if (data :: any)._inGroup then Config.GROUP_REWARD_MULT else 1
+	local premiumMult = if player.MembershipType == Enum.MembershipType.Premium then 1.10 else 1
+	local petMult = 1
+	local okPet, PetService = pcall(require, script.Parent.PetService)
+	if okPet then petMult = PetService.GetCashMult(player) end
+	local hotMult = 1
+	local okHot, HotStreakService = pcall(require, script.Parent.HotStreakService)
+	if okHot then hotMult = HotStreakService.GetMultiplier() end
+	local eventMult = 1
+	local okEvt, EventService = pcall(require, script.Parent.EventService)
+	if okEvt then eventMult = EventService.GetCashMult() end
+	local vipServerMult = 1
+	local okVip, VipServerService = pcall(require, script.Parent.VipServerService)
+	if okVip then vipServerMult = VipServerService.GetCashMult() end
+	local hourMult = 1
+	local okHour, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+	if okHour then hourMult = TopOfHourService.GetCashMult() end
+	local firstSessionMult = 1
+	local okFs, FirstSessionService = pcall(require, script.Parent.FirstSessionService)
+	if okFs then firstSessionMult = FirstSessionService.GetCashMult(player) end
+	local buffMult = 1
+	local okBf, BuffService = pcall(require, script.Parent.BuffService)
+	if okBf then buffMult = BuffService.GetIncomeMult(player) end
+	local infectionMult = 1
+	if data.infectedUntil > os.time() then
+		local penalty = Config.INFECTION_INCOME_MULT
+		if data.gamepasses["InfectionShield"] then
+			-- Full shield reduction.
+			penalty = penalty + (1 - penalty) * Config.INFECTION_SHIELD_GAMEPASS_REDUCTION
+		elseif data.gamepasses["VIPLab"] then
+			-- VIPLab gives a partial reduction (half the InfectionShield amount)
+			-- to match the shop description's 'partial steal/infection
+			-- protection' claim.
+			penalty = penalty + (1 - penalty) * (Config.INFECTION_SHIELD_GAMEPASS_REDUCTION * 0.5)
+		end
+		infectionMult = penalty
+	end
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * firstSessionMult * buffMult * infectionMult
+end
+
+function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
+	local data = DataService.Get(player)
+	if not data then return end
+	local prevEarned = data.stats.totalCashEarned
+	data.cash += amount
+	data.stats.totalCashEarned += math.max(0, amount)
+	EconomyService.PushHud(player)
+	if reason then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "cash",
+			text = `+{amount} cash ({reason})`,
+		})
+	end
+	-- Badge triggers cross the 100k and 1m thresholds
+	if amount > 0 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then
+			if prevEarned < 100000 and data.stats.totalCashEarned >= 100000 then
+				BadgeService.Fire(player, "cash_100k")
+			end
+			if prevEarned < 1000000 and data.stats.totalCashEarned >= 1000000 then
+				BadgeService.Fire(player, "cash_1m")
+			end
+		end
+	end
+end
+
+function EconomyService.SpendCash(player: Player, amount: number): boolean
+	local data = DataService.Get(player)
+	if not data then return false end
+	if data.cash < amount then return false end
+	data.cash -= amount
+	EconomyService.PushHud(player)
+	return true
+end
+
+function EconomyService.TryRebirth(player: Player): boolean
+	local data = DataService.Get(player)
+	if not data then return false end
+	local cost = Config.REBIRTH_CASH_REQUIREMENT(data.rebirths)
+	if data.cash < cost then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "error",
+			text = `Need {cost} cash to rebirth.`,
+		})
+		return false
+	end
+	data.cash -= cost
+	data.rebirths += 1
+	-- Inventory persists across rebirths in this design (player-friendly)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "rebirth",
+		text = `Rebirth {data.rebirths}! Income multiplier {string.format("%.2fx", Config.REBIRTH_INCOME_MULT(data.rebirths))}`,
+	})
+	EconomyService.PushHud(player)
+	if data.rebirths == 1 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(player, "first_rebirth") end
+	end
+	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+	if okL then PlayerLevelService.AwardXp(player, "rebirth") end
+	local okC, CinematicService = pcall(require, script.Parent.CinematicService)
+	if okC then
+		CinematicService.Play(player, {
+			kind = "rebirth",
+			title = string.format("REBIRTH %d", data.rebirths),
+			subtitle = string.format("%.2fx income unlocked", Config.REBIRTH_INCOME_MULT(data.rebirths)),
+			color = { 255, 100, 220 },
+			durationSeconds = 3,
+		})
+	end
+	local okX, CrossServerShoutService = pcall(require, script.Parent.CrossServerShoutService)
+	if okX then CrossServerShoutService.NotifyRebirth(player, data.rebirths) end
+	return true
+end
+
+function EconomyService.SkipRebirth(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	data.rebirths += 1
+	data.cash = math.max(data.cash, Config.STARTING_CASH)
+	EconomyService.PushHud(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "rebirth",
+		text = `Skipped to Rebirth {data.rebirths}!`,
+	})
+end
+
+function EconomyService.PushHud(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local nextRebirthCost = Config.REBIRTH_CASH_REQUIREMENT(data.rebirths)
+	local cashMult = if data.gamepasses["Cash2x"] then 2 else 1
+	local infected = data.infectedUntil > os.time()
+	Remotes.Event(Remotes.Names.HudUpdate):FireClient(player, {
+		cash = data.cash,
+		rebirths = data.rebirths,
+		nextRebirthCost = nextRebirthCost,
+		cashMult = cashMult,
+		rebirthMult = Config.REBIRTH_INCOME_MULT(data.rebirths),
+		infected = infected,
+		infectedSecondsLeft = if infected then data.infectedUntil - os.time() else 0,
+		infectionBombs = data.infectionBombs,
+	})
+end
+
+function EconomyService.Init() end
+
+return EconomyService

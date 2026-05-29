@@ -1,0 +1,89 @@
+{
+  "name": "BrainrotLab",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$path": "src/shared"
+      },
+      "Assets": {
+        "$path": "src/assets"
+      },
+      "Packages": {
+        "$path": "Packages",
+        "$ignoreUnknownInstances": true
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Server": {
+        "$path": "src/server"
+      },
+      "ServerPackages": {
+        "$path": "ServerPackages",
+        "$ignoreUnknownInstances": true
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true,
+        "Gravity": 196.2
+      },
+      "Baseplate": {
+        "$className": "Part",
+        "$properties": {
+          "Name": "Baseplate",
+          "Anchored": true,
+          "Size": [2048, 1, 2048],
+          "Position": [0, -1, 0],
+          "Color": [0.2, 0.6, 0.3],
+          "Material": "Grass"
+        }
+      },
+      "Plots": {
+        "$className": "Folder"
+      },
+      "Brainrots": {
+        "$className": "Folder"
+      }
+    },
+
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "Brightness": 2,
+        "ClockTime": 14,
+        "FogEnd": 1500
+      }
+    },
+
+    "SoundService": {
+      "$className": "SoundService",
+      "$properties": {
+        "RespectFilteringEnabled": true
+      }
+    },
+
+    "HttpService": {
+      "$className": "HttpService",
+      "$properties": {
+        "HttpEnabled": false
+      }
+    }
+  }
+}

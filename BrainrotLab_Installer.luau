@@ -1,0 +1,14070 @@
+--!strict
+-- BrainrotLab installer — auto-generated. Do not edit by hand.
+--
+-- INSTALLATION
+--   1. Open Roblox Studio. Any place (Baseplate, empty, etc.) works.
+--   2. View tab -> Command Bar.
+--   3. Paste this entire file and press Enter.
+--   4. Wait for "[BrainrotLab Installer] Install complete." in Output.
+--   5. File -> Save (or Publish to Roblox).
+--
+-- The installer is idempotent: re-running it overwrites any previous install
+-- in this place. Safe to run while editing; do not run during Play Solo.
+
+local function ensureFolder(parent, name)
+	local existing = parent:FindFirstChild(name)
+	if existing and existing:IsA("Folder") then return existing end
+	if existing then existing:Destroy() end
+	local f = Instance.new("Folder")
+	f.Name = name
+	f.Parent = parent
+	return f
+end
+
+local function resolveContainer(path)
+	local cur = game
+	for part in string.gmatch(path, "[^%.]+") do
+		local nextInst = cur:FindFirstChild(part)
+		if not nextInst then
+			if cur == game then
+				nextInst = game:GetService(part)
+			else
+				nextInst = Instance.new("Folder")
+				nextInst.Name = part
+				nextInst.Parent = cur
+			end
+		end
+		cur = nextInst
+	end
+	return cur
+end
+
+local function ensureScript(parent, name, className, source)
+	local existing = parent:FindFirstChild(name)
+	if existing and existing.ClassName ~= className then
+		existing:Destroy()
+		existing = nil
+	end
+	if not existing then
+		existing = Instance.new(className)
+		existing.Name = name
+		existing.Parent = parent
+	end
+	existing.Source = source
+	return existing
+end
+
+local function ensurePath(root, path, className, source)
+	local segments = {}
+	for seg in string.gmatch(path, "[^/]+") do table.insert(segments, seg) end
+	local cur = root
+	for i = 1, #segments - 1 do
+		cur = ensureFolder(cur, segments[i])
+	end
+	ensureScript(cur, segments[#segments], className, source)
+end
+
+local function ensureRootScript(container, name, className, source)
+	-- Mirrors Rojo's init.* convention: the named folder *is* the Script,
+	-- so `require(script.X)` in init source resolves children correctly.
+	local existing = container:FindFirstChild(name)
+	if existing and existing.ClassName ~= className then
+		-- preserve children if reinstalling with same kind of root
+		local children = existing:GetChildren()
+		local replacement = Instance.new(className)
+		replacement.Name = name
+		for _, c in ipairs(children) do c.Parent = replacement end
+		existing:Destroy()
+		existing = replacement
+		existing.Parent = container
+	elseif not existing then
+		existing = Instance.new(className)
+		existing.Name = name
+		existing.Parent = container
+	end
+	existing.Source = source
+	return existing
+end
+
+local function ensureBaseScene()
+	-- Workspace baseplate
+	local workspace = game:GetService("Workspace")
+	if not workspace:FindFirstChild("Baseplate") then
+		local base = Instance.new("Part")
+		base.Name = "Baseplate"
+		base.Anchored = true
+		base.Size = Vector3.new(2048, 1, 2048)
+		base.Position = Vector3.new(0, -1, 0)
+		base.Color = Color3.fromRGB(50, 150, 75)
+		base.Material = Enum.Material.Grass
+		base.Parent = workspace
+	end
+	ensureFolder(workspace, "Plots")
+	ensureFolder(workspace, "Brainrots")
+
+	-- Lighting tweaks
+	local lighting = game:GetService("Lighting")
+	lighting.Brightness = 2
+	lighting.ClockTime = 14
+	lighting.FogEnd = 1500
+
+	-- HTTP for the optional WebhookService
+	pcall(function() game:GetService("HttpService").HttpEnabled = true end)
+end
+
+print("[BrainrotLab Installer] Beginning install...")
+ensureBaseScene()
+
+
+do  -- ReplicatedStorage/Shared
+	local container = resolveContainer("ReplicatedStorage")
+	local root = ensureFolder(container, "Shared")
+	ensurePath(root, "AchievementData", "ModuleScript", [=[
+--!strict
+--[[
+	AchievementData — 20 achievements that map onto the natural play loop.
+	Each grants a tangible reward on claim, creating "one more session"
+	retention pressure. The completion bar is visible from join.
+]]
+
+export type Achievement = {
+	id: string,
+	name: string,
+	description: string,
+	statKey: string,    -- which field of profile.stats to read
+	target: number,
+	reward: { kind: string, amount: number },
+}
+
+local achievements: { Achievement } = {
+	-- Capture-based
+	{ id="cap_5",     name="Trainee",            description="Capture 5 brainrots.",            statKey="totalCaptured", target=5,      reward={ kind="cash", amount=500 } },
+	{ id="cap_25",    name="Collector",          description="Capture 25 brainrots.",           statKey="totalCaptured", target=25,     reward={ kind="cash", amount=2500 } },
+	{ id="cap_100",   name="Lab Director",       description="Capture 100 brainrots.",          statKey="totalCaptured", target=100,    reward={ kind="cash", amount=10000 } },
+	{ id="cap_500",   name="Brainrot Whisperer", description="Capture 500 brainrots.",          statKey="totalCaptured", target=500,    reward={ kind="rare_egg", amount=1 } },
+
+	-- Mutation-based (the novel mechanic)
+	{ id="mut_5",     name="Mutation Witness",   description="Trigger 5 mutations.",            statKey="totalMutations", target=5,     reward={ kind="cash", amount=750 } },
+	{ id="mut_50",    name="Mutation Maestro",   description="Trigger 50 mutations.",           statKey="totalMutations", target=50,    reward={ kind="cash", amount=5000 } },
+	{ id="mut_250",   name="Genetic Architect",  description="Trigger 250 mutations.",          statKey="totalMutations", target=250,   reward={ kind="instant_mutation", amount=2 } },
+	{ id="mut_1000",  name="Lab Singularity",    description="Trigger 1000 mutations.",         statKey="totalMutations", target=1000,  reward={ kind="rare_egg", amount=3 } },
+
+	-- Steal-based (PvP)
+	{ id="steal_1",   name="First Score",        description="Steal your first brainrot.",      statKey="totalSteals", target=1,        reward={ kind="cash", amount=1000 } },
+	{ id="steal_10",  name="Pickpocket",         description="Steal 10 brainrots.",             statKey="totalSteals", target=10,       reward={ kind="cash", amount=5000 } },
+	{ id="steal_50",  name="Heist Boss",         description="Steal 50 brainrots.",             statKey="totalSteals", target=50,       reward={ kind="infection_bomb", amount=5 } },
+
+	-- Infection-based (PvP)
+	{ id="inf_1",     name="Patient Zero",       description="Infect another player once.",     statKey="totalInfections", target=1,    reward={ kind="cash", amount=1000 } },
+	{ id="inf_10",    name="Outbreak Engineer",  description="Infect players 10 times.",        statKey="totalInfections", target=10,   reward={ kind="cash", amount=5000 } },
+	{ id="inf_50",    name="Plague Doctor",      description="Infect players 50 times.",        statKey="totalInfections", target=50,   reward={ kind="rare_egg", amount=1 } },
+
+	-- Cash earned (volume)
+	{ id="cash_10k",  name="Sigma Salaryman",    description="Earn 10,000 cash total.",         statKey="totalCashEarned", target=10000,    reward={ kind="cash", amount=2000 } },
+	{ id="cash_100k", name="Brainrot Banker",    description="Earn 100,000 cash total.",        statKey="totalCashEarned", target=100000,   reward={ kind="cash", amount=15000 } },
+	{ id="cash_1m",   name="Tycoon Tier",        description="Earn 1,000,000 cash total.",      statKey="totalCashEarned", target=1000000,  reward={ kind="rare_egg", amount=2 } },
+	{ id="cash_10m",  name="Apex Mogul",         description="Earn 10,000,000 cash total.",     statKey="totalCashEarned", target=10000000, reward={ kind="cash", amount=500000 } },
+
+	-- Rebirth (read from profile.rebirths separately)
+	{ id="reb_1",     name="Born Again",         description="Reach Rebirth 1.",                statKey="rebirths", target=1,            reward={ kind="cash", amount=2500 } },
+	{ id="reb_5",     name="Cycle Master",       description="Reach Rebirth 5.",                statKey="rebirths", target=5,            reward={ kind="rare_egg", amount=1 } },
+}
+
+local AchievementData = {}
+
+function AchievementData.GetAll(): { Achievement }
+	return achievements
+end
+
+function AchievementData.Get(id: string): Achievement?
+	for _, a in ipairs(achievements) do
+		if a.id == id then return a end
+	end
+	return nil
+end
+
+return AchievementData
+]=])
+	ensurePath(root, "BrainrotData", "ModuleScript", [=[
+--!strict
+--[[
+	BrainrotData — the content catalogue. Names and visuals follow the
+	Italian/sigma brainrot meme family. Swap meshes/sounds in Studio later;
+	the gameplay tunings (income, rarity) are what matter for balance.
+
+	Rarity floor income (per second, before mutations & rebirth mult):
+	  Common      1.5
+	  Uncommon    4
+	  Rare        10
+	  Epic        28
+	  Legendary   75
+	  Mythic      180
+	  Outbreak   500 (event-only)
+]]
+
+local Types = require(script.Parent.Types)
+
+local function c3(r: number, g: number, b: number): Color3
+	return Color3.fromRGB(r, g, b)
+end
+
+local catalog: { Types.BrainrotDefinition } = {
+	-- Common (drop pool for basic captures)
+	{ id="tralalero",  displayName="Tralalero Tralala",     rarity="Common", baseIncomePerSecond=1.5, color=c3(80,170,255),  primaryShape="Block",    sizeStuds=Vector3.new(3,3,4),   tagline="Three legs, three sins." },
+	{ id="bombardiro", displayName="Bombardiro Crocodilo",  rarity="Common", baseIncomePerSecond=1.8, color=c3(80,140,80),   primaryShape="Cylinder", sizeStuds=Vector3.new(4,2,4),   tagline="Flies. Bombs. Crocodile." },
+	{ id="brrbrr",     displayName="Brr Brr Patapim",        rarity="Common", baseIncomePerSecond=2.0, color=c3(120,90,60),   primaryShape="Block",    sizeStuds=Vector3.new(3,4,3),   tagline="Tree with feet." },
+	{ id="lirili",     displayName="Lirili Larila",          rarity="Common", baseIncomePerSecond=2.3, color=c3(200,180,90),  primaryShape="Wedge",    sizeStuds=Vector3.new(3,3,3),   tagline="Cactus. Sandals. Elephant." },
+
+	-- Uncommon
+	{ id="bombombini", displayName="Bombombini Gusini",      rarity="Uncommon", baseIncomePerSecond=4,  color=c3(170,170,170), primaryShape="Cylinder", sizeStuds=Vector3.new(3,2,5),   tagline="Goose. Bomber. Annoying." },
+	{ id="trippi",     displayName="Trippi Troppi",          rarity="Uncommon", baseIncomePerSecond=4.5,color=c3(220,150,200), primaryShape="Ball",     sizeStuds=Vector3.new(3,3,3),   tagline="Shrimp cat. Fashion icon." },
+	{ id="boneca",     displayName="Boneca Ambalabu",        rarity="Uncommon", baseIncomePerSecond=5,  color=c3(80,200,200),  primaryShape="Ball",     sizeStuds=Vector3.new(3,3,3),   tagline="Frog tire person." },
+
+	-- Rare
+	{ id="udin",       displayName="Udin Din Din Dun",       rarity="Rare", baseIncomePerSecond=10, color=c3(255,140,40),  primaryShape="Block",    sizeStuds=Vector3.new(4,4,4),   tagline="Drum legs. Goes hard." },
+	{ id="frigo",      displayName="Frigo Camelo",           rarity="Rare", baseIncomePerSecond=12, color=c3(220,220,255), primaryShape="Block",    sizeStuds=Vector3.new(4,5,4),   tagline="Fridge camel. Stays cool." },
+	{ id="pipi",       displayName="Pipi Avocado",           rarity="Rare", baseIncomePerSecond=14, color=c3(120,200,80),  primaryShape="Ball",     sizeStuds=Vector3.new(3,3,3),   tagline="Avocado that hums." },
+	{ id="zibra",      displayName="Zibra Zibra",            rarity="Rare", baseIncomePerSecond=16, color=c3(240,240,240), primaryShape="Block",    sizeStuds=Vector3.new(4,3,5),   tagline="Stripes loading…" },
+
+	-- Epic
+	{ id="tunglur",    displayName="Tung Tung Tung Sahur",   rarity="Epic", baseIncomePerSecond=28, color=c3(80,60,40),    primaryShape="Cylinder", sizeStuds=Vector3.new(2,5,2),   tagline="Wood log. Holy stick." },
+	{ id="capucino",   displayName="Cappuccino Assassino",   rarity="Epic", baseIncomePerSecond=32, color=c3(110,70,40),   primaryShape="Cylinder", sizeStuds=Vector3.new(3,4,3),   tagline="Espresso, two katanas." },
+	{ id="ballerina",  displayName="Ballerina Cappuccina",   rarity="Epic", baseIncomePerSecond=36, color=c3(220,180,140), primaryShape="Block",    sizeStuds=Vector3.new(3,5,3),   tagline="Pirouette. Caffeinated." },
+	{ id="chimpanzini",displayName="Chimpanzini Bananini",   rarity="Epic", baseIncomePerSecond=40, color=c3(220,200,50),  primaryShape="Ball",     sizeStuds=Vector3.new(3,4,3),   tagline="Banana monkey. Trades stocks." },
+
+	-- Legendary
+	{ id="lirilarila", displayName="Lirili Larila Supremo",  rarity="Legendary", baseIncomePerSecond=75, color=c3(255,220,120), primaryShape="Wedge", sizeStuds=Vector3.new(5,4,5), tagline="Time bends for him." },
+	{ id="bombarmiro", displayName="Bombardino Lucertola",   rarity="Legendary", baseIncomePerSecond=90, color=c3(60,180,90),   primaryShape="Cylinder", sizeStuds=Vector3.new(5,3,5), tagline="Lizard bomber, Mach 9." },
+	{ id="orangutini", displayName="Orangutini Ananasini",   rarity="Legendary", baseIncomePerSecond=110, color=c3(255,160,40),  primaryShape="Ball",     sizeStuds=Vector3.new(4,5,4), tagline="Pineapple primate, listed on NYSE." },
+
+	-- Mythic (rare drops, big income)
+	{ id="trulimero",  displayName="Trulimero Trulicina",    rarity="Mythic", baseIncomePerSecond=180, color=c3(255,80,180),  primaryShape="Ball",     sizeStuds=Vector3.new(5,5,5), tagline="Fish-cat-deity. Don't ask." },
+	{ id="cocofanto",  displayName="Cocofanto Elefanto",     rarity="Mythic", baseIncomePerSecond=220, color=c3(120,80,40),   primaryShape="Block",    sizeStuds=Vector3.new(6,6,7), tagline="Coconut elephant. Heavy." },
+	{ id="lalilulalero",displayName="La Lila Lulu Lalero",   rarity="Mythic", baseIncomePerSecond=260, color=c3(180,80,255),  primaryShape="Cylinder", sizeStuds=Vector3.new(4,7,4), tagline="Skibidi's accountant." },
+
+	-- Outbreak (event-only, can be captured during Outbreak event)
+	{ id="patriarch",  displayName="Patriarchus Sigmus",     rarity="Outbreak", baseIncomePerSecond=500, color=c3(255,215,0),   primaryShape="Wedge", sizeStuds=Vector3.new(7,7,7), tagline="The original. The mind virus." },
+	{ id="apexor",     displayName="Apexor Brainrot",        rarity="Outbreak", baseIncomePerSecond=650, color=c3(255,0,120),   primaryShape="Ball",  sizeStuds=Vector3.new(7,7,7), tagline="Final form. Final boss." },
+
+	-- Additional content (v2 expansion — depth keeps players collecting)
+	{ id="garamaraman",   displayName="Garamaraman Garamamarinanara", rarity="Common",    baseIncomePerSecond=2.6, color=c3(80,200,200),  primaryShape="Ball",     sizeStuds=Vector3.new(3,3,3),   tagline="Says many words. Means none." },
+	{ id="trippitroppa",  displayName="Trippi Troppa Sigma",          rarity="Uncommon",  baseIncomePerSecond=5.5, color=c3(255,80,180),  primaryShape="Ball",     sizeStuds=Vector3.new(4,3,4),   tagline="Shrimp dad. Six pack abs." },
+	{ id="bobritini",     displayName="Bobritini Crocodilini",        rarity="Rare",      baseIncomePerSecond=18,  color=c3(50,140,80),   primaryShape="Cylinder", sizeStuds=Vector3.new(5,2,5),   tagline="Bob with teeth." },
+	{ id="brrbrrtim",     displayName="Brr Brr Tim Tim",              rarity="Rare",      baseIncomePerSecond=20,  color=c3(140,100,70),  primaryShape="Block",    sizeStuds=Vector3.new(4,4,3),   tagline="Two trees, one mission." },
+	{ id="trulilulilu",   displayName="Trulilu Lirili Lulilu",        rarity="Epic",      baseIncomePerSecond=44,  color=c3(220,140,255), primaryShape="Wedge",    sizeStuds=Vector3.new(4,5,4),   tagline="Forgets what time means." },
+	{ id="bombobambino",  displayName="Bombobambino Bambinello",      rarity="Epic",      baseIncomePerSecond=50,  color=c3(180,200,80),  primaryShape="Cylinder", sizeStuds=Vector3.new(3,3,3),   tagline="Tiny bombs. Big anger." },
+	{ id="cappuccinetto", displayName="Cappuccinetto Mezzanotte",     rarity="Legendary", baseIncomePerSecond=140, color=c3(60,30,20),    primaryShape="Cylinder", sizeStuds=Vector3.new(3,4,3),   tagline="Espresso at 3am. Unstoppable." },
+	{ id="frigocamelona", displayName="Frigo Camelona Suprema",       rarity="Legendary", baseIncomePerSecond=160, color=c3(255,255,255), primaryShape="Block",    sizeStuds=Vector3.new(5,6,5),   tagline="Holds the cold and the truth." },
+	{ id="balerinamamma", displayName="Ballerina Mamma Mia",          rarity="Mythic",    baseIncomePerSecond=320, color=c3(255,200,220), primaryShape="Block",    sizeStuds=Vector3.new(4,6,4),   tagline="Dances on dimensions." },
+	{ id="lalilelilu",    displayName="La Lili Le Li Lu",             rarity="Mythic",    baseIncomePerSecond=380, color=c3(180,0,255),   primaryShape="Cylinder", sizeStuds=Vector3.new(4,7,4),   tagline="Numbers became sounds, sounds became him." },
+
+	-- v3 expansion — five more species, one per main tier for depth
+	{ id="pipinino",   displayName="Pipinino Pipinone",      rarity="Common",    baseIncomePerSecond=2.1, color=c3(200,160,80),  primaryShape="Ball",     sizeStuds=Vector3.new(3,3,3), tagline="Pip pip pip pip pip." },
+	{ id="brarbar",    displayName="Brar Brar Lopop",        rarity="Uncommon",  baseIncomePerSecond=4.8, color=c3(100,200,180), primaryShape="Cylinder", sizeStuds=Vector3.new(3,3,3), tagline="A door with attitude." },
+	{ id="trentino",   displayName="Trentino Mentolino",     rarity="Rare",      baseIncomePerSecond=14,  color=c3(180,255,180), primaryShape="Block",    sizeStuds=Vector3.new(4,4,4), tagline="Refreshingly minty." },
+	{ id="bobini",     displayName="Bobini Crocco",          rarity="Epic",      baseIncomePerSecond=34,  color=c3(60,160,80),   primaryShape="Cylinder", sizeStuds=Vector3.new(5,2,5), tagline="Bob with a crocodile problem." },
+	{ id="supremo",    displayName="Supremo Brainrotissimo", rarity="Legendary", baseIncomePerSecond=125, color=c3(255,80,40),   primaryShape="Wedge",    sizeStuds=Vector3.new(5,5,5), tagline="Top of the chain. For now." },
+}
+
+local byId: { [string]: Types.BrainrotDefinition } = {}
+for _, def in ipairs(catalog) do
+	byId[def.id] = def
+end
+
+-- Rarity probability table for normal captures.
+local captureRollWeights: { [Types.Rarity]: number } = {
+	Common = 60,
+	Uncommon = 22,
+	Rare = 12,
+	Epic = 4.5,
+	Legendary = 1.3,
+	Mythic = 0.2,
+	Outbreak = 0,
+}
+
+-- Rarity probability table during Outbreak events (heavily skewed).
+local outbreakRollWeights: { [Types.Rarity]: number } = {
+	Common = 5,
+	Uncommon = 10,
+	Rare = 20,
+	Epic = 30,
+	Legendary = 22,
+	Mythic = 10,
+	Outbreak = 3,
+}
+
+local BrainrotData = {}
+
+function BrainrotData.GetAll(): { Types.BrainrotDefinition }
+	return catalog
+end
+
+function BrainrotData.Get(id: string): Types.BrainrotDefinition?
+	return byId[id]
+end
+
+function BrainrotData.RollSpecies(rng: Random, outbreak: boolean, luckyBias: number?): Types.BrainrotDefinition
+	local weights = if outbreak then outbreakRollWeights else captureRollWeights
+	local bias = luckyBias or 0
+
+	-- Lucky bias shifts weight from Common toward Mythic/Legendary by a fractional amount
+	local adjusted: { [Types.Rarity]: number } = table.clone(weights) :: any
+	if bias > 0 and not outbreak then
+		local steal = adjusted.Common * bias
+		adjusted.Common -= steal
+		adjusted.Legendary += steal * 0.5
+		adjusted.Mythic += steal * 0.3
+		adjusted.Epic += steal * 0.2
+	end
+
+	local total = 0
+	for _, w in pairs(adjusted) do total += w end
+	local pick = rng:NextNumber(0, total)
+	local cursor = 0
+	local chosenRarity: Types.Rarity = "Common"
+	for rarity, w in pairs(adjusted) do
+		cursor += w
+		if pick <= cursor then
+			chosenRarity = rarity
+			break
+		end
+	end
+
+	local pool: { Types.BrainrotDefinition } = {}
+	for _, def in ipairs(catalog) do
+		if def.rarity == chosenRarity then
+			table.insert(pool, def)
+		end
+	end
+
+	if #pool == 0 then
+		-- Fallback: any non-outbreak species
+		for _, def in ipairs(catalog) do
+			if def.rarity ~= "Outbreak" then
+				table.insert(pool, def)
+			end
+		end
+	end
+
+	return pool[rng:NextInteger(1, #pool)]
+end
+
+return BrainrotData
+]=])
+	ensurePath(root, "Config", "ModuleScript", [=[
+--!strict
+--[[
+	Config — single source of truth for tuning + monetization IDs.
+
+	After publishing your gamepasses and developer products in the Roblox
+	Creator Dashboard, paste their numeric IDs into the tables below. Leaving
+	zeros will cause MarketplaceService prompts to fail silently in Studio
+	(MonetizationService logs a warning so you can tell).
+]]
+
+local Config = {}
+
+-- ============================================================
+-- DEV / RELEASE TOGGLES
+-- ============================================================
+-- Bump this any time you ship a meaningful update — the new-update badge
+-- on PatchNotesUI pings any player whose last-seen version is older.
+Config.GAME_VERSION = "0.1.0"
+
+-- Set to false before publishing to slow mutations to a believable cadence.
+Config.FAST_TEST_MODE = false
+
+-- Use a separate DataStore key prefix while iterating so prod saves are safe.
+Config.DATASTORE_SCOPE = "BrainrotLab_v1"
+
+-- ============================================================
+-- ECONOMY
+-- ============================================================
+Config.STARTING_CASH = 500
+Config.STARTING_CAPACITY = 4 -- brainrot slots per plot at tier 0
+Config.CAPACITY_PER_REBIRTH = 2
+Config.REBIRTH_CASH_REQUIREMENT = function(rebirths: number): number
+	-- exponential cost curve
+	return math.floor(2500 * (2.4 ^ rebirths))
+end
+Config.REBIRTH_INCOME_MULT = function(rebirths: number): number
+	return 1 + rebirths * 0.35
+end
+
+-- Auto-collect interval (seconds) — owners gain cash without standing on plot
+Config.AUTO_COLLECT_INTERVAL = 4
+
+-- ============================================================
+-- MUTATION
+-- ============================================================
+-- Seconds between mutation rolls per brainrot. Lower = more spectacle.
+Config.MUTATION_INTERVAL = if Config.FAST_TEST_MODE then 8 else 90
+Config.MUTATION_MAX_TIER = 6 -- after T6 a brainrot is "Apex" and stops mutating
+Config.MUTATION_INCOME_MULT_PER_TIER = 0.6 -- +60% income per tier
+Config.MUTATION_GAMEPASS_SPEED_MULT = 2 -- 2x Mutation Speed gamepass effect
+Config.MUTATION_LUCKY_RARITY_BIAS = 0.35 -- Lucky Mutations gamepass — pushes toward rarer rolls
+
+-- ============================================================
+-- CAPTURE
+-- ============================================================
+Config.CAPTURE_COST = function(playerRebirths: number): number
+	return 50 + playerRebirths * 25
+end
+Config.CAPTURE_BASE_COUNT = 1
+Config.TRIPLE_CAPTURE_COUNT = 3 -- Triple Capture gamepass
+
+-- ============================================================
+-- PVP — STEAL
+-- ============================================================
+Config.STEAL_COOLDOWN = 120 -- per-victim per-attacker
+Config.STEAL_GRACE_PERIOD_AFTER_JOIN = 90 -- new joiners are safe for 90s
+Config.STEAL_MAX_TIER_DELTA = 2 -- can only steal brainrots within 2 tiers of your best
+Config.STEAL_DETECTION_RADIUS = 14 -- studs from any brainrot the attacker must be inside
+
+-- ============================================================
+-- PVP — INFECTION
+-- ============================================================
+Config.INFECTION_DEBUFF_DURATION = 180
+Config.INFECTION_INCOME_MULT = 0.4 -- victim earns 40% during debuff
+Config.INFECTION_BOMB_STARTER_COUNT = 1 -- new players get 1 free bomb
+Config.INFECTION_BOMB_DEVPRODUCT_COUNT = 5
+Config.INFECTION_SHIELD_GAMEPASS_REDUCTION = 0.7 -- 70% damage reduction on the multiplier penalty
+
+-- ============================================================
+-- OUTBREAK (server-wide event)
+-- ============================================================
+Config.OUTBREAK_INTERVAL = if Config.FAST_TEST_MODE then 60 else 1200 -- 20 min
+Config.OUTBREAK_DURATION = 180
+Config.OUTBREAK_SPAWN_COUNT = 8
+Config.OUTBREAK_RARE_BIAS = 0.7 -- bias toward Epic+
+
+-- ============================================================
+-- DAILY REWARDS (7-day cycle)
+-- ============================================================
+Config.DAILY_REWARDS = {
+	{ kind = "cash", amount = 250 },
+	{ kind = "cash", amount = 500 },
+	{ kind = "infection_bomb", amount = 1 },
+	{ kind = "cash", amount = 1000 },
+	{ kind = "rare_egg", amount = 1 },
+	{ kind = "cash", amount = 2500 },
+	{ kind = "cash", amount = 10000, premium_bonus = 5000 },
+}
+
+-- ============================================================
+-- MONETIZATION IDs  (replace 0s with real IDs after publishing)
+-- ============================================================
+Config.GAMEPASSES = {
+	MutationSpeed2x = { id = 0, price = 199, name = "2x Mutation Speed" },
+	Cash2x          = { id = 0, price = 249, name = "2x Cash" },
+	VIPLab          = { id = 0, price = 499, name = "VIP Lab" },
+	InfectionShield = { id = 0, price = 299, name = "Infection Shield" },
+	LuckyMutations  = { id = 0, price = 349, name = "Lucky Mutations" },
+	TripleCapture   = { id = 0, price = 399, name = "Triple Capture" },
+	RainbowTrail    = { id = 0, price = 149, name = "Rainbow Trail" }, -- cosmetic, high-margin whale slot
+	GoldenPlot      = { id = 0, price = 199, name = "Golden Plot" },   -- cosmetic floor + sign upgrade
+	PetLucky        = { id = 0, price = 299, name = "Pet Lucky" },     -- biases pet rolls toward Legendary/Mythical
+	DecorationPack  = { id = 0, price = 249, name = "Decoration Pack" }, -- unlocks premium-tier decorations
+}
+
+Config.DEV_PRODUCTS = {
+	-- Cash packs
+	CashSmall   = { id = 0, price = 49,  name = "Cash Pack: Small",   kind = "cash", amount = 1000 },
+	CashMedium  = { id = 0, price = 99,  name = "Cash Pack: Medium",  kind = "cash", amount = 3000 },
+	CashLarge   = { id = 0, price = 199, name = "Cash Pack: Large",   kind = "cash", amount = 7500 },
+	CashHuge    = { id = 0, price = 499, name = "Cash Pack: Huge",    kind = "cash", amount = 25000 },
+	CashTycoon  = { id = 0, price = 999, name = "Cash Pack: Tycoon",  kind = "cash", amount = 60000 },
+	-- Convenience
+	InstantMutation = { id = 0, price = 75,  name = "Instant Mutation", kind = "instant_mutation" },
+	SkipRebirth     = { id = 0, price = 99,  name = "Skip Rebirth",     kind = "skip_rebirth" },
+	RareBrainrotEgg = { id = 0, price = 149, name = "Rare Brainrot Egg", kind = "rare_egg" },
+	InfectionBomb5  = { id = 0, price = 89,  name = "Infection Bombs x5", kind = "infection_bomb", amount = 5 },
+	-- Battle pass (premium tier purchase)
+	BattlePassPremium = { id = 0, price = 999, name = "Premium Battle Pass", kind = "battle_pass" },
+	-- Pets (the high-ARPU mechanic)
+	PetEgg            = { id = 0, price = 99,  name = "Pet Egg",            kind = "pet_egg" },
+	PetEggGolden      = { id = 0, price = 399, name = "Golden Pet Egg (luckier)", kind = "pet_egg_lucky" },
+	-- Wheel
+	WheelSpinPack5    = { id = 0, price = 79,  name = "5 Wheel Spins",       kind = "wheel_spins", amount = 5 },
+	WheelSpinPack25   = { id = 0, price = 299, name = "25 Wheel Spins",      kind = "wheel_spins", amount = 25 },
+	-- Tips (developer support)
+	TipSmall          = { id = 0, price = 50,  name = "Tip the Dev (Small)", kind = "tip", amount = 50  },
+	TipMedium         = { id = 0, price = 200, name = "Tip the Dev",         kind = "tip", amount = 200 },
+	TipLarge          = { id = 0, price = 1000,name = "Tip the Dev (Mega)",  kind = "tip", amount = 1000},
+}
+
+-- ============================================================
+-- BATTLE PASS
+-- ============================================================
+Config.BATTLE_PASS_XP_PER_TIER = 1000
+Config.BATTLE_PASS_TIERS = 30
+Config.BATTLE_PASS_DURATION_DAYS = 14
+Config.BATTLE_PASS_XP_SOURCES = {
+	mutation = 25,
+	capture = 15,
+	steal = 75,
+	infection = 50,
+	outbreak_brainrot = 100,
+	rebirth = 500,
+}
+
+-- ============================================================
+-- ANTI-EXPLOIT / SOFT LIMITS
+-- ============================================================
+Config.MAX_INVENTORY_SIZE = 200
+Config.PURCHASE_LOG_RING_SIZE = 50
+
+-- ============================================================
+-- ADMIN
+-- ============================================================
+-- The experience owner (game.CreatorId) is admin by default. Add extra
+-- UserIds here to grant admin access without owning the experience.
+-- Owner-only commands stay locked to game.CreatorId.
+Config.ADMIN_USER_IDS = {} :: { number }
+
+-- ============================================================
+-- LAUNCH METADATA
+-- ============================================================
+-- Set this to os.time() at the moment you publish the experience.
+-- Players who join within LAUNCH_FOUNDER_WINDOW_DAYS get the Founder
+-- badge automatically. Leave at 0 to disable the founder award.
+Config.LAUNCH_TS = 0
+Config.LAUNCH_FOUNDER_WINDOW_DAYS = 14
+
+-- ============================================================
+-- COMMUNITY / GROUP REWARD
+-- ============================================================
+-- Replace with your real Roblox group id after creating one. A 0 disables
+-- the prompt and reward. Encourage players to join via the in-game banner;
+-- group members get a permanent income multiplier and you get a
+-- discoverable hub for announcements + Premium-eligible engagement.
+Config.GROUP_ID = 0
+Config.GROUP_REWARD_MULT = 1.25 -- +25% cash income for group members
+
+-- Optional Discord invite shown in the same banner. Leave nil to hide.
+Config.DISCORD_INVITE_URL = nil :: string?
+
+-- ============================================================
+-- CODE REDEMPTION (your marketing dial)
+-- ============================================================
+-- Codes are case-insensitive. Each code may be redeemed once per player.
+-- Use these in TikTok/Shorts/Reels videos to drive view-to-play conversion:
+--   "Redeem code TIKTOK1K for 1,000 free cash!"
+-- After release, just add more entries to this table and republish.
+type RedeemableReward = {
+	kind: string,
+	amount: number?,
+	expiresAt: number?, -- unix time; nil = no expiry
+	label: string?,
+}
+Config.REDEMPTION_CODES = {
+	LAUNCH        = { kind = "cash", amount = 2500, label = "Launch reward" },
+	BRAINROT      = { kind = "cash", amount = 1500, label = "Welcome to the lab" },
+	TIKTOK1K      = { kind = "cash", amount = 1000, label = "TikTok viewer reward" },
+	OUTBREAK      = { kind = "infection_bomb", amount = 3, label = "Outbreak survival kit" },
+	MUTATE        = { kind = "instant_mutation", amount = 1, label = "Free instant mutation" },
+	SIGMA         = { kind = "rare_egg", amount = 1, label = "Sigma seed" },
+} :: { [string]: RedeemableReward }
+
+return Config
+]=])
+	ensurePath(root, "DecorationData", "ModuleScript", [=[
+--!strict
+--[[
+	DecorationData — placeable cosmetic items players buy with cash and
+	put on their plot. Pure cosmetics; no income impact. Sold through the
+	Decoration Shop and a gamepass that unlocks the premium tier set.
+]]
+
+export type DecorationDefinition = {
+	id: string,
+	name: string,
+	cost: number,
+	premium: boolean, -- requires DecorationPack gamepass to purchase
+	primaryShape: "Ball" | "Block" | "Cylinder",
+	size: Vector3,
+	color: Color3,
+	material: Enum.Material,
+	effect: "None" | "Sparkle" | "Fire" | "Rainbow",
+}
+
+local function c3(r: number, g: number, b: number): Color3
+	return Color3.fromRGB(r, g, b)
+end
+
+local catalog: { DecorationDefinition } = {
+	-- Free tier
+	{ id="lamp",   name="Neon Lamp",       cost=500,   premium=false, primaryShape="Cylinder", size=Vector3.new(1.5,4,1.5),  color=c3(255,220,80),  material=Enum.Material.Neon,         effect="None" },
+	{ id="bench",  name="Lab Bench",       cost=750,   premium=false, primaryShape="Block",    size=Vector3.new(6,1.5,2),    color=c3(140,80,40),   material=Enum.Material.Wood,         effect="None" },
+	{ id="plant",  name="Sigma Plant",     cost=1000,  premium=false, primaryShape="Ball",     size=Vector3.new(3,4,3),      color=c3(60,180,80),   material=Enum.Material.Grass,        effect="None" },
+	{ id="speaker",name="Bass Cannon",     cost=1500,  premium=false, primaryShape="Cylinder", size=Vector3.new(2,3,2),      color=c3(40,40,55),    material=Enum.Material.Metal,        effect="None" },
+	{ id="trophy", name="Tycoon Trophy",   cost=3000,  premium=false, primaryShape="Block",    size=Vector3.new(2,4,2),      color=c3(255,215,80),  material=Enum.Material.Neon,         effect="Sparkle" },
+	-- Premium tier (requires DecorationPack gamepass)
+	{ id="fountain", name="Cash Fountain", cost=10000, premium=true,  primaryShape="Cylinder", size=Vector3.new(5,4,5),      color=c3(80,180,255),  material=Enum.Material.Neon,         effect="Sparkle" },
+	{ id="brazier",  name="Apex Brazier",  cost=15000, premium=true,  primaryShape="Cylinder", size=Vector3.new(3,5,3),      color=c3(255,80,40),   material=Enum.Material.Neon,         effect="Fire" },
+	{ id="orb",      name="Rainbow Orb",   cost=20000, premium=true,  primaryShape="Ball",     size=Vector3.new(4,4,4),      color=c3(255,255,255), material=Enum.Material.ForceField,   effect="Rainbow" },
+}
+
+local byId: { [string]: DecorationDefinition } = {}
+for _, d in ipairs(catalog) do byId[d.id] = d end
+
+local module = {}
+function module.GetAll(): { DecorationDefinition } return catalog end
+function module.Get(id: string): DecorationDefinition? return byId[id] end
+return module
+]=])
+	ensurePath(root, "LocalizationService", "ModuleScript", [=[
+--!strict
+--[[
+	LocalizationService — string-key lookup with per-locale tables.
+	Roblox provides `LocalizationService:GetCountryRegionForPlayerAsync` and
+	`Player.LocaleId`, which we map to a locale code (en, es, pt, fr).
+
+	UI calls `Loc(key)` instead of hardcoding text. Untranslated keys fall
+	back to English. Roblox's auto-translator handles dynamic content; this
+	is for the static UI chrome and the launch CTAs that drive conversion.
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalizationService = {}
+
+type LocaleTable = { [string]: string }
+
+local strings: { [string]: LocaleTable } = {
+	en = {
+		-- HUD
+		hud_cash = "%s cash",
+		hud_rebirth = "Rebirth %d (need %s)",
+		hud_infected = "INFECTED · %ds · 🦠",
+		hud_bombs = "💣 %d bombs",
+		-- Buttons
+		btn_capture = "🎲 CAPTURE",
+		btn_steal = "🥷 STEAL\nnearest",
+		btn_infect = "💣 INFECT\nnearest",
+		btn_rebirth = "REBIRTH",
+		btn_redeem = "REDEEM",
+		btn_claim = "CLAIM",
+		btn_done = "✓ DONE",
+		btn_locked = "LOCKED",
+		-- Shop tabs
+		tab_shop = "🛒 Shop",
+		tab_inventory = "🧠 Lab",
+		tab_quests = "📋 Quests",
+		tab_achievements = "🏅 Goals",
+		tab_trade = "🤝 Trade",
+		tab_codes = "🎟 Codes",
+		tab_daily = "🎁 Daily",
+		tab_pass = "🎖 Pass",
+		tab_global = "🌍 Global",
+		tab_leaderboard = "🏆 Top",
+		-- Toasts
+		toast_invalid_code = "Invalid code: %s",
+		toast_code_expired = "Code expired: %s",
+		toast_already_claimed = "Already claimed today.",
+		toast_inventory_full = "Inventory full — sell some brainrots first.",
+		toast_grace = "Target is in grace period.",
+		toast_cooldown = "Cooldown: %ds",
+	},
+	es = {
+		hud_cash = "%s monedas",
+		hud_rebirth = "Renacimiento %d (necesitas %s)",
+		hud_infected = "INFECTADO · %ds · 🦠",
+		hud_bombs = "💣 %d bombas",
+		btn_capture = "🎲 CAPTURAR",
+		btn_steal = "🥷 ROBAR\ncercano",
+		btn_infect = "💣 INFECTAR\ncercano",
+		btn_rebirth = "RENACER",
+		btn_redeem = "CANJEAR",
+		btn_claim = "RECLAMAR",
+		btn_done = "✓ HECHO",
+		btn_locked = "BLOQUEADO",
+		tab_shop = "🛒 Tienda",
+		tab_inventory = "🧠 Lab",
+		tab_quests = "📋 Misiones",
+		tab_achievements = "🏅 Logros",
+		tab_trade = "🤝 Intercambio",
+		tab_codes = "🎟 Códigos",
+		tab_daily = "🎁 Diario",
+		tab_pass = "🎖 Pase",
+		tab_global = "🌍 Global",
+		tab_leaderboard = "🏆 Top",
+		toast_invalid_code = "Código inválido: %s",
+		toast_code_expired = "Código expirado: %s",
+		toast_already_claimed = "Ya reclamado hoy.",
+		toast_inventory_full = "Inventario lleno — vende algunos brainrots primero.",
+		toast_grace = "Objetivo en periodo de protección.",
+		toast_cooldown = "Espera: %ds",
+	},
+	pt = {
+		hud_cash = "%s dinheiro",
+		hud_rebirth = "Renascimento %d (precisa %s)",
+		hud_infected = "INFECTADO · %ds · 🦠",
+		hud_bombs = "💣 %d bombas",
+		btn_capture = "🎲 CAPTURAR",
+		btn_steal = "🥷 ROUBAR\nperto",
+		btn_infect = "💣 INFECTAR\nperto",
+		btn_rebirth = "RENASCER",
+		btn_redeem = "RESGATAR",
+		btn_claim = "RECLAMAR",
+		btn_done = "✓ FEITO",
+		btn_locked = "BLOQUEADO",
+		tab_shop = "🛒 Loja",
+		tab_inventory = "🧠 Lab",
+		tab_quests = "📋 Missões",
+		tab_achievements = "🏅 Conquistas",
+		tab_trade = "🤝 Troca",
+		tab_codes = "🎟 Códigos",
+		tab_daily = "🎁 Diário",
+		tab_pass = "🎖 Passe",
+		tab_global = "🌍 Global",
+		tab_leaderboard = "🏆 Top",
+		toast_invalid_code = "Código inválido: %s",
+		toast_code_expired = "Código expirado: %s",
+		toast_already_claimed = "Já resgatado hoje.",
+		toast_inventory_full = "Inventário cheio — venda alguns brainrots primeiro.",
+		toast_grace = "Alvo em período de proteção.",
+		toast_cooldown = "Espera: %ds",
+	},
+}
+
+local function detectLocale(): string
+	if RunService:IsServer() then return "en" end
+	local lp = Players.LocalPlayer
+	if not lp then return "en" end
+	local code = string.lower(string.sub(lp.LocaleId or "en", 1, 2))
+	if strings[code] then return code end
+	return "en"
+end
+
+local clientLocale: string? = nil
+
+function LocalizationService.Get(key: string, ...): string
+	local locale = clientLocale or detectLocale()
+	clientLocale = locale
+	local table_ = strings[locale] or strings.en
+	local template = table_[key] or strings.en[key] or key
+	local args = { ... }
+	if #args > 0 then
+		local ok, formatted = pcall(string.format, template, ...)
+		if ok then return formatted end
+	end
+	return template
+end
+
+function LocalizationService.SetLocale(code: string)
+	clientLocale = code
+end
+
+return LocalizationService
+]=])
+	ensurePath(root, "Log", "ModuleScript", [[
+--!strict
+
+local RunService = game:GetService("RunService")
+
+local Log = {}
+
+local LEVELS = { DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4 }
+local LEVEL_NAMES = { "DEBUG", "INFO", "WARN", "ERROR" }
+local activeLevel = if RunService:IsStudio() then LEVELS.DEBUG else LEVELS.INFO
+
+local function format(level: number, scope: string, msg: string): string
+	return string.format("[%s][%s] %s", LEVEL_NAMES[level], scope, msg)
+end
+
+function Log.SetLevel(level: number)
+	activeLevel = level
+end
+
+function Log.Debug(scope: string, msg: string, ...)
+	if activeLevel > LEVELS.DEBUG then return end
+	if select("#", ...) > 0 then msg = string.format(msg, ...) end
+	print(format(LEVELS.DEBUG, scope, msg))
+end
+
+function Log.Info(scope: string, msg: string, ...)
+	if activeLevel > LEVELS.INFO then return end
+	if select("#", ...) > 0 then msg = string.format(msg, ...) end
+	print(format(LEVELS.INFO, scope, msg))
+end
+
+function Log.Warn(scope: string, msg: string, ...)
+	if activeLevel > LEVELS.WARN then return end
+	if select("#", ...) > 0 then msg = string.format(msg, ...) end
+	warn(format(LEVELS.WARN, scope, msg))
+end
+
+function Log.Error(scope: string, msg: string, ...)
+	if select("#", ...) > 0 then msg = string.format(msg, ...) end
+	warn(format(LEVELS.ERROR, scope, msg))
+end
+
+Log.LEVELS = LEVELS
+
+return Log
+]])
+	ensurePath(root, "MutationData", "ModuleScript", [=[
+--!strict
+--[[
+	MutationData — the table of possible mutations a brainrot can acquire.
+	Each tier roll picks ONE mutation from this list (weighted) and appends
+	it to the brainrot's mutation chain.
+
+	The visual stack is additive: tier 3 brainrot has 3 mutations applied,
+	colors blend, scale multiplies, effects layer. This is the "screenshot
+	bait" — every plot ends up unique.
+]]
+
+local Types = require(script.Parent.Types)
+
+local function c3(r: number, g: number, b: number): Color3
+	return Color3.fromRGB(r, g, b)
+end
+
+local mutations: { Types.Mutation } = {
+	{ id="sigma",     displayName="Sigma",     suffix="Sigma",     rarityWeight=40, colorShift=c3(255,215,0),  scaleMult=1.05, incomeMult=1.15, effect="Sparkle" },
+	{ id="skibidi",   displayName="Skibidi",   suffix="Skibidi",   rarityWeight=35, colorShift=c3(100,180,255),scaleMult=1.10, incomeMult=1.20, effect="Smoke" },
+	{ id="ohio",      displayName="Ohio",      suffix="from Ohio", rarityWeight=30, colorShift=c3(120,60,160), scaleMult=1.08, incomeMult=1.25, effect="Glitch" },
+	{ id="gyatt",     displayName="Gyatt",     suffix="Gyatt",     rarityWeight=28, colorShift=c3(255,120,150),scaleMult=1.20, incomeMult=1.10, effect="Sparkle" },
+	{ id="rizzler",   displayName="Rizzler",   suffix="Rizzler",   rarityWeight=22, colorShift=c3(255,80,200), scaleMult=1.05, incomeMult=1.40, effect="Rainbow" },
+	{ id="cursed",    displayName="Cursed",    suffix="Cursed",    rarityWeight=14, colorShift=c3(40,0,60),    scaleMult=1.12, incomeMult=1.55, effect="Smoke" },
+	{ id="glitched",  displayName="Glitched",  suffix="Glitched",  rarityWeight=10, colorShift=c3(0,255,180),  scaleMult=1.00, incomeMult=1.80, effect="Glitch" },
+	{ id="celestial", displayName="Celestial", suffix="Celestial", rarityWeight=5,  colorShift=c3(255,255,255),scaleMult=1.25, incomeMult=2.20, effect="Rainbow" },
+	{ id="apex",      displayName="Apex",      suffix="Apex",      rarityWeight=1.5,colorShift=c3(255,0,0),    scaleMult=1.35, incomeMult=3.00, effect="Fire" },
+}
+
+local MutationData = {}
+
+function MutationData.GetAll(): { Types.Mutation }
+	return mutations
+end
+
+function MutationData.RollMutation(rng: Random, luckyBias: number?): Types.Mutation
+	local bias = luckyBias or 0
+	local total = 0
+	for _, m in ipairs(mutations) do
+		-- Lucky bias slightly inverts the weight to favor rarer mutations
+		local w = m.rarityWeight
+		if bias > 0 and w < 15 then
+			w = w * (1 + bias)
+		elseif bias > 0 and w > 25 then
+			w = w * (1 - bias * 0.4)
+		end
+		total += w
+	end
+	local pick = rng:NextNumber(0, total)
+	local cursor = 0
+	for _, m in ipairs(mutations) do
+		local w = m.rarityWeight
+		if bias > 0 and w < 15 then
+			w = w * (1 + bias)
+		elseif bias > 0 and w > 25 then
+			w = w * (1 - bias * 0.4)
+		end
+		cursor += w
+		if pick <= cursor then
+			return m
+		end
+	end
+	return mutations[1]
+end
+
+function MutationData.Get(id: string): Types.Mutation?
+	for _, m in ipairs(mutations) do
+		if m.id == id then return m end
+	end
+	return nil
+end
+
+return MutationData
+]=])
+	ensurePath(root, "PatchNotes", "ModuleScript", [=[
+--!strict
+--[[
+	PatchNotes — chronological release notes shown in-game. Add an entry
+	whenever you bump Config.GAME_VERSION. Players whose lastSeenVersion
+	doesn't match the latest get a glowing badge on the PatchNotes tab
+	until they open it.
+]]
+
+export type PatchEntry = {
+	version: string,
+	date: string,
+	title: string,
+	highlights: { string },
+}
+
+local PatchNotes: { PatchEntry } = {
+	{
+		version = "0.1.0",
+		date = "2026-05-25",
+		title = "BRAINROT LAB — Opening Week",
+		highlights = {
+			"33 brainrots across Common → Outbreak rarity",
+			"Live mutation system with 6 tiers + 9 mutation suffixes",
+			"Steal + Infection PvP mechanics",
+			"30-tier Battle Pass, daily quests, achievements",
+			"Server-wide Outbreak (20 min) + Mega Boss (45 min) events",
+			"Cross-server weekly leaderboards",
+			"Trade system with cash add-ons",
+			"Pet companions, collectible buffs",
+			"Player levels + level reward chests",
+			"Seasonal limited-time brainrots (rotates every 2 weeks)",
+			"ES + PT localization",
+		},
+	},
+}
+
+local module = {}
+
+function module.GetAll(): { PatchEntry }
+	return PatchNotes
+end
+
+function module.Latest(): PatchEntry
+	return PatchNotes[#PatchNotes]
+end
+
+return module
+]=])
+	ensurePath(root, "PetData", "ModuleScript", [=[
+--!strict
+--[[
+	PetData — pet companions. Each pet:
+	  * Floats next to the player when equipped
+	  * Provides a passive buff (cash mult, mutation speed, etc.)
+	  * Has a rarity-tier visual
+
+	Pets are intentionally separate from brainrots so they constitute a
+	second collection dimension (= second grind motivation = second egg
+	dev-product slot). Players collect pets AND brainrots.
+]]
+
+export type PetRarity = "Basic" | "Premium" | "Legendary" | "Mythical"
+
+export type PetDefinition = {
+	id: string,
+	name: string,
+	rarity: PetRarity,
+	color: Color3,
+	buffKind: string, -- "cashMult" | "mutationSpeed" | "captureLuck" | "infectionPower"
+	buffValue: number, -- e.g. 1.10 = +10%
+	tagline: string,
+}
+
+local function c3(r: number, g: number, b: number): Color3
+	return Color3.fromRGB(r, g, b)
+end
+
+local catalog: { PetDefinition } = {
+	{ id="pup",     name="Sigma Pup",       rarity="Basic",    color=c3(180,180,180), buffKind="cashMult",       buffValue=1.05, tagline="+5% cash" },
+	{ id="kit",     name="Brainrot Kit",    rarity="Basic",    color=c3(220,160,80),  buffKind="captureLuck",    buffValue=0.10, tagline="+10% lucky" },
+	{ id="dragon",  name="Mini Dragon",     rarity="Premium",  color=c3(255,80,80),   buffKind="cashMult",       buffValue=1.15, tagline="+15% cash" },
+	{ id="ghost",   name="Lab Ghost",       rarity="Premium",  color=c3(220,220,255), buffKind="mutationSpeed",  buffValue=1.20, tagline="+20% mutation speed" },
+	{ id="phoenix", name="Phoenix Sigma",   rarity="Legendary",color=c3(255,140,60),  buffKind="cashMult",       buffValue=1.35, tagline="+35% cash" },
+	{ id="wyrm",    name="Outbreak Wyrm",   rarity="Legendary",color=c3(120,255,140), buffKind="infectionPower", buffValue=1.50, tagline="+50% infection damage" },
+	{ id="apex",    name="Apex Familiar",   rarity="Mythical", color=c3(255,0,200),   buffKind="cashMult",       buffValue=1.75, tagline="+75% cash" },
+	{ id="celest",  name="Celestial Eye",   rarity="Mythical", color=c3(255,255,255), buffKind="mutationSpeed",  buffValue=1.60, tagline="+60% mutation speed" },
+}
+
+local byId: { [string]: PetDefinition } = {}
+for _, d in ipairs(catalog) do byId[d.id] = d end
+
+local rollWeights: { [PetRarity]: number } = {
+	Basic = 60,
+	Premium = 28,
+	Legendary = 10,
+	Mythical = 2,
+}
+
+local module = {}
+
+function module.GetAll(): { PetDefinition }
+	return catalog
+end
+
+function module.Get(id: string): PetDefinition?
+	return byId[id]
+end
+
+function module.Roll(rng: Random, luckyBias: number?): PetDefinition
+	local bias = luckyBias or 0
+	local adjusted = table.clone(rollWeights) :: any
+	if bias > 0 then
+		local steal = adjusted.Basic * bias
+		adjusted.Basic -= steal
+		adjusted.Legendary += steal * 0.6
+		adjusted.Mythical += steal * 0.4
+	end
+	local total = 0
+	for _, w in pairs(adjusted) do total += w end
+	local pick = rng:NextNumber(0, total)
+	local cursor = 0
+	local chosen: PetRarity = "Basic"
+	for r, w in pairs(adjusted) do
+		cursor += w
+		if pick <= cursor then chosen = r; break end
+	end
+	local pool: { PetDefinition } = {}
+	for _, d in ipairs(catalog) do
+		if d.rarity == chosen then table.insert(pool, d) end
+	end
+	return pool[rng:NextInteger(1, #pool)]
+end
+
+return module
+]=])
+	ensurePath(root, "Remotes", "ModuleScript", [=[
+--!strict
+--[[
+	Remotes — central registry. Server creates instances on first access,
+	client just reads them. Avoids stringly-typed lookups scattered across
+	the codebase.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local RemoteNames = {
+	-- Events (fire-and-forget)
+	Notify = "Notify",                -- server -> client (toasts)
+	HudUpdate = "HudUpdate",          -- server -> client (cash, rebirth, multipliers)
+	InventoryUpdate = "InventoryUpdate",
+	OutbreakUpdate = "OutbreakUpdate",
+	BattlePassUpdate = "BattlePassUpdate",
+	DailyRewardUpdate = "DailyRewardUpdate",
+	LeaderboardUpdate = "LeaderboardUpdate",
+	AchievementUpdate = "AchievementUpdate",
+	QuestUpdate = "QuestUpdate",
+	TradeInvite = "TradeInvite",
+	TradeUpdate = "TradeUpdate",
+	GlobalLeaderboardUpdate = "GlobalLeaderboardUpdate",
+	BossUpdate = "BossUpdate",
+	AnnouncementShow = "AnnouncementShow",
+	PetUpdate = "PetUpdate",
+	LevelUpdate = "LevelUpdate",
+	SeasonUpdate = "SeasonUpdate",
+	DecorationUpdate = "DecorationUpdate",
+	InviteUpdate = "InviteUpdate",
+	WelcomeOffer = "WelcomeOffer",
+	Spectate = "Spectate",
+	WheelUpdate = "WheelUpdate",
+	WheelSpinResult = "WheelSpinResult",
+	EventUpdate = "EventUpdate",
+	Cinematic = "Cinematic",
+	AutoSellUpdate = "AutoSellUpdate",
+	DailyDeal = "DailyDeal",
+	PlayInfectionAnim = "PlayInfectionAnim",
+
+	-- Client -> server actions
+	RequestCapture = "RequestCapture",
+	RequestPlaceBrainrot = "RequestPlaceBrainrot",
+	RequestUnplaceBrainrot = "RequestUnplaceBrainrot",
+	RequestSellBrainrot = "RequestSellBrainrot",
+	RequestRebirth = "RequestRebirth",
+	RequestSteal = "RequestSteal",
+	RequestInfect = "RequestInfect",
+	RequestClaimDaily = "RequestClaimDaily",
+	RequestClaimBattlePassTier = "RequestClaimBattlePassTier",
+	RequestPromptPurchase = "RequestPromptPurchase",
+	RequestRedeemCode = "RequestRedeemCode",
+	RequestRecheckGroup = "RequestRecheckGroup",
+	RequestClaimAchievement = "RequestClaimAchievement",
+	RequestClaimQuest = "RequestClaimQuest",
+	RequestTradeInvite = "RequestTradeInvite",
+	RequestTradeAccept = "RequestTradeAccept",
+	RequestTradeDecline = "RequestTradeDecline",
+	RequestTradeAddBrainrot = "RequestTradeAddBrainrot",
+	RequestTradeRemoveBrainrot = "RequestTradeRemoveBrainrot",
+	RequestTradeSetCash = "RequestTradeSetCash",
+	RequestTradeConfirm = "RequestTradeConfirm",
+	RequestTradeCancel = "RequestTradeCancel",
+	RequestEquipPet = "RequestEquipPet",
+	RequestUnequipPet = "RequestUnequipPet",
+	RequestClaimLevelReward = "RequestClaimLevelReward",
+	RequestBuyDecoration = "RequestBuyDecoration",
+	RequestSellDecoration = "RequestSellDecoration",
+	RequestRedeemInvite = "RequestRedeemInvite",
+	RequestWheelSpin = "RequestWheelSpin",
+	RequestSocialInvite = "RequestSocialInvite",
+	RequestSetAutoSell = "RequestSetAutoSell",
+	RequestFuse = "RequestFuse",
+	RequestRerollMutation = "RequestRerollMutation",
+}
+
+local Remotes = {}
+
+local folder: Folder
+
+local function ensureFolder(): Folder
+	if folder and folder.Parent then return folder end
+	if RunService:IsServer() then
+		local existing = ReplicatedStorage:FindFirstChild("Remotes")
+		if existing then
+			folder = existing :: Folder
+		else
+			folder = Instance.new("Folder")
+			folder.Name = "Remotes"
+			folder.Parent = ReplicatedStorage
+		end
+	else
+		folder = ReplicatedStorage:WaitForChild("Remotes") :: Folder
+	end
+	return folder
+end
+
+function Remotes.Event(name: string): RemoteEvent
+	local f = ensureFolder()
+	if RunService:IsServer() then
+		local r = f:FindFirstChild(name)
+		if r then return r :: RemoteEvent end
+		local ev = Instance.new("RemoteEvent")
+		ev.Name = name
+		ev.Parent = f
+		return ev
+	end
+	return f:WaitForChild(name) :: RemoteEvent
+end
+
+function Remotes.Function(name: string): RemoteFunction
+	local f = ensureFolder()
+	if RunService:IsServer() then
+		local r = f:FindFirstChild(name)
+		if r then return r :: RemoteFunction end
+		local fn = Instance.new("RemoteFunction")
+		fn.Name = name
+		fn.Parent = f
+		return fn
+	end
+	return f:WaitForChild(name) :: RemoteFunction
+end
+
+-- Eagerly create all remotes on the server so clients don't race.
+function Remotes.InitServer()
+	assert(RunService:IsServer(), "InitServer called on client")
+	for _, n in pairs(RemoteNames) do
+		Remotes.Event(n)
+	end
+end
+
+Remotes.Names = RemoteNames
+
+return Remotes
+]=])
+	ensurePath(root, "Types", "ModuleScript", [=[
+--!strict
+--[[
+	Shared type definitions. Used by both server and client modules.
+]]
+
+export type Rarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary" | "Mythic" | "Outbreak"
+
+export type BrainrotDefinition = {
+	id: string,
+	displayName: string,
+	rarity: Rarity,
+	baseIncomePerSecond: number,
+	color: Color3,
+	primaryShape: "Ball" | "Block" | "Cylinder" | "Wedge",
+	sizeStuds: Vector3,
+	soundAssetId: string?, -- optional meme audio
+	tagline: string,
+}
+
+export type Mutation = {
+	id: string,
+	displayName: string,
+	suffix: string, -- e.g. "Glitched", "Sigma", "Cursed"
+	rarityWeight: number, -- higher = more common
+	colorShift: Color3?, -- if set, tints the brainrot
+	scaleMult: number,
+	incomeMult: number, -- multiplicative bonus stacked on tier bonus
+	effect: "None" | "Sparkle" | "Fire" | "Glitch" | "Rainbow" | "Smoke",
+}
+
+export type OwnedBrainrot = {
+	uid: string, -- unique per brainrot
+	speciesId: string,
+	mutationTier: number, -- 0..MUTATION_MAX_TIER
+	mutations: { string }, -- mutation ids applied (length = mutationTier)
+	bornAt: number, -- os.time() when captured
+	lastMutationAt: number, -- os.time() of last successful roll
+	placed: boolean, -- on this player's plot?
+	slotIndex: number?, -- if placed, which slot
+}
+
+export type PlayerProfileData = {
+	cash: number,
+	rebirths: number,
+	inventory: { OwnedBrainrot },
+	infectionBombs: number,
+	infectedUntil: number, -- os.time() — 0 if not infected
+	plotId: number?, -- assigned at runtime, not persisted across sessions
+	gamepasses: { [string]: boolean },
+	battlePass: {
+		xp: number,
+		tier: number,
+		claimed: { [string]: boolean }, -- claimed tier rewards keyed by tier index
+		premium: boolean,
+		seasonId: string,
+	},
+	dailyReward: {
+		lastClaimDay: number, -- os.time()/86400 floor
+		streak: number,
+	},
+	stats: {
+		totalCaptured: number,
+		totalMutations: number,
+		totalSteals: number,
+		totalInfections: number,
+		totalCashEarned: number,
+	},
+	createdAt: number,
+}
+
+export type StealRecord = {
+	attacker: string, -- userId as string
+	victim: string,
+	brainrotUid: string,
+	at: number,
+}
+
+return {}
+]=])
+	ensurePath(root, "Util", "ModuleScript", [=[
+--!strict
+--[[
+	Util — tiny shared helpers.
+]]
+
+local Util = {}
+
+function Util.GenerateUid(): string
+	-- 12-char base36-ish id, enough for inventory uniqueness
+	local chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	local buf = table.create(12)
+	for i = 1, 12 do
+		local idx = math.random(1, #chars)
+		buf[i] = string.sub(chars, idx, idx)
+	end
+	return table.concat(buf)
+end
+
+function Util.DeepCopy<T>(value: T): T
+	if type(value) ~= "table" then
+		return value
+	end
+	local out = {}
+	for k, v in pairs(value :: any) do
+		out[k] = Util.DeepCopy(v)
+	end
+	return out :: any
+end
+
+function Util.FormatShortNumber(n: number): string
+	local abs = math.abs(n)
+	if abs >= 1e12 then return string.format("%.2fT", n / 1e12) end
+	if abs >= 1e9 then return string.format("%.2fB", n / 1e9) end
+	if abs >= 1e6 then return string.format("%.2fM", n / 1e6) end
+	if abs >= 1e3 then return string.format("%.1fK", n / 1e3) end
+	return tostring(math.floor(n))
+end
+
+function Util.SecondsToClock(s: number): string
+	s = math.max(0, math.floor(s))
+	local h = math.floor(s / 3600)
+	local m = math.floor((s % 3600) / 60)
+	local sec = s % 60
+	if h > 0 then
+		return string.format("%d:%02d:%02d", h, m, sec)
+	end
+	return string.format("%d:%02d", m, sec)
+end
+
+function Util.DayIndex(t: number?): number
+	return math.floor((t or os.time()) / 86400)
+end
+
+return Util
+]=])
+end
+
+do  -- ReplicatedStorage/Assets
+	local container = resolveContainer("ReplicatedStorage")
+	local root = ensureFolder(container, "Assets")
+end
+
+do  -- ServerScriptService/Server
+	local container = resolveContainer("ServerScriptService")
+	local root = ensureRootScript(container, "Server", "Script", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared  = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+Remotes.InitServer()
+
+local AntiCheat               = require(script.AntiCheat)
+local DataService             = require(script.DataService)
+local EconomyService          = require(script.EconomyService)
+local LabService              = require(script.LabService)
+local CaptureService          = require(script.CaptureService)
+local MutationService         = require(script.MutationService)
+local StealService            = require(script.StealService)
+local InfectionService        = require(script.InfectionService)
+local OutbreakService         = require(script.OutbreakService)
+local MonetizationService     = require(script.MonetizationService)
+local BattlePassService       = require(script.BattlePassService)
+local DailyRewardService      = require(script.DailyRewardService)
+local LeaderboardService      = require(script.LeaderboardService)
+local AnalyticsService        = require(script.AnalyticsService)
+local CodeService             = require(script.CodeService)
+local GroupRewardService      = require(script.GroupRewardService)
+local TrailService            = require(script.TrailService)
+local AchievementService      = require(script.AchievementService)
+local QuestService            = require(script.QuestService)
+local TradeService            = require(script.TradeService)
+local BadgeService            = require(script.BadgeService)
+local GlobalLeaderboardService= require(script.GlobalLeaderboardService)
+local AfkService              = require(script.AfkService)
+local BossEventService        = require(script.BossEventService)
+local AnnouncementService     = require(script.AnnouncementService)
+local PetService              = require(script.PetService)
+local PlayerLevelService      = require(script.PlayerLevelService)
+local SeasonService           = require(script.SeasonService)
+local DecorationService       = require(script.DecorationService)
+local InviteService           = require(script.InviteService)
+local WebhookService          = require(script.WebhookService)
+local AdminService            = require(script.AdminService)
+local OfflineCashService      = require(script.OfflineCashService)
+local WelcomeOfferService     = require(script.WelcomeOfferService)
+local LuckyWheelService       = require(script.LuckyWheelService)
+local SocialInviteService     = require(script.SocialInviteService)
+local HotStreakService        = require(script.HotStreakService)
+local PresenceService         = require(script.PresenceService)
+local EventService            = require(script.EventService)
+local CinematicService        = require(script.CinematicService)
+local MilestoneAnnounceService= require(script.MilestoneAnnounceService)
+local VipServerService        = require(script.VipServerService)
+local AutoSellService         = require(script.AutoSellService)
+local PerformanceService      = require(script.PerformanceService)
+local CrossServerShoutService = require(script.CrossServerShoutService)
+local FusionService           = require(script.FusionService)
+local TopOfHourService        = require(script.TopOfHourService)
+local DailyDealService        = require(script.DailyDealService)
+local LoginStreakService      = require(script.LoginStreakService)
+local HealthCheckService      = require(script.HealthCheckService)
+local GraceShutdownService    = require(script.GraceShutdownService)
+local FirstSessionService     = require(script.FirstSessionService)
+local MutationRerollService   = require(script.MutationRerollService)
+local BuffService             = require(script.BuffService)
+local MythicCelebrationService = require(script.MythicCelebrationService)
+
+-- Boot order is significant: persistence first, content domain next,
+-- monetization and observability last so they can observe domain state.
+local bootOrder = {
+	{ "AntiCheat",            AntiCheat.Init             },
+	{ "DataService",          DataService.Init           },
+	{ "EconomyService",       EconomyService.Init        },
+	{ "LabService",           LabService.Init            },
+	{ "CaptureService",       CaptureService.Init        },
+	{ "BattlePassService",    BattlePassService.Init     },
+	{ "DailyRewardService",   DailyRewardService.Init    },
+	{ "PetService",           PetService.Init            },
+	{ "MutationService",      MutationService.Init       },
+	{ "InfectionService",     InfectionService.Init      },
+	{ "StealService",         StealService.Init          },
+	{ "OutbreakService",      OutbreakService.Init       },
+	{ "BossEventService",     BossEventService.Init      },
+	{ "MonetizationService",  MonetizationService.Init   },
+	{ "LeaderboardService",   LeaderboardService.Init    },
+	{ "GlobalLeaderboardService", GlobalLeaderboardService.Init },
+	{ "AnalyticsService",     AnalyticsService.Init      },
+	{ "CodeService",          CodeService.Init           },
+	{ "GroupRewardService",   GroupRewardService.Init    },
+	{ "TrailService",         TrailService.Init          },
+	{ "AchievementService",   AchievementService.Init    },
+	{ "QuestService",         QuestService.Init          },
+	{ "TradeService",         TradeService.Init          },
+	{ "BadgeService",         BadgeService.Init          },
+	{ "AfkService",           AfkService.Init            },
+	{ "AnnouncementService",  AnnouncementService.Init   },
+	{ "PlayerLevelService",   PlayerLevelService.Init    },
+	{ "SeasonService",        SeasonService.Init         },
+	{ "DecorationService",    DecorationService.Init     },
+	{ "InviteService",        InviteService.Init         },
+	{ "WebhookService",       WebhookService.Init        },
+	{ "AdminService",         AdminService.Init          },
+	{ "OfflineCashService",   OfflineCashService.Init    },
+	{ "WelcomeOfferService",  WelcomeOfferService.Init   },
+	{ "LuckyWheelService",    LuckyWheelService.Init     },
+	{ "SocialInviteService",  SocialInviteService.Init   },
+	{ "HotStreakService",     HotStreakService.Init      },
+	{ "PresenceService",      PresenceService.Init       },
+	{ "EventService",         EventService.Init          },
+	{ "CinematicService",     CinematicService.Init      },
+	{ "MilestoneAnnounceService", MilestoneAnnounceService.Init },
+	{ "VipServerService",     VipServerService.Init      },
+	{ "AutoSellService",      AutoSellService.Init       },
+	{ "PerformanceService",   PerformanceService.Init    },
+	{ "CrossServerShoutService", CrossServerShoutService.Init },
+	{ "FusionService",        FusionService.Init         },
+	{ "TopOfHourService",     TopOfHourService.Init      },
+	{ "DailyDealService",     DailyDealService.Init      },
+	{ "LoginStreakService",   LoginStreakService.Init    },
+	{ "HealthCheckService",   HealthCheckService.Init    },
+	{ "GraceShutdownService", GraceShutdownService.Init  },
+	{ "FirstSessionService",  FirstSessionService.Init   },
+	{ "MutationRerollService", MutationRerollService.Init },
+	{ "MythicCelebrationService", MythicCelebrationService.Init },
+	{ "BuffService",          BuffService.Init           },
+}
+
+for _, entry in ipairs(bootOrder) do
+	local ok, err = pcall(entry[2])
+	if not ok then Log.Error("Boot", "%s.Init failed: %s", entry[1], tostring(err)) end
+end
+
+local function onPlayerAdded(player: Player)
+	AntiCheat.OnPlayerAdded(player)
+	if AdminService.IsBanned(player.UserId) then
+		player:Kick("You are banned from this experience.")
+		return
+	end
+	DataService.LoadProfile(player)
+	DataService.OnProfileLoaded(player, function()
+		LabService.OnPlayerAdded(player)
+		StealService.OnPlayerAdded(player)
+		MonetizationService.OnPlayerAdded(player)
+		OutbreakService.OnPlayerAdded(player)
+		BattlePassService.OnPlayerAdded(player)
+		DailyRewardService.OnPlayerAdded(player)
+		GroupRewardService.OnPlayerAdded(player)
+		TrailService.OnPlayerAdded(player)
+		AchievementService.OnPlayerAdded(player)
+		QuestService.OnPlayerAdded(player)
+		BadgeService.OnPlayerAdded(player)
+		GlobalLeaderboardService.OnPlayerAdded(player)
+		AfkService.OnPlayerAdded(player)
+		BossEventService.OnPlayerAdded(player)
+		AnnouncementService.OnPlayerAdded(player)
+		PetService.OnPlayerAdded(player)
+		PlayerLevelService.OnPlayerAdded(player)
+		SeasonService.OnPlayerAdded(player)
+		DecorationService.OnPlayerAdded(player)
+		InviteService.OnPlayerAdded(player)
+		AdminService.OnPlayerAdded(player)
+		OfflineCashService.OnPlayerAdded(player)
+		WelcomeOfferService.OnPlayerAdded(player)
+		LuckyWheelService.OnPlayerAdded(player)
+		HotStreakService.OnPlayerAdded(player)
+		PresenceService.OnPlayerAdded(player)
+		EventService.OnPlayerAdded(player)
+		CinematicService.OnPlayerAdded(player)
+		MilestoneAnnounceService.OnPlayerAdded(player)
+		VipServerService.OnPlayerAdded(player)
+		AutoSellService.OnPlayerAdded(player)
+		DailyDealService.OnPlayerAdded(player)
+		LoginStreakService.OnPlayerAdded(player)
+		HealthCheckService.OnPlayerAdded(player)
+		FirstSessionService.OnPlayerAdded(player)
+		EconomyService.PushHud(player)
+	end)
+end
+
+local function onPlayerRemoving(player: Player)
+	LabService.OnPlayerRemoving(player)
+	StealService.OnPlayerRemoving(player)
+	TradeService.OnPlayerRemoving(player)
+	GlobalLeaderboardService.OnPlayerRemoving(player)
+	AfkService.OnPlayerRemoving(player)
+	DecorationService.OnPlayerRemoving(player)
+	AntiCheat.OnPlayerRemoving(player)
+	OfflineCashService.OnPlayerRemoving(player)
+	HotStreakService.OnPlayerRemoving(player)
+	MilestoneAnnounceService.OnPlayerRemoving(player)
+	FirstSessionService.OnPlayerRemoving(player)
+	BuffService.OnPlayerRemoving(player)
+	DataService.ReleaseProfile(player)
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+for _, p in ipairs(Players:GetPlayers()) do
+	task.spawn(onPlayerAdded, p)
+end
+
+-- Remote handlers. Every handler is rate-limited and sanitized via AntiCheat
+-- before reaching the service layer; services trust their inputs.
+
+local function bind(name: string, fn: (Player, ...any) -> ())
+	AntiCheat.WrapRemote(Remotes.Event(name), name, fn)
+end
+
+local function asUid(player: Player, value: any, context: string): string?
+	return AntiCheat.SanitizeUid(player, value, context)
+end
+
+local function asString(player: Player, value: any, context: string): string?
+	return AntiCheat.SanitizeString(player, value, context)
+end
+
+local function asNumber(player: Player, value: any, context: string): number?
+	return AntiCheat.SanitizeNumber(player, value, context)
+end
+
+bind(Remotes.Names.RequestCapture, function(player)
+	CaptureService.AttemptCapture(player)
+end)
+
+bind(Remotes.Names.RequestPlaceBrainrot, function(player, uid)
+	local u = asUid(player, uid, "PlaceBrainrot.uid")
+	if u then LabService.PlaceBrainrot(player, u) end
+end)
+
+bind(Remotes.Names.RequestUnplaceBrainrot, function(player, uid)
+	local u = asUid(player, uid, "UnplaceBrainrot.uid")
+	if u then LabService.UnplaceBrainrot(player, u) end
+end)
+
+bind(Remotes.Names.RequestSellBrainrot, function(player, uid)
+	local u = asUid(player, uid, "SellBrainrot.uid")
+	if u then LabService.SellBrainrot(player, u) end
+end)
+
+bind(Remotes.Names.RequestRebirth, function(player)
+	EconomyService.TryRebirth(player)
+end)
+
+bind(Remotes.Names.RequestSteal, function(player, victimUserId, uid)
+	local v = asNumber(player, victimUserId, "Steal.victimUserId")
+	local u = asUid(player, uid, "Steal.uid")
+	if v and u then StealService.AttemptSteal(player, v, u) end
+end)
+
+bind(Remotes.Names.RequestInfect, function(player, victimUserId)
+	local v = asNumber(player, victimUserId, "Infect.victimUserId")
+	if v then InfectionService.AttemptInfect(player, v) end
+end)
+
+bind(Remotes.Names.RequestClaimDaily, function(player)
+	DailyRewardService.Claim(player)
+end)
+
+bind(Remotes.Names.RequestClaimBattlePassTier, function(player, tier)
+	local t = asNumber(player, tier, "ClaimBattlePassTier.tier")
+	if t then BattlePassService.ClaimTier(player, math.floor(t)) end
+end)
+
+bind(Remotes.Names.RequestPromptPurchase, function(player, kind, key)
+	local k = asString(player, kind, "Purchase.kind")
+	local kk = asString(player, key, "Purchase.key")
+	if k and kk then MonetizationService.PromptPurchase(player, k, kk) end
+end)
+
+bind(Remotes.Names.RequestRedeemCode, function(player, code)
+	local c = asString(player, code, "RedeemCode.code")
+	if c then CodeService.Redeem(player, c) end
+end)
+
+bind(Remotes.Names.RequestRecheckGroup, function(player)
+	GroupRewardService.Check(player)
+end)
+
+bind(Remotes.Names.RequestClaimAchievement, function(player, id)
+	local i = asString(player, id, "ClaimAchievement.id")
+	if i then AchievementService.Claim(player, i) end
+end)
+
+bind(Remotes.Names.RequestClaimQuest, function(player, id)
+	local i = asString(player, id, "ClaimQuest.id")
+	if i then QuestService.Claim(player, i) end
+end)
+
+bind(Remotes.Names.RequestTradeInvite, function(player, targetUserId)
+	local v = asNumber(player, targetUserId, "TradeInvite.targetUserId")
+	if v then TradeService.Invite(player, v) end
+end)
+
+bind(Remotes.Names.RequestTradeAccept, function(player) TradeService.Accept(player) end)
+bind(Remotes.Names.RequestTradeDecline, function(player) TradeService.Decline(player) end)
+
+bind(Remotes.Names.RequestTradeAddBrainrot, function(player, uid)
+	local u = asUid(player, uid, "TradeAdd.uid")
+	if u then TradeService.AddBrainrot(player, u) end
+end)
+
+bind(Remotes.Names.RequestTradeRemoveBrainrot, function(player, uid)
+	local u = asUid(player, uid, "TradeRemove.uid")
+	if u then TradeService.RemoveBrainrot(player, u) end
+end)
+
+bind(Remotes.Names.RequestTradeSetCash, function(player, n)
+	local v = asNumber(player, n, "TradeSetCash.amount")
+	if v then TradeService.SetCash(player, math.max(0, math.floor(v))) end
+end)
+
+bind(Remotes.Names.RequestTradeConfirm, function(player) TradeService.Confirm(player) end)
+bind(Remotes.Names.RequestTradeCancel, function(player) TradeService.Cancel(player) end)
+
+bind(Remotes.Names.RequestEquipPet, function(player, uid)
+	local u = asUid(player, uid, "EquipPet.uid")
+	if u then PetService.Equip(player, u) end
+end)
+
+bind(Remotes.Names.RequestUnequipPet, function(player)
+	PetService.Unequip(player)
+end)
+
+bind(Remotes.Names.RequestClaimLevelReward, function(player, lvl)
+	local v = asNumber(player, lvl, "ClaimLevelReward.level")
+	if v then PlayerLevelService.ClaimLevelReward(player, math.floor(v)) end
+end)
+
+bind(Remotes.Names.RequestBuyDecoration, function(player, id)
+	local i = asString(player, id, "BuyDecoration.id")
+	if i then DecorationService.Buy(player, i) end
+end)
+
+bind(Remotes.Names.RequestSellDecoration, function(player, uid)
+	local u = asUid(player, uid, "SellDecoration.uid")
+	if u then DecorationService.Sell(player, u) end
+end)
+
+bind(Remotes.Names.RequestRedeemInvite, function(player, code)
+	local c = asString(player, code, "RedeemInvite.code")
+	if c then InviteService.Redeem(player, c) end
+end)
+
+bind(Remotes.Names.RequestWheelSpin, function(player, kind)
+	local k = asString(player, kind, "WheelSpin.kind")
+	if k then LuckyWheelService.Spin(player, k) end
+end)
+
+bind(Remotes.Names.RequestSocialInvite, function(player)
+	SocialInviteService.Prompt(player)
+end)
+
+bind(Remotes.Names.RequestSetAutoSell, function(player, enabled, threshold, excludeMutated)
+	local t = asString(player, threshold, "AutoSell.threshold")
+	if t and typeof(enabled) == "boolean" and typeof(excludeMutated) == "boolean" then
+		AutoSellService.SetConfig(player, enabled, t, excludeMutated)
+	end
+end)
+
+bind(Remotes.Names.RequestFuse, function(player, uids)
+	if typeof(uids) ~= "table" then return end
+	local cleaned: { string } = {}
+	for _, u in ipairs(uids) do
+		local s = asUid(player, u, "Fuse.uid")
+		if s then table.insert(cleaned, s) end
+	end
+	if #cleaned == 3 then FusionService.Attempt(player, cleaned) end
+end)
+
+bind(Remotes.Names.RequestRerollMutation, function(player, uid)
+	local u = asUid(player, uid, "RerollMutation.uid")
+	if u then MutationRerollService.Reroll(player, u) end
+end)
+
+Log.Info("Boot", "BrainrotLab server ready (%d services).", #bootOrder)
+]])
+	ensurePath(root, "AchievementService", "ModuleScript", [=[
+--!strict
+--[[
+	AchievementService — tracks progress (read from profile.stats and
+	profile.rebirths), delivers rewards on claim. Pushes an update to the
+	client whenever progress crosses a threshold or a claim is made.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes = require(Shared.Remotes)
+local AchievementData = require(Shared.AchievementData)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local InfectionService -- forward
+local CaptureService -- forward
+local MutationService -- forward
+
+local AchievementService = {}
+
+local function statValue(data: any, key: string): number
+	if key == "rebirths" then return data.rebirths or 0 end
+	return (data.stats and data.stats[key]) or 0
+end
+
+local function deliver(player: Player, reward: any)
+	if reward.kind == "cash" then
+		EconomyService.AwardCash(player, reward.amount or 0, "achievement")
+	elseif reward.kind == "infection_bomb" then
+		InfectionService.AddBombs(player, reward.amount or 1)
+	elseif reward.kind == "rare_egg" then
+		CaptureService.AttemptCapture(player, { freeRare = true, count = reward.amount or 1 })
+	elseif reward.kind == "instant_mutation" then
+		for _ = 1, (reward.amount or 1) do
+			MutationService.ForceInstantMutation(player)
+		end
+	end
+end
+
+function AchievementService.Push(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local list = AchievementData.GetAll()
+	;(data :: any)._achievements = (data :: any)._achievements or {}
+	local claimed = (data :: any)._achievements :: { [string]: boolean }
+	local payload = {}
+	for _, a in ipairs(list) do
+		local progress = statValue(data, a.statKey)
+		table.insert(payload, {
+			id = a.id,
+			name = a.name,
+			description = a.description,
+			target = a.target,
+			progress = progress,
+			complete = progress >= a.target,
+			claimed = claimed[a.id] == true,
+			rewardKind = a.reward.kind,
+			rewardAmount = a.reward.amount,
+		})
+	end
+	Remotes.Event(Remotes.Names.AchievementUpdate):FireClient(player, payload)
+end
+
+function AchievementService.Claim(player: Player, id: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	local a = AchievementData.Get(id)
+	if not a then return end
+	;(data :: any)._achievements = (data :: any)._achievements or {}
+	local claimed = (data :: any)._achievements :: { [string]: boolean }
+	if claimed[id] then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Already claimed." })
+		return
+	end
+	if statValue(data, a.statKey) < a.target then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Not finished yet." })
+		return
+	end
+	claimed[id] = true
+	deliver(player, a.reward)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = `🏅 Achievement: {a.name}`,
+	})
+	AchievementService.Push(player)
+end
+
+function AchievementService.OnPlayerAdded(player: Player)
+	task.delay(2, AchievementService.Push, player)
+end
+
+function AchievementService.Init()
+	InfectionService = require(script.Parent.InfectionService)
+	CaptureService = require(script.Parent.CaptureService)
+	MutationService = require(script.Parent.MutationService)
+
+	-- periodic push so progress bars update without manual triggers
+	task.spawn(function()
+		while true do
+			task.wait(8)
+			for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+				AchievementService.Push(p)
+			end
+		end
+	end)
+end
+
+return AchievementService
+]=])
+	ensurePath(root, "AdminService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config       = require(Shared.Config)
+local Remotes      = require(Shared.Remotes)
+local Log          = require(Shared.Log)
+local BrainrotData = require(Shared.BrainrotData)
+
+local DataService     = require(script.Parent.DataService)
+local EconomyService  = require(script.Parent.EconomyService)
+local CaptureService  = require(script.Parent.CaptureService)
+local MutationService = require(script.Parent.MutationService)
+local AntiCheat       = require(script.Parent.AntiCheat)
+
+local AdminService = {}
+
+-- ============================================================
+-- AUTHORIZATION
+-- ============================================================
+-- Owner is auto-detected via game.CreatorId (works for both User-owned
+-- and Group-owned experiences). Additional admin UserIds can be added
+-- via Config.ADMIN_USER_IDS.
+
+local function isOwner(userId: number): boolean
+	if userId == game.CreatorId then return true end
+	if game.CreatorType == Enum.CreatorType.Group then
+		local ok, rank = pcall(function() return Players:GetPlayerByUserId(userId):GetRankInGroup(game.CreatorId) end)
+		if ok and rank and rank >= 254 then return true end -- group owner / co-owner
+	end
+	return false
+end
+
+local function isAdmin(userId: number): boolean
+	if isOwner(userId) then return true end
+	for _, id in ipairs((Config :: any).ADMIN_USER_IDS or {}) do
+		if id == userId then return true end
+	end
+	return false
+end
+
+function AdminService.IsAdmin(player: Player): boolean
+	return isAdmin(player.UserId)
+end
+
+function AdminService.IsOwner(player: Player): boolean
+	return isOwner(player.UserId)
+end
+
+-- ============================================================
+-- COMMANDS
+-- ============================================================
+
+type Command = {
+	name: string,
+	usage: string,
+	help: string,
+	ownerOnly: boolean?,
+	fn: (Player, { string }) -> string,
+}
+
+local commands: { Command } = {}
+
+local function find(commands_: { Command }, name: string): Command?
+	name = string.lower(name)
+	for _, c in ipairs(commands_) do
+		if c.name == name then return c end
+	end
+	return nil
+end
+
+local function findPlayer(query: string): Player?
+	if query == nil or query == "" then return nil end
+	query = string.lower(query)
+	for _, p in ipairs(Players:GetPlayers()) do
+		if string.lower(p.Name) == query or string.lower(p.DisplayName) == query
+			or string.lower(p.Name):sub(1, #query) == query then
+			return p
+		end
+	end
+	return nil
+end
+
+local function asNumber(s: string?): number?
+	if not s then return nil end
+	local n = tonumber(s)
+	return if n == n and n ~= math.huge and n ~= -math.huge then n else nil
+end
+
+table.insert(commands, {
+	name = "help",
+	usage = "/help [command]",
+	help = "List commands, or detail one.",
+	fn = function(player, args)
+		local filter = args[1] and string.lower(args[1]) or nil
+		if filter then
+			for _, c in ipairs(commands) do
+				if c.name == filter then
+					return string.format("%s — %s%s",
+						c.usage, c.help,
+						c.ownerOnly and "  (owner only)" or "")
+				end
+			end
+			return "no such command: " .. filter
+		end
+		local list = {}
+		for _, c in ipairs(commands) do
+			table.insert(list, string.format("%s — %s", c.usage, c.help))
+		end
+		return "Commands:\n" .. table.concat(list, "\n")
+	end,
+})
+
+table.insert(commands, {
+	name = "give",
+	usage = "/give <player> <amount>",
+	help = "Give cash to a player (owner only).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local amount = asNumber(args[2])
+		if not target or not amount then return "usage: /give <player> <amount>" end
+		EconomyService.AwardCash(target, math.floor(amount), "admin grant")
+		return string.format("granted %d cash to %s", math.floor(amount), target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "setcash",
+	usage = "/setcash <player> <amount>",
+	help = "Set a player's cash to an exact amount.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local amount = asNumber(args[2])
+		if not target or not amount then return "usage: /setcash <player> <amount>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		data.cash = math.max(0, math.floor(amount))
+		EconomyService.PushHud(target)
+		return string.format("%s cash = %d", target.Name, data.cash)
+	end,
+})
+
+table.insert(commands, {
+	name = "rebirths",
+	usage = "/rebirths <player> <count>",
+	help = "Set a player's rebirth count.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local count  = asNumber(args[2])
+		if not target or not count then return "usage: /rebirths <player> <count>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		data.rebirths = math.max(0, math.floor(count))
+		EconomyService.PushHud(target)
+		return string.format("%s rebirths = %d", target.Name, data.rebirths)
+	end,
+})
+
+table.insert(commands, {
+	name = "give-brainrot",
+	usage = "/give-brainrot <player> <speciesId>",
+	help = "Give a player a specific brainrot. species id in BrainrotData.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local id = args[2]
+		if not target or not id then return "usage: /give-brainrot <player> <speciesId>" end
+		local def = BrainrotData.Get(id)
+		if not def then return "unknown species: " .. id end
+		CaptureService.GiveOutbreakBrainrot(target, id)
+		return string.format("gave %s to %s", def.displayName, target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "skip-outbreak",
+	usage = "/skip-outbreak",
+	help = "Trigger an Outbreak event immediately.",
+	ownerOnly = true,
+	fn = function()
+		local OutbreakService = require(script.Parent.OutbreakService)
+		if OutbreakService and (OutbreakService :: any).ForceStart then
+			(OutbreakService :: any).ForceStart()
+			return "outbreak forced"
+		end
+		return "outbreak service does not expose ForceStart yet"
+	end,
+})
+
+table.insert(commands, {
+	name = "spawn-boss",
+	usage = "/spawn-boss",
+	help = "Spawn the Mega Boss now.",
+	ownerOnly = true,
+	fn = function()
+		local BossEventService = require(script.Parent.BossEventService)
+		if BossEventService and (BossEventService :: any).ForceSpawn then
+			(BossEventService :: any).ForceSpawn()
+			return "boss forced"
+		end
+		return "boss service does not expose ForceSpawn yet"
+	end,
+})
+
+table.insert(commands, {
+	name = "mutate-all",
+	usage = "/mutate-all <player>",
+	help = "Force a mutation on every placed brainrot for a player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /mutate-all <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local n = 0
+		for _, b in ipairs(data.inventory) do
+			if b.placed then
+				MutationService.ForceInstantMutation(target)
+				n += 1
+			end
+		end
+		return string.format("forced %d mutations on %s", n, target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "tp",
+	usage = "/tp <player> [targetPlayer|x,y,z]",
+	help = "Teleport a player to another player or coordinates.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /tp <player> <target|x,y,z>" end
+		local dest = args[2]
+		if not dest then return "missing destination" end
+		local destPlayer = findPlayer(dest)
+		if destPlayer and destPlayer.Character then
+			target.Character:PivotTo(destPlayer.Character:GetPivot())
+			return string.format("tp %s -> %s", target.Name, destPlayer.Name)
+		end
+		local x, y, z = string.match(dest, "(-?%d+%.?%d*),(-?%d+%.?%d*),(-?%d+%.?%d*)")
+		if x then
+			target.Character:PivotTo(CFrame.new(tonumber(x) :: number, tonumber(y) :: number, tonumber(z) :: number))
+			return string.format("tp %s -> %s,%s,%s", target.Name, x, y, z)
+		end
+		return "could not resolve destination"
+	end,
+})
+
+table.insert(commands, {
+	name = "idreport",
+	usage = "/idreport",
+	help = "List gamepass / dev product entries with id=0 (unconfigured).",
+	fn = function()
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local missing: { string } = {}
+		for key, gp in pairs(Config.GAMEPASSES) do
+			if not gp.id or gp.id == 0 then table.insert(missing, "gamepass:" .. key) end
+		end
+		for key, dp in pairs(Config.DEV_PRODUCTS) do
+			if not dp.id or dp.id == 0 then table.insert(missing, "product:" .. key) end
+		end
+		table.sort(missing)
+		if #missing == 0 then return "all monetization IDs configured ✅" end
+		return string.format("%d unconfigured IDs (set on Creator Dashboard):\n  %s",
+			#missing, table.concat(missing, "\n  "))
+	end,
+})
+
+table.insert(commands, {
+	name = "pricecheck",
+	usage = "/pricecheck <key>",
+	help = "Show price + delivery for a gamepass or dev product key.",
+	fn = function(player, args)
+		local key = args[1]
+		if not key then return "usage: /pricecheck <key>" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local gp = Config.GAMEPASSES[key]
+		if gp then
+			return string.format("[gamepass] %s — %d R$, id=%d", gp.name, gp.price, gp.id)
+		end
+		local dp = Config.DEV_PRODUCTS[key]
+		if dp then
+			return string.format("[product] %s — %d R$, kind=%s%s, id=%d",
+				dp.name, dp.price, dp.kind,
+				dp.amount and (", amount=" .. dp.amount) or "",
+				dp.id)
+		end
+		return "unknown key: " .. key
+	end,
+})
+
+table.insert(commands, {
+	name = "revokepass",
+	usage = "/revokepass <player> <gamepass-key>",
+	help = "Remove a gamepass effect from a player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local key = args[2]
+		if not target or not key then return "usage: /revokepass <player> <gamepass-key>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		if not data.gamepasses[key] then return key .. " not granted to " .. target.Name end
+		data.gamepasses[key] = nil
+		EconomyService.PushHud(target)
+		return string.format("revoked %s from %s", key, target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "grantpass",
+	usage = "/grantpass <player> <gamepass-key>",
+	help = "Manually grant a gamepass effect for free (whale gift / test).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local key = args[2]
+		if not target or not key then return "usage: /grantpass <player> <gamepass-key>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		if not Config.GAMEPASSES[key] then return "unknown gamepass key: " .. key end
+		data.gamepasses[key] = true
+		EconomyService.PushHud(target)
+		Remotes.Event(Remotes.Names.Notify):FireClient(target, {
+			kind = "info",
+			text = string.format("Gifted: %s", Config.GAMEPASSES[key].name),
+		})
+		return string.format("granted %s to %s", key, target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "clearflags",
+	usage = "/clearflags <player>",
+	help = "Wipe a player's AntiCheat violation history.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /clearflags <player>" end
+		local ok = AntiCheat.ClearFlags(target)
+		return ok and string.format("cleared flags for %s", target.Name)
+			or "target has no AntiCheat record"
+	end,
+})
+
+table.insert(commands, {
+	name = "reset",
+	usage = "/reset <player>",
+	help = "Wipe a player's profile back to defaults. Irreversible.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /reset <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		-- Despawn placed brainrot models before wiping inventory so the
+		-- visible plot is consistent with the new profile state. Iterate
+		-- over a UID copy because Unplace mutates placedModels under us.
+		local LabService = require(script.Parent.LabService)
+		local uids: { string } = {}
+		for _, b in ipairs(data.inventory) do
+			if b.placed then table.insert(uids, b.uid) end
+		end
+		for _, uid in ipairs(uids) do LabService.UnplaceBrainrot(target, uid) end
+		data.cash = 500
+		data.rebirths = 0
+		data.inventory = {}
+		data.infectionBombs = 1
+		data.infectedUntil = 0
+		data.gamepasses = {}
+		data.stats = {
+			totalCaptured = 0, totalMutations = 0, totalSteals = 0,
+			totalInfections = 0, totalCashEarned = 0,
+		}
+		LabService.PushInventory(target)
+		EconomyService.PushHud(target)
+		Remotes.Event(Remotes.Names.Notify):FireClient(target, {
+			kind = "error",
+			text = "Your progress was reset by an admin.",
+		})
+		return string.format("reset %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "playerinfo",
+	usage = "/playerinfo <player>",
+	help = "Detailed profile snapshot for one player.",
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /playerinfo <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local gpKeys = {}
+		for k, _ in pairs(data.gamepasses) do table.insert(gpKeys, k) end
+		table.sort(gpKeys)
+		local stats = data.stats
+		local tipped = (data :: any)._totalTipped or 0
+		local streak = (data :: any)._streak and (data :: any)._streak.count or 0
+		return string.format(
+			"%s (uid=%d) — cash=%d rebirths=%d inv=%d created=%ds-ago\n" ..
+			"  stats: cap=%d mut=%d steals=%d infs=%d earned=%d\n" ..
+			"  gamepasses: %s\n" ..
+			"  streak=%d tipped=%dR\$",
+			target.Name, target.UserId, data.cash, data.rebirths, #data.inventory,
+			os.time() - (data.createdAt or os.time()),
+			stats.totalCaptured, stats.totalMutations, stats.totalSteals,
+			stats.totalInfections, stats.totalCashEarned,
+			#gpKeys > 0 and table.concat(gpKeys, ",") or "(none)",
+			streak, tipped)
+	end,
+})
+
+table.insert(commands, {
+	name = "wheelgift",
+	usage = "/wheelgift <count>",
+	help = "Grant N free wheel spins to every online player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local n = asNumber(args[1])
+		if not n or n <= 0 then return "usage: /wheelgift <count>" end
+		local ok, LuckyWheelService = pcall(require, script.Parent.LuckyWheelService)
+		if not ok then return "LuckyWheelService unavailable" end
+		local count = math.floor(n)
+		local affected = 0
+		for _, p in ipairs(Players:GetPlayers()) do
+			LuckyWheelService.GrantSpins(p, count)
+			affected += 1
+		end
+		local okA, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if okA then
+			AnnouncementService.Push(
+				string.format("🎰 EVERYONE just got %d free wheel spins!", count),
+				{ 255, 215, 80 }, 20)
+		end
+		return string.format("gave %d spins to %d players", count, affected)
+	end,
+})
+
+table.insert(commands, {
+	name = "event",
+	usage = "/event [golden|mutation|spin|random]",
+	help = "Fire a Top-of-Hour-style event immediately.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local kind = args[1] or "random"
+		local ok, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+		if not ok then return "TopOfHourService unavailable" end
+		if kind == "random" then
+			(TopOfHourService :: any).ForceStart()
+		else
+			(TopOfHourService :: any).ForceStart(kind)
+		end
+		return "event fired: " .. kind
+	end,
+})
+
+table.insert(commands, {
+	name = "notify",
+	usage = "/notify <player> <text...>",
+	help = "Send a personal toast to a specific player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /notify <player> <text>" end
+		local text = table.concat(args, " ", 2)
+		if text == "" then return "missing text" end
+		Remotes.Event(Remotes.Names.Notify):FireClient(target, {
+			kind = "info",
+			text = text,
+		})
+		return string.format("toasted %s: %s", target.Name, text)
+	end,
+})
+
+table.insert(commands, {
+	name = "jackpot",
+	usage = "/jackpot <amount>",
+	help = "Pick a random online player and grant them cash. Live-event hook.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local amount = asNumber(args[1])
+		if not amount then return "usage: /jackpot <amount>" end
+		local pool = Players:GetPlayers()
+		if #pool == 0 then return "no online players" end
+		local winner = pool[math.random(1, #pool)]
+		EconomyService.AwardCash(winner, math.floor(amount), "jackpot")
+		local okA, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if okA then
+			AnnouncementService.Push(
+				string.format("🎰 JACKPOT — %s won %d cash!", winner.DisplayName, math.floor(amount)),
+				{ 255, 215, 80 }, 20)
+		end
+		return string.format("jackpot %d -> %s", math.floor(amount), winner.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "addcode",
+	usage = "/addcode <CODE> <cash-amount>",
+	help = "Add a runtime redemption code without republishing.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local code = args[1]
+		local amount = asNumber(args[2])
+		if not code or not amount then return "usage: /addcode <CODE> <cash-amount>" end
+		local ok, CodeService = pcall(require, script.Parent.CodeService)
+		if not ok then return "CodeService unavailable" end
+		local fn = (CodeService :: any).AddRuntime
+		if not fn then return "CodeService.AddRuntime not exposed" end
+		fn(string.upper(code), math.floor(amount))
+		return string.format("added runtime code %s -> +%d cash", string.upper(code), math.floor(amount))
+	end,
+})
+
+table.insert(commands, {
+	name = "codes",
+	usage = "/codes",
+	help = "List all active redemption codes.",
+	fn = function()
+		local ok, CodeService = pcall(require, script.Parent.CodeService)
+		if not ok then return "CodeService unavailable" end
+		local list = (CodeService :: any).List and (CodeService :: any).List()
+		if not list or #list == 0 then return "no active codes" end
+		return "active codes: " .. table.concat(list, ", ")
+	end,
+})
+
+table.insert(commands, {
+	name = "global",
+	usage = "/global <text...>",
+	help = "Push a banner to every server in this experience.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local text = table.concat(args, " ")
+		if text == "" then return "usage: /global <text>" end
+		local ok, CrossServerShoutService = pcall(require, script.Parent.CrossServerShoutService)
+		if not ok then return "CrossServerShoutService unavailable" end
+		(CrossServerShoutService :: any).Publish({
+			kind = "owner_global",
+			text = text,
+			name = player.DisplayName,
+		})
+		-- Also push locally so the owner sees it on their own server.
+		local okA, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if okA then AnnouncementService.Push(text, { 255, 215, 80 }, 30) end
+		return string.format("global broadcast: %s", text)
+	end,
+})
+
+table.insert(commands, {
+	name = "restart",
+	usage = "/restart",
+	help = "Shut down this server (BindToClose runs; players get the grace bonus).",
+	ownerOnly = true,
+	fn = function()
+		task.delay(2, function()
+			-- BindToClose handlers (GraceShutdownService + DataService) get
+			-- the 30s window Roblox provides before hard-kill.
+			for _, p in ipairs(Players:GetPlayers()) do
+				p:Kick("Server restart — rejoin to continue. (Cash bonus delivered.)")
+			end
+		end)
+		return "restart in 2s (clients get kick + grace bonus)"
+	end,
+})
+
+table.insert(commands, {
+	name = "cleanup",
+	usage = "/cleanup",
+	help = "Sweep orphaned debris (firework leftovers, lost parts).",
+	ownerOnly = true,
+	fn = function()
+		local Workspace = game:GetService("Workspace")
+		local protected = { Baseplate = true, Plots = true, Brainrots = true, OutbreakPlaza = true, BossArena = true, Terrain = true }
+		local removed = 0
+		for _, inst in ipairs(Workspace:GetChildren()) do
+			if not protected[inst.Name] and not inst:IsA("Camera") and not inst:IsA("Terrain") then
+				-- Don't sweep player characters
+				local ok = true
+				for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+					if inst == p.Character then ok = false; break end
+				end
+				if ok and (inst:IsA("BasePart") or inst:IsA("Model")) then
+					inst:Destroy()
+					removed += 1
+				end
+			end
+		end
+		return string.format("cleaned %d orphaned objects", removed)
+	end,
+})
+
+table.insert(commands, {
+	name = "spectate",
+	usage = "/spectate <player|self>",
+	help = "Lock the camera onto a target. 'self' to release.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local arg = args[1] or ""
+		if arg == "" then return "usage: /spectate <player|self>" end
+		if string.lower(arg) == "self" then
+			Remotes.Event("Spectate"):FireClient(player, { kind = "release" })
+			return "released spectate"
+		end
+		local target = findPlayer(arg)
+		if not target then return "no such player" end
+		Remotes.Event("Spectate"):FireClient(player, {
+			kind = "attach",
+			targetUserId = target.UserId,
+			targetName = target.DisplayName,
+		})
+		return string.format("now spectating %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "inventory",
+	usage = "/inventory <player>",
+	help = "List a player's brainrots.",
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /inventory <player>" end
+		local data = DataService.Get(target)
+		if not data then return "no profile" end
+		if #data.inventory == 0 then return target.Name .. " has no brainrots" end
+		local lines = { target.Name .. " inventory:" }
+		for _, b in ipairs(data.inventory) do
+			local def = BrainrotData.Get(b.speciesId)
+			local label = def and def.displayName or b.speciesId
+			table.insert(lines, string.format("  %s [T%d] %s%s",
+				label, b.mutationTier,
+				b.placed and "(placed)" or "",
+				#b.mutations > 0 and (" {" .. table.concat(b.mutations, ",") .. "}") or ""))
+			if #lines > 20 then table.insert(lines, "  ...truncated"); break end
+		end
+		return table.concat(lines, "\n")
+	end,
+})
+
+table.insert(commands, {
+	name = "heal",
+	usage = "/heal <player>",
+	help = "Refill a player's character health.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /heal <player>" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		hum.Health = hum.MaxHealth
+		return string.format("healed %s (%.0f/%.0f hp)", target.Name, hum.Health, hum.MaxHealth)
+	end,
+})
+
+table.insert(commands, {
+	name = "health",
+	usage = "/health",
+	help = "Run HealthCheckService probes now and report.",
+	fn = function()
+		local ok, HealthCheckService = pcall(require, script.Parent.HealthCheckService)
+		if not ok then return "HealthCheckService unavailable" end
+		local report = (HealthCheckService :: any).RunOnce and (HealthCheckService :: any).RunOnce()
+		return report or "health probes ran (see Output)"
+	end,
+})
+
+table.insert(commands, {
+	name = "test-purchase",
+	usage = "/test-purchase <product-key>",
+	help = "Deliver a dev product without charging — verify the receipt path.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local key = args[1]
+		if not key then return "usage: /test-purchase <product-key>" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local def = Config.DEV_PRODUCTS[key]
+		if not def then return "unknown product: " .. key end
+		local ok, MonetizationService = pcall(require, script.Parent.MonetizationService)
+		if not ok then return "MonetizationService unavailable" end
+		local handler = (MonetizationService :: any).DeliverProductTestOnly
+		if handler then
+			handler(player, key)
+			return string.format("delivered %s to %s (test)", key, player.Name)
+		end
+		-- Fall back to direct cash for cash products if no test hook exists
+		if def.kind == "cash" then
+			EconomyService.AwardCash(player, def.amount or 0, "test purchase")
+			return string.format("test-delivered %s -> +%d cash", key, def.amount or 0)
+		end
+		return "no test hook for product kind: " .. tostring(def.kind)
+	end,
+})
+
+table.insert(commands, {
+	name = "announce",
+	usage = "/announce <text...>",
+	help = "Push a banner to every client in this server.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local text = table.concat(args, " ")
+		if text == "" then return "usage: /announce <text>" end
+		local ok, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if not ok then return "AnnouncementService unavailable" end
+		AnnouncementService.Push(text, { 255, 215, 80 }, 30)
+		return string.format("announced: %s", text)
+	end,
+})
+
+table.insert(commands, {
+	name = "freeze",
+	usage = "/freeze <player>",
+	help = "Lock a player in place (sets WalkSpeed=0, JumpPower=0).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /freeze <player>" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		hum.WalkSpeed = 0
+		hum.JumpPower = 0
+		return string.format("froze %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "unfreeze",
+	usage = "/unfreeze <player>",
+	help = "Restore movement.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /unfreeze <player>" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		hum.WalkSpeed = 16
+		hum.JumpPower = 50
+		return string.format("unfroze %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "kick",
+	usage = "/kick <player> [reason]",
+	help = "Kick a player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /kick <player> [reason]" end
+		local reason = table.concat(args, " ", 2)
+		if reason == "" then reason = "Removed by admin." end
+		target:Kick(reason)
+		return string.format("kicked %s — %s", target.Name, reason)
+	end,
+})
+
+table.insert(commands, {
+	name = "ban",
+	usage = "/ban <userId|name> [reason]",
+	help = "Soft-ban a user (DataStore-backed, persistent).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local first = args[1]
+		if not first then return "usage: /ban <userId|name>" end
+		local userId = tonumber(first)
+		if not userId then
+			local p = findPlayer(first)
+			if p then userId = p.UserId end
+		end
+		if not userId then return "could not resolve user" end
+		AdminService.SoftBan(userId, table.concat(args, " ", 2))
+		local p = Players:GetPlayerByUserId(userId)
+		if p then p:Kick("Banned by admin.") end
+		return string.format("banned userId %d", userId)
+	end,
+})
+
+table.insert(commands, {
+	name = "unban",
+	usage = "/unban <userId>",
+	help = "Lift a soft-ban.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local userId = asNumber(args[1])
+		if not userId then return "usage: /unban <userId>" end
+		AdminService.SoftUnban(math.floor(userId))
+		return string.format("unbanned userId %d", math.floor(userId))
+	end,
+})
+
+table.insert(commands, {
+	name = "flags",
+	usage = "/flags",
+	help = "Show recent anti-cheat flags for all players.",
+	fn = function()
+		local snap = AntiCheat.Snapshot()
+		local lines = {}
+		for name, info in pairs(snap) do
+			table.insert(lines, string.format("%s (sid=%s, vio=%d, recent=%d)",
+				name, info.sessionId, info.violations, #info.recentFlags))
+			for _, f in ipairs(info.recentFlags) do
+				table.insert(lines, string.format("    %s: %s", f.tag, f.detail))
+			end
+		end
+		return #lines > 0 and table.concat(lines, "\n") or "no flags"
+	end,
+})
+
+table.insert(commands, {
+	name = "unmute",
+	usage = "/unmute <player>",
+	help = "Restore a muted player's chat immediately.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /unmute <player>" end
+		local TextChatService = game:GetService("TextChatService")
+		if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then
+			return "TextChatService not active"
+		end
+		local restored = false
+		for _, channel in ipairs(TextChatService:WaitForChild("TextChannels"):GetChildren()) do
+			local source = (channel :: any):FindFirstChild("TextSource_" .. target.UserId)
+			if source then source.CanSend = true; restored = true end
+		end
+		return restored and ("unmuted " .. target.Name) or "no chat source found"
+	end,
+})
+
+table.insert(commands, {
+	name = "speed",
+	usage = "/speed <player> <walkspeed>",
+	help = "Set walk speed (default 16, max 60).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local n = asNumber(args[2])
+		if not target or not target.Character or not n then
+			return "usage: /speed <player> <walkspeed>"
+		end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		local clamped = math.clamp(math.floor(n), 0, 60)
+		AntiCheat.SetCharacterClampExempt(target, clamped > 30)
+		hum.WalkSpeed = clamped
+		return string.format("set %s walkspeed to %d", target.Name, clamped)
+	end,
+})
+
+table.insert(commands, {
+	name = "godmode",
+	usage = "/godmode <player> [on|off]",
+	help = "Toggle invulnerability on a player's character.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /godmode <player> [on|off]" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		local mode = string.lower(args[2] or "on")
+		if mode == "off" then
+			hum.MaxHealth = 100
+			hum.Health = 100
+			return string.format("godmode OFF for %s", target.Name)
+		end
+		hum.MaxHealth = math.huge
+		hum.Health = math.huge
+		return string.format("godmode ON for %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "gather",
+	usage = "/gather",
+	help = "Teleport every online player to your position.",
+	ownerOnly = true,
+	fn = function(player)
+		if not player.Character then return "your character has no position" end
+		local origin = player.Character:GetPivot()
+		local moved = 0
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= player and p.Character then
+				local offset = CFrame.new(math.random(-6, 6), 0, math.random(-6, 6))
+				p.Character:PivotTo(origin * offset)
+				moved += 1
+			end
+		end
+		return string.format("gathered %d players", moved)
+	end,
+})
+
+table.insert(commands, {
+	name = "maxmutate",
+	usage = "/maxmutate <player>",
+	help = "Fast-track all placed brainrots to apex tier.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /maxmutate <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local function anyBelowMax(): boolean
+			for _, b in ipairs(data.inventory) do
+				if b.placed and b.mutationTier < Config.MUTATION_MAX_TIER then return true end
+			end
+			return false
+		end
+		-- ForceInstantMutation always advances the *highest-tier* placed
+		-- brainrot, so once one hits MAX it shifts to the next-highest. Drive
+		-- one roll at a time until everything's at MAX or we hit the cap.
+		local rolls = 0
+		while anyBelowMax() and rolls < 200 do
+			MutationService.ForceInstantMutation(target)
+			rolls += 1
+		end
+		return string.format("max-mutated %s (%d rolls fired)", target.Name, rolls)
+	end,
+})
+
+table.insert(commands, {
+	name = "mute",
+	usage = "/mute <player> <seconds>",
+	help = "Mute a player's chat for N seconds.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local seconds = asNumber(args[2])
+		if not target or not seconds then return "usage: /mute <player> <seconds>" end
+		local TextChatService = game:GetService("TextChatService")
+		if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then
+			return "TextChatService not active — mute requires the new chat"
+		end
+		local source: TextSource?
+		for _, channel in ipairs(TextChatService:WaitForChild("TextChannels"):GetChildren()) do
+			source = (channel :: any):FindFirstChild("TextSource_" .. target.UserId)
+			if source then break end
+		end
+		if not source then return "no chat source for " .. target.Name end
+		source.CanSend = false
+		task.delay(math.floor(seconds), function()
+			if source and source.Parent then source.CanSend = true end
+		end)
+		return string.format("muted %s for %ds", target.Name, math.floor(seconds))
+	end,
+})
+
+table.insert(commands, {
+	name = "buff",
+	usage = "/buff <player> <income|mutation> <mult> <seconds>",
+	help = "Apply a temporary personal buff.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local kind = args[2]
+		local mult = asNumber(args[3])
+		local seconds = asNumber(args[4])
+		if not target or not kind or not mult or not seconds then
+			return "usage: /buff <player> <income|mutation> <mult> <seconds>"
+		end
+		local ok, BuffService = pcall(require, script.Parent.BuffService)
+		if not ok then return "BuffService unavailable" end
+		local applied = BuffService.Apply(target, kind, mult, math.floor(seconds))
+		if not applied then return "kind must be income|mutation" end
+		EconomyService.PushHud(target)
+		return string.format("buffed %s %s x%.2f for %ds", target.Name, kind, mult, math.floor(seconds))
+	end,
+})
+
+table.insert(commands, {
+	name = "top",
+	usage = "/top [cash|rebirths|captures|mutations|steals|infections]",
+	help = "Top 5 players by metric (default: cash).",
+	fn = function(player, args)
+		local metric = string.lower(args[1] or "cash")
+		local extractors: { [string]: (any) -> number } = {
+			cash        = function(d) return d.cash end,
+			rebirths    = function(d) return d.rebirths end,
+			captures    = function(d) return d.stats.totalCaptured end,
+			mutations   = function(d) return d.stats.totalMutations end,
+			steals      = function(d) return d.stats.totalSteals end,
+			infections  = function(d) return d.stats.totalInfections end,
+		}
+		local getter = extractors[metric]
+		if not getter then return "metric must be one of: cash|rebirths|captures|mutations|steals|infections" end
+		local rows = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			local d = DataService.Get(p)
+			if d then table.insert(rows, { name = p.DisplayName, value = getter(d) }) end
+		end
+		table.sort(rows, function(a, b) return a.value > b.value end)
+		local lines = { `top by {metric}:` }
+		for i = 1, math.min(5, #rows) do
+			table.insert(lines, string.format("  %d. %s — %d", i, rows[i].name, rows[i].value))
+		end
+		return table.concat(lines, "\n")
+	end,
+})
+
+table.insert(commands, {
+	name = "players",
+	usage = "/players",
+	help = "List online players (name, displayName, userId, cash).",
+	fn = function()
+		local pool = Players:GetPlayers()
+		if #pool == 0 then return "no online players" end
+		local lines = {}
+		for _, p in ipairs(pool) do
+			local data = DataService.Get(p)
+			table.insert(lines, string.format("%s [%s] uid=%d cash=%d",
+				p.DisplayName, p.Name, p.UserId, data and data.cash or 0))
+		end
+		return table.concat(lines, "\n")
+	end,
+})
+
+table.insert(commands, {
+	name = "stats",
+	usage = "/stats",
+	help = "Show server stats summary.",
+	fn = function()
+		local n = #Players:GetPlayers()
+		return string.format("server: %d/%d players, uptime %ds", n, Players.MaxPlayers, math.floor(time()))
+	end,
+})
+
+table.insert(commands, {
+	name = "version",
+	usage = "/version",
+	help = "Show server build identity.",
+	fn = function()
+		local jobId = game.JobId
+		if jobId == "" then jobId = "studio" end
+		return string.format("place=%d job=%s placeVer=%d uptime=%ds",
+			game.PlaceId, jobId, game.PlaceVersion, math.floor(time()))
+	end,
+})
+
+table.insert(commands, {
+	name = "revenue",
+	usage = "/revenue",
+	help = "Show this server's purchase summary.",
+	fn = function()
+		local ok, AnalyticsService = pcall(require, script.Parent.AnalyticsService)
+		if not ok then return "AnalyticsService unavailable" end
+		local s = AnalyticsService.Summary()
+		local rate = if s.count > 0 then s.totalRobux / s.count else 0
+		return string.format(
+			"server revenue: %d R$ across %d purchases (avg %.1f R$). " ..
+			"Devex est: ~$%.2f (~70%% of gross after Roblox cut).",
+			s.totalRobux, s.count, rate, (s.totalRobux * 0.7) / 350)
+	end,
+})
+
+-- ============================================================
+-- BAN STORE (persistent across servers)
+-- ============================================================
+local DataStoreService = game:GetService("DataStoreService")
+local banStore: DataStore?
+if not RunService:IsStudio() then
+	pcall(function() banStore = DataStoreService:GetDataStore(Config.DATASTORE_SCOPE .. "_Bans") end)
+end
+
+local banCache: { [number]: { reason: string, at: number } } = {}
+
+function AdminService.SoftBan(userId: number, reason: string?)
+	local entry = { reason = reason or "Banned", at = os.time() }
+	banCache[userId] = entry
+	if banStore then
+		pcall(function() banStore:SetAsync(tostring(userId), entry) end)
+	end
+end
+
+function AdminService.SoftUnban(userId: number)
+	banCache[userId] = nil
+	if banStore then
+		pcall(function() banStore:RemoveAsync(tostring(userId)) end)
+	end
+end
+
+function AdminService.IsBanned(userId: number): boolean
+	if banCache[userId] then return true end
+	if not banStore then return false end
+	local ok, entry = pcall(function() return banStore:GetAsync(tostring(userId)) end)
+	if ok and entry then banCache[userId] = entry; return true end
+	return false
+end
+
+-- ============================================================
+-- DISPATCH
+-- ============================================================
+
+function AdminService.RunCommand(player: Player, line: string): string
+	if not isAdmin(player.UserId) then
+		return "permission denied"
+	end
+	if string.sub(line, 1, 1) == "/" then line = string.sub(line, 2) end
+	local parts: { string } = {}
+	for word in string.gmatch(line, "%S+") do table.insert(parts, word) end
+	if #parts == 0 then return "type /help" end
+	local name = string.lower(table.remove(parts, 1) :: string)
+	local cmd = find(commands, name)
+	if not cmd then return "unknown command: " .. name end
+	if cmd.ownerOnly and not isOwner(player.UserId) then return "owner-only command" end
+	local ok, result = pcall(cmd.fn, player, parts)
+	if not ok then
+		Log.Error("Admin", "%s ran /%s -> %s", player.Name, name, tostring(result))
+		return "error: " .. tostring(result)
+	end
+	Log.Info("Admin", "%s ran /%s -> %s", player.Name, name, tostring(result))
+	return tostring(result)
+end
+
+function AdminService.SnapshotPlayers(): { any }
+	local out = {}
+	local flags = AntiCheat.Snapshot()
+	for _, p in ipairs(Players:GetPlayers()) do
+		local d = DataService.Get(p)
+		local f = flags[p.Name] or { violations = 0, recentFlags = {} }
+		table.insert(out, {
+			userId = p.UserId,
+			name = p.Name,
+			displayName = p.DisplayName,
+			cash = d and d.cash or 0,
+			rebirths = d and d.rebirths or 0,
+			brainrots = d and #d.inventory or 0,
+			violations = f.violations,
+			isAdmin = isAdmin(p.UserId),
+			isOwner = isOwner(p.UserId),
+		})
+	end
+	return out
+end
+
+-- ============================================================
+-- INIT
+-- ============================================================
+local OPEN_REMOTE_NAME = "AdminUpdate"
+local RUN_REMOTE_NAME  = "AdminRunCommand"
+
+function AdminService.OnPlayerAdded(player: Player)
+	if AdminService.IsBanned(player.UserId) then
+		player:Kick("You are banned from this experience.")
+		return
+	end
+	-- Chat-command bridge for all admins regardless of whether the panel is open.
+	-- Legacy chat path; the TextChatService path is wired once in Init().
+	if isAdmin(player.UserId) then
+		player.Chatted:Connect(function(message)
+			if string.sub(message, 1, 1) ~= "/" then return end
+			local result = AdminService.RunCommand(player, message)
+			Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
+		end)
+		task.delay(2, function()
+			Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, {
+				kind = "init",
+				isOwner = isOwner(player.UserId),
+				players = AdminService.SnapshotPlayers(),
+			})
+		end)
+		task.spawn(function()
+			while player.Parent do
+				task.wait(5)
+				if isAdmin(player.UserId) then
+					Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, {
+						kind = "tick",
+						players = AdminService.SnapshotPlayers(),
+					})
+				end
+			end
+		end)
+	end
+end
+
+function AdminService.Init()
+	Remotes.Event(OPEN_REMOTE_NAME)
+
+	AntiCheat.WrapRemote(Remotes.Event(RUN_REMOTE_NAME), RUN_REMOTE_NAME, function(player, line)
+		if typeof(line) ~= "string" then return end
+		if #line > 256 then return end
+		local result = AdminService.RunCommand(player, line)
+		Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
+	end)
+
+	-- TextChatService bridge: modern Roblox chat doesn't fire player.Chatted,
+	-- so we intercept SendingMessage. Admin-prefixed '/' messages are
+	-- swallowed (destroyed) so other players don't see them.
+	local ok, TextChatService = pcall(function() return game:GetService("TextChatService") end)
+	if ok and TextChatService and TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+		TextChatService.SendingMessage:Connect(function(message)
+			local source = message.TextSource
+			if not source then return end
+			local player = Players:GetPlayerByUserId(source.UserId)
+			if not player or not isAdmin(player.UserId) then return end
+			local text = message.Text
+			if string.sub(text, 1, 1) ~= "/" then return end
+			pcall(function() message:Destroy() end)
+			local result = AdminService.RunCommand(player, text)
+			Remotes.Event(OPEN_REMOTE_NAME):FireClient(player, { kind = "result", text = result })
+		end)
+	end
+end
+
+return AdminService
+]])
+	ensurePath(root, "AfkService", "ModuleScript", [=[
+--!strict
+--[[
+	AfkService — soft-kicks players idle for >20 minutes. With only 8 plots
+	per server, an AFK farmer occupies a slot a real new joiner could fill.
+	Real joiners are 100x more valuable for revenue than AFK farmers, so
+	prioritize them.
+
+	Detection: any character movement, chat, or input resets the timer.
+	30s before kick: a warning toast. On kick: a polite "rejoin anytime"
+	kick reason that doesn't damage NPS.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local AfkService = {}
+
+local IDLE_KICK_SECONDS = 1200 -- 20 min
+local WARN_SECONDS = 30
+
+local lastActive: { [Player]: number } = {}
+local warned: { [Player]: boolean } = {}
+
+local function bumpActivity(player: Player)
+	lastActive[player] = os.clock()
+	warned[player] = false
+end
+
+function AfkService.OnPlayerAdded(player: Player)
+	bumpActivity(player)
+	player.Chatted:Connect(function() bumpActivity(player) end)
+	player.CharacterAdded:Connect(function(char)
+		bumpActivity(player)
+		local humanoid = char:WaitForChild("Humanoid", 5) :: Humanoid?
+		if humanoid then
+			humanoid.Running:Connect(function(speed) if speed > 0.5 then bumpActivity(player) end end)
+			humanoid.Jumping:Connect(function() bumpActivity(player) end)
+		end
+	end)
+	if player.Character then
+		local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.Running:Connect(function(speed) if speed > 0.5 then bumpActivity(player) end end)
+		end
+	end
+end
+
+function AfkService.OnPlayerRemoving(player: Player)
+	lastActive[player] = nil
+	warned[player] = nil
+end
+
+function AfkService.Init()
+	task.spawn(function()
+		while true do
+			task.wait(10)
+			-- Snapshot before iterating because player:Kick fires PlayerRemoving
+			-- synchronously, which clears lastActive[player] mid-pairs — Lua's
+			-- behavior for "set existing key to nil during pairs()" is undefined
+			-- and can skip later entries.
+			local toKick: { Player } = {}
+			for player, ts in pairs(lastActive) do
+				local idle = os.clock() - ts
+				if idle >= IDLE_KICK_SECONDS then
+					table.insert(toKick, player)
+				elseif idle >= IDLE_KICK_SECONDS - WARN_SECONDS and not warned[player] then
+					warned[player] = true
+					Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+						kind = "error",
+						text = `AFK kick in {WARN_SECONDS}s — move to reset.`,
+					})
+				end
+			end
+			for _, player in ipairs(toKick) do
+				player:Kick("AFK kick after 20 min — rejoin anytime to keep your progress!")
+			end
+		end
+	end)
+
+	-- Hook every server-bound request as an activity signal
+	for _, n in pairs(Remotes.Names) do
+		local r = Remotes.Event(n)
+		if r:IsA("RemoteEvent") then
+			r.OnServerEvent:Connect(function(player) bumpActivity(player) end)
+		end
+	end
+end
+
+return AfkService
+]=])
+	ensurePath(root, "AnalyticsService", "ModuleScript", [=[
+--!strict
+--[[
+	AnalyticsService — lightweight in-process counters and a DataStore-backed
+	purchase log. Use the in-Studio Output to monitor purchase rates during
+	playtest; for production, swap in your preferred analytics SDK
+	(PlayFab, GameAnalytics, etc.) by extending LogPurchase.
+]]
+
+local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
+
+local AnalyticsService = {}
+
+local purchases: { { userId: number, kind: string, key: string, price: number, at: number } } = {}
+
+local store: DataStore? = nil
+pcall(function()
+	if not RunService:IsStudio() then
+		store = DataStoreService:GetDataStore("BrainrotLab_Analytics_v1")
+	end
+end)
+
+local MAX_PURCHASES_IN_MEMORY = 1000
+
+function AnalyticsService.LogPurchase(player: Player, kind: string, key: string, price: number)
+	local entry = { userId = player.UserId, kind = kind, key = key, price = price, at = os.time() }
+	table.insert(purchases, entry)
+	if #purchases > MAX_PURCHASES_IN_MEMORY then
+		table.remove(purchases, 1)
+	end
+	print(string.format("[ANALYTICS] %s bought %s (%s) for %d R$ — total purchases this server: %d",
+		player.DisplayName, key, kind, price, #purchases))
+	if store then
+		pcall(function()
+			store:SetAsync(`{player.UserId}_{os.time()}_{key}`, entry)
+		end)
+	end
+	local ok, WebhookService = pcall(require, script.Parent.WebhookService)
+	if ok then WebhookService.PostSale(player, kind, key, price) end
+end
+
+function AnalyticsService.Summary(): { totalRobux: number, count: number }
+	local total = 0
+	for _, p in ipairs(purchases) do total += p.price end
+	return { totalRobux = total, count = #purchases }
+end
+
+function AnalyticsService.Init() end
+
+return AnalyticsService
+]=])
+	ensurePath(root, "AnnouncementService", "ModuleScript", [=[
+--!strict
+--[[
+	AnnouncementService — broadcasts a rotating banner to all players. Add
+	entries to the ANNOUNCEMENTS table for live-ops (codes drop, event
+	starting, sale on a gamepass, milestone celebration). The client cycles
+	through them in the top-bar ticker.
+
+	Two ways to schedule: static list (recompiled into server) and runtime
+	pushes via AnnouncementService.Push(text, color) from any service.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local AnnouncementService = {}
+
+type Announcement = {
+	text: string,
+	color: { number },     -- {r,g,b} 0-255
+	durationSeconds: number?,
+}
+
+local STATIC_ANNOUNCEMENTS: { Announcement } = {
+	{ text = "🎟 New code: LAUNCH for 2,500 cash — type in 🎟 Codes tab", color = { 120, 220, 120 } },
+	{ text = "🧠 Watch your brainrots MUTATE every ~90s for stronger forms", color = { 255, 100, 200 } },
+	{ text = "🥷 Walk near a rival's lab and press E to STEAL their brainrots", color = { 255, 80, 80 } },
+	{ text = "💣 Press Q near a rival to throw an INFECTION BOMB", color = { 80, 200, 100 } },
+	{ text = "🌍 Climb the WEEKLY GLOBAL leaderboard — resets Sun 00:00 UTC", color = { 255, 215, 80 } },
+	{ text = "🤝 Trade brainrots with other players in the 🤝 Trade tab", color = { 255, 180, 80 } },
+	{ text = "👥 Join the group for permanent +25% cash income", color = { 200, 200, 255 } },
+	{ text = "🔥 MEGA BOSS spawns every 45 min — coop kill for huge cash payout", color = { 255, 80, 80 } },
+}
+
+local runtimePushes: { Announcement } = {}
+
+local function getRotation(): { Announcement }
+	local combined = table.clone(STATIC_ANNOUNCEMENTS) :: { Announcement }
+	for _, a in ipairs(runtimePushes) do
+		table.insert(combined, 1, a)  -- runtime pushes go to the front
+	end
+	return combined
+end
+
+function AnnouncementService.Push(text: string, color: { number }?, durationSeconds: number?)
+	local entry: Announcement = {
+		text = text,
+		color = color or { 255, 215, 80 },
+		durationSeconds = durationSeconds or 60,
+	}
+	table.insert(runtimePushes, entry)
+	-- Auto-expire
+	if durationSeconds then
+		task.delay(durationSeconds, function()
+			for i, e in ipairs(runtimePushes) do
+				if e == entry then table.remove(runtimePushes, i); break end
+			end
+		end)
+	end
+end
+
+local idx = 1
+local function broadcastNext()
+	local rotation = getRotation()
+	if #rotation == 0 then return end
+	idx = ((idx) % #rotation) + 1
+	local a = rotation[idx]
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.AnnouncementShow):FireClient(p, a)
+	end
+end
+
+function AnnouncementService.OnPlayerAdded(player: Player)
+	local rotation = getRotation()
+	if rotation[1] then
+		Remotes.Event(Remotes.Names.AnnouncementShow):FireClient(player, rotation[1])
+	end
+end
+
+function AnnouncementService.Init()
+	task.spawn(function()
+		while true do
+			task.wait(20)
+			broadcastNext()
+		end
+	end)
+end
+
+return AnnouncementService
+]=])
+	ensurePath(root, "AntiCheat", "ModuleScript", [[
+--!strict
+--!native
+
+local HttpService     = game:GetService("HttpService")
+local Players         = game:GetService("Players")
+local RunService      = game:GetService("RunService")
+local Workspace       = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared  = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local AntiCheat = {}
+
+local RATE_LIMITS: { [string]: { window: number, max: number } } = {
+	RequestCapture            = { window = 1.0,  max = 4   },
+	RequestPlaceBrainrot      = { window = 1.0,  max = 12  },
+	RequestUnplaceBrainrot    = { window = 1.0,  max = 12  },
+	RequestSellBrainrot       = { window = 1.0,  max = 12  },
+	RequestRebirth            = { window = 2.0,  max = 2   },
+	RequestSteal              = { window = 1.5,  max = 3   },
+	RequestInfect             = { window = 1.5,  max = 3   },
+	RequestPromptPurchase     = { window = 1.0,  max = 3   },
+	RequestRedeemCode         = { window = 4.0,  max = 2   },
+	RequestRedeemInvite       = { window = 5.0,  max = 1   },
+	RequestRecheckGroup       = { window = 60.0, max = 1   },
+	RequestClaimDaily         = { window = 5.0,  max = 1   },
+	RequestClaimBattlePassTier= { window = 0.5,  max = 6   },
+	RequestClaimAchievement   = { window = 0.5,  max = 6   },
+	RequestClaimQuest         = { window = 0.5,  max = 6   },
+	RequestClaimLevelReward   = { window = 0.5,  max = 6   },
+	RequestTradeInvite        = { window = 3.0,  max = 1   },
+	RequestTradeAccept        = { window = 1.0,  max = 1   },
+	RequestTradeDecline       = { window = 1.0,  max = 1   },
+	RequestTradeAddBrainrot   = { window = 0.3,  max = 4   },
+	RequestTradeRemoveBrainrot= { window = 0.3,  max = 4   },
+	RequestTradeSetCash       = { window = 0.5,  max = 4   },
+	RequestTradeConfirm       = { window = 1.0,  max = 1   },
+	RequestTradeCancel        = { window = 1.0,  max = 1   },
+	RequestEquipPet           = { window = 0.5,  max = 4   },
+	RequestUnequipPet         = { window = 0.5,  max = 4   },
+	RequestBuyDecoration      = { window = 0.5,  max = 4   },
+	RequestSellDecoration     = { window = 0.5,  max = 4   },
+}
+
+local MAX_HORIZONTAL_SPEED      = 36   -- studs/sec; default WalkSpeed is 16
+local MAX_VERTICAL_SPEED        = 100  -- studs/sec; allows for jumps but blocks flight
+local POSITION_SAMPLE_INTERVAL  = 0.5
+local TELEPORT_THRESHOLD_STUDS  = 80
+local WORLD_BOUNDS              = { x = 4096, y = 2048, z = 4096 }
+local VIOLATION_KICK_THRESHOLD  = 6
+local VIOLATION_DECAY_SECONDS   = 60
+local VIOLATION_DECAY_AMOUNT    = 1
+
+type RateBucket = { startedAt: number, count: number }
+type PlayerRecord = {
+	rateBuckets: { [string]: RateBucket },
+	lastPosition: Vector3?,
+	lastPositionAt: number,
+	violations: number,
+	violationsLastDecayAt: number,
+	flagLog: { { tag: string, detail: string, at: number } },
+	sessionId: string,
+}
+
+local records: { [Player]: PlayerRecord } = {}
+local violationListeners: { (Player, string, string, number) -> () } = {}
+
+local function record(player: Player): PlayerRecord
+	local r = records[player]
+	if r then return r end
+	r = {
+		rateBuckets = {},
+		lastPosition = nil,
+		lastPositionAt = os.clock(),
+		violations = 0,
+		violationsLastDecayAt = os.clock(),
+		flagLog = {},
+		sessionId = HttpService:GenerateGUID(false),
+	}
+	records[player] = r
+	return r
+end
+
+local function notifyListeners(player: Player, tag: string, detail: string, severity: number)
+	for _, cb in ipairs(violationListeners) do
+		task.spawn(cb, player, tag, detail, severity)
+	end
+end
+
+local function flag(player: Player, tag: string, detail: string, severity: number)
+	local r = record(player)
+	r.violations += severity
+	table.insert(r.flagLog, { tag = tag, detail = detail, at = os.time() })
+	if #r.flagLog > 32 then table.remove(r.flagLog, 1) end
+	Log.Warn("AntiCheat", "%s sid=%s | %s — %s (sev=%d total=%d)",
+		player.Name, r.sessionId, tag, detail, severity, r.violations)
+	notifyListeners(player, tag, detail, severity)
+	if r.violations >= VIOLATION_KICK_THRESHOLD then
+		player:Kick(string.format("Disconnected: anti-cheat flag (%s). Rejoin to continue.", tag))
+	end
+end
+
+function AntiCheat.OnViolation(cb: (Player, string, string, number) -> ())
+	table.insert(violationListeners, cb)
+end
+
+function AntiCheat.CheckRate(player: Player, remoteName: string): boolean
+	local limit = RATE_LIMITS[remoteName]
+	if not limit then return true end
+	local r = record(player)
+	local bucket = r.rateBuckets[remoteName]
+	local now = os.clock()
+	if not bucket or now - bucket.startedAt > limit.window then
+		r.rateBuckets[remoteName] = { startedAt = now, count = 1 }
+		return true
+	end
+	bucket.count += 1
+	if bucket.count > limit.max then
+		flag(player, "RateLimit",
+			string.format("%s exceeded %d req / %.1fs", remoteName, limit.max, limit.window), 1)
+		return false
+	end
+	return true
+end
+
+local SANITIZE_MAX_NUMBER = 1e12
+local SANITIZE_MAX_STRING = 64
+
+function AntiCheat.SanitizeNumber(player: Player, value: any, context: string): number?
+	if typeof(value) ~= "number" then
+		flag(player, "BadArg", `{context}: expected number, got {typeof(value)}`, 2)
+		return nil
+	end
+	if value ~= value or value == math.huge or value == -math.huge then
+		flag(player, "BadArg", `{context}: NaN/inf`, 2)
+		return nil
+	end
+	if math.abs(value) > SANITIZE_MAX_NUMBER then
+		flag(player, "BadArg", `{context}: number out of range`, 2)
+		return nil
+	end
+	return value
+end
+
+function AntiCheat.SanitizeString(player: Player, value: any, context: string, maxLen: number?): string?
+	if typeof(value) ~= "string" then
+		flag(player, "BadArg", `{context}: expected string, got {typeof(value)}`, 2)
+		return nil
+	end
+	local cap = maxLen or SANITIZE_MAX_STRING
+	if #value > cap then
+		flag(player, "BadArg", `{context}: string length {#value} > {cap}`, 2)
+		return nil
+	end
+	return value
+end
+
+function AntiCheat.SanitizeUid(player: Player, value: any, context: string): string?
+	local s = AntiCheat.SanitizeString(player, value, context, 32)
+	if not s then return nil end
+	if not string.match(s, "^[%w%-_]+$") then
+		flag(player, "BadArg", `{context}: invalid uid format`, 2)
+		return nil
+	end
+	return s
+end
+
+local function checkPositionFor(player: Player)
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return end
+	local r = record(player)
+	local now = os.clock()
+	local pos = hrp.Position
+
+	if math.abs(pos.X) > WORLD_BOUNDS.x or math.abs(pos.Z) > WORLD_BOUNDS.z
+		or pos.Y < -WORLD_BOUNDS.y or pos.Y > WORLD_BOUNDS.y then
+		flag(player, "OutOfBounds", string.format("pos=%.0f,%.0f,%.0f", pos.X, pos.Y, pos.Z), 2)
+		pcall(function() char:PivotTo(CFrame.new(0, 8, 0)) end)
+		return
+	end
+
+	if r.lastPosition then
+		local dt = math.max(0.01, now - r.lastPositionAt)
+		local delta = pos - r.lastPosition
+		local horiz = math.sqrt(delta.X*delta.X + delta.Z*delta.Z)
+		local vert = math.abs(delta.Y)
+		local horizSpeed = horiz / dt
+		local vertSpeed = vert / dt
+
+		if horiz > TELEPORT_THRESHOLD_STUDS then
+			flag(player, "Teleport", string.format("dx=%.1f in %.2fs", horiz, dt), 2)
+		elseif horizSpeed > MAX_HORIZONTAL_SPEED then
+			flag(player, "SpeedHack", string.format("h=%.1f s/s", horizSpeed), 1)
+		end
+		if vertSpeed > MAX_VERTICAL_SPEED then
+			flag(player, "VerticalSpeed", string.format("v=%.1f s/s", vertSpeed), 1)
+		end
+	end
+	r.lastPosition = pos
+	r.lastPositionAt = now
+
+	if now - r.violationsLastDecayAt >= VIOLATION_DECAY_SECONDS and r.violations > 0 then
+		r.violations = math.max(0, r.violations - VIOLATION_DECAY_AMOUNT)
+		r.violationsLastDecayAt = now
+	end
+end
+
+-- Players in this set are exempt from WalkSpeed/JumpPower clamps. Set by
+-- AdminService /speed so an owner-issued override sticks. Cleared on
+-- character removing so an exploit can't lean on a stale exemption.
+local hardenExempt: { [number]: boolean } = {}
+
+function AntiCheat.SetCharacterClampExempt(player: Player, exempt: boolean)
+	hardenExempt[player.UserId] = exempt or nil
+end
+
+local function hardenCharacter(player: Player, char: Model)
+	local humanoid = char:WaitForChild("Humanoid", 5) :: Humanoid?
+	if not humanoid then return end
+	humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+		if hardenExempt[player.UserId] then return end
+		if humanoid.WalkSpeed > 30 then humanoid.WalkSpeed = 16 end
+	end)
+	humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
+		if hardenExempt[player.UserId] then return end
+		if humanoid.JumpPower > 80 then humanoid.JumpPower = 50 end
+	end)
+	char.AncestryChanged:Connect(function()
+		if not char:IsDescendantOf(game) then hardenExempt[player.UserId] = nil end
+	end)
+end
+
+function AntiCheat.OnPlayerAdded(player: Player)
+	record(player)
+	player.CharacterAdded:Connect(function(char)
+		local r = records[player]
+		if r then r.lastPosition = nil end
+		hardenCharacter(player, char)
+	end)
+	if player.Character then hardenCharacter(player, player.Character) end
+end
+
+function AntiCheat.OnPlayerRemoving(player: Player)
+	records[player] = nil
+end
+
+function AntiCheat.WrapRemote(remote: RemoteEvent, name: string, handler: (Player, ...any) -> ())
+	remote.OnServerEvent:Connect(function(player, ...)
+		if not AntiCheat.CheckRate(player, name) then return end
+		local ok, err = pcall(handler, player, ...)
+		if not ok then
+			Log.Error("AntiCheat", "handler %s errored: %s", name, tostring(err))
+		end
+	end)
+end
+
+function AntiCheat.ClearFlags(player: Player): boolean
+	local r = records[player]
+	if not r then return false end
+	r.violations = 0
+	r.flagLog = {}
+	r.violationsLastDecayAt = os.clock()
+	return true
+end
+
+function AntiCheat.Snapshot(): { [string]: any }
+	local out = {}
+	for player, r in pairs(records) do
+		out[player.Name] = {
+			violations = r.violations,
+			recentFlags = r.flagLog,
+			sessionId = r.sessionId,
+		}
+	end
+	return out
+end
+
+function AntiCheat.Init()
+	if RunService:IsClient() then return end
+
+	task.spawn(function()
+		while true do
+			task.wait(POSITION_SAMPLE_INTERVAL)
+			for _, player in ipairs(Players:GetPlayers()) do
+				checkPositionFor(player)
+			end
+		end
+	end)
+
+	-- Block client-side workspace mutation attempts: any script the client
+	-- could inject via LocalScript can't reach the server data. We additionally
+	-- prevent obvious workspace tampering attempts by watching for parts owned
+	-- by no one being added to known plot folders.
+	local plotsFolder = Workspace:FindFirstChild("Plots") :: Folder?
+	if plotsFolder then
+		plotsFolder.DescendantAdded:Connect(function(inst)
+			if inst:IsA("Tool") or inst:IsA("Accessory") then
+				inst:Destroy()
+			end
+		end)
+	end
+
+	-- Mute exception logs from Remotes the client targets — the wrapper logs
+	-- richer detail and rate-limits naturally.
+	local _ = Remotes
+end
+
+return AntiCheat
+]])
+	ensurePath(root, "AutoSellService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local DataService = require(script.Parent.DataService)
+local LabService  = require(script.Parent.LabService)
+
+local AutoSellService = {}
+
+-- Per-player auto-sell rules. Player picks a rarity threshold; anything at or
+-- below that rarity is auto-sold on capture. Solves late-game inventory
+-- bloat that drives players to quit instead of grinding higher rebirths.
+
+local RARITY_RANK: { [string]: number } = {
+	Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Mythic = 6, Outbreak = 7,
+}
+
+local function ensure(data: any)
+	data._autoSell = data._autoSell or {
+		enabled = false,
+		threshold = "Common",       -- below or equal to this gets sold
+		excludeMutated = true,       -- never auto-sell a mutated brainrot
+	}
+end
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	Remotes.Event(Remotes.Names.AutoSellUpdate):FireClient(player, data._autoSell)
+end
+
+-- Hook called by LabService.GiveBrainrot once a new brainrot lands in
+-- inventory. We re-check eligibility and trigger a sell if applicable.
+function AutoSellService.OnCapture(player: Player, brainrotUid: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	if not data._autoSell.enabled then return end
+	for _, b in ipairs(data.inventory) do
+		if b.uid == brainrotUid then
+			if data._autoSell.excludeMutated and b.mutationTier > 0 then return end
+			local BrainrotData = require(Shared.BrainrotData)
+			local def = BrainrotData.Get(b.speciesId)
+			if not def then return end
+			local thRank = RARITY_RANK[data._autoSell.threshold] or 1
+			local rank = RARITY_RANK[def.rarity] or 1
+			if rank <= thRank then
+				task.defer(function() LabService.SellBrainrot(player, brainrotUid) end)
+			end
+			return
+		end
+	end
+end
+
+function AutoSellService.SetConfig(player: Player, enabled: boolean, threshold: string, excludeMutated: boolean)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	if not RARITY_RANK[threshold] then return end
+	data._autoSell.enabled = enabled and true or false
+	data._autoSell.threshold = threshold
+	data._autoSell.excludeMutated = excludeMutated and true or false
+	pushUpdate(player)
+	Log.Info("AutoSell", "%s -> enabled=%s threshold=%s excludeMutated=%s",
+		player.Name, tostring(enabled), threshold, tostring(excludeMutated))
+end
+
+function AutoSellService.OnPlayerAdded(player: Player)
+	task.delay(2, pushUpdate, player)
+end
+
+function AutoSellService.Init()
+	Remotes.Event(Remotes.Names.AutoSellUpdate)
+end
+
+return AutoSellService
+]])
+	ensurePath(root, "BadgeService", "ModuleScript", [=[
+--!strict
+--[[
+	BadgeService — awards Roblox Badges for milestone events. Badges show
+	on the player's Roblox profile permanently, which is the most viral
+	thing in the platform's social graph (friends see them, recommendation
+	algorithms bias toward profiles with rare badges).
+
+	Workflow: create badges on the Creator Dashboard (one per entry in
+	BADGES below) → paste IDs → republish. Each badge is awarded at most
+	once per player; BadgeService gates with a profile flag and the
+	platform's :UserHasBadgeAsync check.
+]]
+
+local BadgeService_Roblox = game:GetService("BadgeService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local DataService = require(script.Parent.DataService)
+local Remotes = require(Shared.Remotes)
+local Config = require(Shared.Config)
+
+local BadgeService = {}
+
+-- Replace 0s with real Badge IDs from Creator Dashboard → Badges → Create.
+-- Suggested badge icons documented in launch/MARKETING.md.
+local BADGES: { [string]: { id: number, name: string, trigger: string } } = {
+	FirstSteps    = { id = 0, name = "First Steps",     trigger = "join" },               -- first join
+	FirstCapture  = { id = 0, name = "First Capture",   trigger = "first_capture" },
+	FirstMutation = { id = 0, name = "First Mutation",  trigger = "first_mutation" },
+	FirstSteal    = { id = 0, name = "Sticky Fingers",  trigger = "first_steal" },
+	FirstInfect   = { id = 0, name = "Patient Zero",    trigger = "first_infect" },
+	FirstRebirth  = { id = 0, name = "Reborn",          trigger = "first_rebirth" },
+	OutbreakHero  = { id = 0, name = "Outbreak Hero",   trigger = "first_outbreak" },
+	ApexAchieved  = { id = 0, name = "Apex Tier",       trigger = "apex_mutation" },     -- mutate any to T6
+	Tycoon100K    = { id = 0, name = "100K Earner",     trigger = "cash_100k" },
+	Tycoon1M      = { id = 0, name = "Millionaire",     trigger = "cash_1m" },
+	Founder       = { id = 0, name = "Founder",         trigger = "joined_in_launch_week" },
+}
+
+local function shouldAwardFounder(): boolean
+	-- Awards "Founder" badge to anyone joining within the launch window.
+	-- Set Config.LAUNCH_TS = os.time() when you publish to enable it.
+	-- Treat 0 / nil / negative as 'disabled' so a typo doesn't accidentally
+	-- award the badge to anyone who joins.
+	local ts = Config.LAUNCH_TS
+	if not ts or ts <= 0 then return false end
+	local windowDays = Config.LAUNCH_FOUNDER_WINDOW_DAYS or 14
+	if windowDays <= 0 then return false end
+	return os.time() - ts < windowDays * 24 * 3600
+end
+
+local function tryAward(player: Player, key: string)
+	local b = BADGES[key]
+	if not b or b.id <= 0 then return end
+	local data = DataService.Get(player)
+	if not data then return end
+	(data :: any)._badges = (data :: any)._badges or {}
+	local log = (data :: any)._badges :: { [string]: boolean }
+	if log[key] then return end
+	-- Don't re-grant if Roblox already has it (cross-session check)
+	local ok, owned = pcall(function()
+		return BadgeService_Roblox:UserHasBadgeAsync(player.UserId, b.id)
+	end)
+	if ok and owned then
+		log[key] = true
+		return
+	end
+	-- AwardBadge returns a boolean. pcall protects against network errors;
+	-- the returned bool tells us whether Roblox actually granted the badge
+	-- (false typically means the badge is private or unowned). Treating a
+	-- silent false as success would mark the local log so this player never
+	-- retries — leading to permanently un-awarded badges after fixing
+	-- visibility on the dashboard. Capture both.
+	local callOk, awardSuccess = pcall(function()
+		return BadgeService_Roblox:AwardBadge(player.UserId, b.id)
+	end)
+	if callOk and awardSuccess then
+		log[key] = true
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = `🏆 Badge unlocked: {b.name}`,
+		})
+	end
+end
+
+function BadgeService.Fire(player: Player, trigger: string)
+	for key, b in pairs(BADGES) do
+		if b.trigger == trigger then
+			tryAward(player, key)
+		end
+	end
+end
+
+function BadgeService.OnPlayerAdded(player: Player)
+	task.delay(2, function()
+		BadgeService.Fire(player, "join")
+		if shouldAwardFounder() then
+			tryAward(player, "Founder")
+		end
+	end)
+end
+
+function BadgeService.Init()
+	if BADGES.FirstSteps.id <= 0 then
+		print("[BadgeService] No badge IDs configured. Create badges in Creator Dashboard and paste IDs into BadgeService.luau.")
+	end
+	-- Suppress unused
+	local _ = Players
+end
+
+return BadgeService
+]=])
+	ensurePath(root, "BattlePassService", "ModuleScript", [=[
+--!strict
+--[[
+	BattlePassService — XP, tier progression, reward claim.
+	Free tier gives small cash + bombs. Premium tier (sold via Battle Pass
+	dev product) gives 10x rewards. Season resets every BATTLE_PASS_DURATION_DAYS.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local InfectionService -- forward
+local CaptureService -- forward
+
+local BattlePassService = {}
+
+local function tierReward(tier: number, premium: boolean): { kind: string, amount: number }
+	-- Free vs premium reward magnitudes
+	local cash = (tier + 1) * 300
+	local mult = if premium then 10 else 1
+	if tier % 5 == 4 then
+		-- Bonus tier: rare egg (premium) or bomb (free)
+		if premium then
+			return { kind = "rare_egg", amount = 1 }
+		else
+			return { kind = "infection_bomb", amount = 1 }
+		end
+	end
+	return { kind = "cash", amount = cash * mult }
+end
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	Remotes.Event(Remotes.Names.BattlePassUpdate):FireClient(player, {
+		xp = data.battlePass.xp,
+		tier = data.battlePass.tier,
+		xpPerTier = Config.BATTLE_PASS_XP_PER_TIER,
+		maxTier = Config.BATTLE_PASS_TIERS,
+		premium = data.battlePass.premium,
+		claimed = data.battlePass.claimed,
+		seasonId = data.battlePass.seasonId,
+	})
+end
+
+function BattlePassService.AwardXp(player: Player, kind: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	local amount = Config.BATTLE_PASS_XP_SOURCES[kind] or 0
+	if amount == 0 then return end
+	data.battlePass.xp += amount
+	-- tier ups
+	while data.battlePass.tier < Config.BATTLE_PASS_TIERS
+		and data.battlePass.xp >= (data.battlePass.tier + 1) * Config.BATTLE_PASS_XP_PER_TIER do
+		data.battlePass.tier += 1
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "info",
+			text = `Battle Pass Tier {data.battlePass.tier}! Claim your reward.`,
+		})
+	end
+	pushUpdate(player)
+end
+
+function BattlePassService.ClaimTier(player: Player, tier: number)
+	local data = DataService.Get(player)
+	if not data then return end
+	if tier < 1 or tier > data.battlePass.tier then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Tier not earned yet." })
+		return
+	end
+	local keyFree = `f:{tier}`
+	local keyPrem = `p:{tier}`
+	if not data.battlePass.claimed[keyFree] then
+		local r = tierReward(tier, false)
+		if r.kind == "cash" then EconomyService.AwardCash(player, r.amount, "battle pass")
+		elseif r.kind == "infection_bomb" then InfectionService.AddBombs(player, r.amount)
+		elseif r.kind == "rare_egg" then CaptureService.AttemptCapture(player, { freeRare = true, count = r.amount or 1 })
+		end
+		data.battlePass.claimed[keyFree] = true
+	end
+	if data.battlePass.premium and not data.battlePass.claimed[keyPrem] then
+		local r = tierReward(tier, true)
+		if r.kind == "cash" then EconomyService.AwardCash(player, r.amount, "BP premium")
+		elseif r.kind == "infection_bomb" then InfectionService.AddBombs(player, r.amount)
+		elseif r.kind == "rare_egg" then CaptureService.AttemptCapture(player, { freeRare = true, count = r.amount or 1 })
+		end
+		data.battlePass.claimed[keyPrem] = true
+	end
+	pushUpdate(player)
+end
+
+function BattlePassService.GrantPremium(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	data.battlePass.premium = true
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "info", text = "Premium Battle Pass unlocked — claim previous tiers for premium rewards!",
+	})
+	pushUpdate(player)
+end
+
+function BattlePassService.OnPlayerAdded(player: Player)
+	task.delay(1, pushUpdate, player)
+end
+
+function BattlePassService.Init()
+	InfectionService = require(script.Parent.InfectionService)
+	CaptureService = require(script.Parent.CaptureService)
+end
+
+return BattlePassService
+]=])
+	ensurePath(root, "BossEventService", "ModuleScript", [=[
+--!strict
+--[[
+	BossEventService — once every 45 min a "Mega Brainrot" boss spawns at
+	the plaza. All players in the server can damage it by clicking. The
+	boss has lots of HP; damage scales with the attacker's rebirth tier so
+	high-rebirth players carry but everyone contributes. Each damaging
+	player gets a share of the loot pool (cash + rare egg roll) on kill.
+
+	Why cooperative? It's the one mode where players HAVE to interact
+	without fighting each other. Cooperative events drive friendship loops
+	and group voice-chat retention, both of which dominate LTV in tycoon
+	games (Adopt Me's adoption + trade community is the canonical example).
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local CaptureService -- forward
+
+local BossEventService = {}
+
+local BOSS_INTERVAL = if Config.FAST_TEST_MODE then 90 else 2700 -- 45 min
+local BOSS_DURATION = 240
+local BOSS_HP_BASE = 50000
+
+local nextBossAt = os.time() + BOSS_INTERVAL
+local activeBoss: { model: Model, hp: number, maxHp: number, damageBy: { [number]: number }, endsAt: number }? = nil
+
+local function bossCenter(): Vector3
+	return Vector3.new(160, 6, -200)
+end
+
+local function broadcastState()
+	local payload
+	if activeBoss then
+		payload = {
+			active = true,
+			hp = activeBoss.hp,
+			maxHp = activeBoss.maxHp,
+			secondsLeft = math.max(0, activeBoss.endsAt - os.time()),
+			contributors = 0,
+		}
+		for _ in pairs(activeBoss.damageBy) do payload.contributors += 1 end
+	else
+		payload = {
+			active = false,
+			secondsToStart = math.max(0, nextBossAt - os.time()),
+		}
+	end
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.BossUpdate):FireClient(p, payload)
+	end
+end
+
+local function payoutAndEnd(victory: boolean)
+	if not activeBoss then return end
+	local pool = victory and 50000 or 10000
+	local total = 0
+	for _, dmg in pairs(activeBoss.damageBy) do total += dmg end
+	if total > 0 then
+		for userId, dmg in pairs(activeBoss.damageBy) do
+			local player = Players:GetPlayerByUserId(userId)
+			if player then
+				local share = math.floor(pool * dmg / total)
+				EconomyService.AwardCash(player, share, "boss share")
+				if victory and dmg / total >= 0.05 then
+					-- Top contributors get a rare egg
+					if CaptureService then
+						CaptureService.AttemptCapture(player, { freeRare = true, count = 1 })
+					end
+				end
+				Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+					kind = victory and "capture" or "info",
+					text = victory and `Boss defeated! +{share} cash` or `Boss escaped. +{share} cash`,
+				})
+			end
+		end
+	end
+	if activeBoss.model.Parent then activeBoss.model:Destroy() end
+	activeBoss = nil
+	nextBossAt = os.time() + BOSS_INTERVAL
+	broadcastState()
+end
+
+local function spawnBoss()
+	local center = bossCenter()
+	local model = Instance.new("Model")
+	model.Name = "MegaBrainrot"
+
+	local body = Instance.new("Part")
+	body.Anchored = true
+	body.Size = Vector3.new(18, 18, 18)
+	body.Position = center + Vector3.new(0, body.Size.Y/2, 0)
+	body.Color = Color3.fromRGB(255, 60, 60)
+	body.Material = Enum.Material.Neon
+	body.Shape = Enum.PartType.Ball
+	body.Parent = model
+	model.PrimaryPart = body
+
+	local fire = Instance.new("Fire")
+	fire.Size = 20
+	fire.Heat = 12
+	fire.Parent = body
+
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.fromOffset(420, 100)
+	bb.StudsOffset = Vector3.new(0, 14, 0)
+	bb.AlwaysOnTop = true
+	bb.Parent = body
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.Font = Enum.Font.GothamBlack
+	lbl.TextScaled = true
+	lbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+	lbl.TextStrokeTransparency = 0
+	lbl.Text = "MEGA BRAINROT\nCLICK TO ATTACK"
+	lbl.Name = "Label"
+	lbl.Parent = bb
+
+	local maxHp = BOSS_HP_BASE + (#Players:GetPlayers() * 15000)
+	activeBoss = {
+		model = model,
+		hp = maxHp,
+		maxHp = maxHp,
+		damageBy = {},
+		endsAt = os.time() + BOSS_DURATION,
+	}
+
+	local cd = Instance.new("ClickDetector")
+	cd.MaxActivationDistance = 60
+	cd.Parent = body
+	local lastClickAt: { [number]: number } = {}
+	cd.MouseClick:Connect(function(player)
+		if not activeBoss then return end
+		local now = os.clock()
+		if lastClickAt[player.UserId] and now - lastClickAt[player.UserId] < 0.2 then return end
+		lastClickAt[player.UserId] = now
+		local data = DataService.Get(player)
+		if not data then return end
+		local dmg = 100 + data.rebirths * 80
+		activeBoss.hp = math.max(0, activeBoss.hp - dmg)
+		activeBoss.damageBy[player.UserId] = (activeBoss.damageBy[player.UserId] or 0) + dmg
+		lbl.Text = string.format("MEGA BRAINROT\n%d / %d HP", activeBoss.hp, activeBoss.maxHp)
+		if activeBoss.hp == 0 then
+			payoutAndEnd(true)
+		end
+	end)
+
+	model.Parent = Workspace
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.Notify):FireClient(p, {
+			kind = "info",
+			text = `🔥 MEGA BOSS at the arena! Click to attack — coop kill = big cash + rare egg.`,
+		})
+	end
+	broadcastState()
+end
+
+function BossEventService.Init()
+	CaptureService = require(script.Parent.CaptureService)
+
+	-- Arena pad
+	local pad = Instance.new("Part")
+	pad.Anchored = true
+	pad.Size = Vector3.new(60, 1, 60)
+	pad.Position = bossCenter() - Vector3.new(0, 6, 0)
+	pad.Color = Color3.fromRGB(60, 0, 0)
+	pad.Material = Enum.Material.Neon
+	pad.Name = "BossArena"
+	pad.Parent = Workspace
+
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			if not activeBoss and os.time() >= nextBossAt then
+				spawnBoss()
+			elseif activeBoss and os.time() >= activeBoss.endsAt then
+				payoutAndEnd(false)
+			end
+			if os.time() % 5 == 0 then broadcastState() end
+		end
+	end)
+end
+
+function BossEventService.ForceSpawn()
+	if activeBoss then return end
+	spawnBoss()
+end
+
+function BossEventService.OnPlayerAdded(player: Player)
+	task.delay(2, broadcastState)
+end
+
+return BossEventService
+]=])
+	ensurePath(root, "BuffService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+local Log     = require(Shared.Log)
+
+local BuffService = {}
+
+-- Per-player temporary multipliers, applied on top of the existing
+-- EconomyService stack. Used by AdminService /buff for compensation
+-- ('sorry your brainrot got eaten by the bug, here's 2x income for 5
+-- minutes') and live-ops bursts.
+
+type Buff = {
+	kind: string,     -- "income" | "mutation"
+	mult: number,
+	expiresAt: number,
+}
+
+local buffs: { [number]: { [string]: Buff } } = {}
+
+local function get(userId: number, kind: string): number
+	local set = buffs[userId]
+	if not set then return 1 end
+	local b = set[kind]
+	if not b then return 1 end
+	if os.time() >= b.expiresAt then
+		set[kind] = nil
+		return 1
+	end
+	return b.mult
+end
+
+function BuffService.GetIncomeMult(player: Player): number
+	return get(player.UserId, "income")
+end
+
+function BuffService.GetMutationMult(player: Player): number
+	return get(player.UserId, "mutation")
+end
+
+function BuffService.Apply(player: Player, kind: string, mult: number, seconds: number)
+	if kind ~= "income" and kind ~= "mutation" then return false end
+	-- Reject pathological inputs: mult must be positive, seconds must be a
+	-- reasonable positive integer. Negative mult would invert income/mutation,
+	-- zero would freeze the player out of the loop.
+	if typeof(mult) ~= "number" or mult <= 0 or mult ~= mult then return false end
+	if typeof(seconds) ~= "number" or seconds <= 0 or seconds ~= seconds then return false end
+	mult = math.min(mult, 100)            -- absurd-mult cap
+	seconds = math.min(math.floor(seconds), 86400)   -- 1-day cap
+	buffs[player.UserId] = buffs[player.UserId] or {}
+	buffs[player.UserId][kind] = {
+		kind = kind,
+		mult = mult,
+		expiresAt = os.time() + seconds,
+	}
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "info",
+		text = string.format("⚡ %s buff x%.2f for %s", kind, mult, Util.SecondsToClock(seconds)),
+	})
+	Log.Info("Buff", "applied %s x%.2f to %s for %ds", kind, mult, player.Name, seconds)
+	return true
+end
+
+function BuffService.OnPlayerRemoving(player: Player)
+	buffs[player.UserId] = nil
+end
+
+function BuffService.Init() end
+
+return BuffService
+]])
+	ensurePath(root, "CaptureService", "ModuleScript", [=[
+--!strict
+--[[
+	CaptureService — handles the "buy a new brainrot" action from a plot's
+	capture button (and from the Rare Brainrot Egg dev product).
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Types = require(Shared.Types)
+local BrainrotData = require(Shared.BrainrotData)
+local Util = require(Shared.Util)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local LabService = require(script.Parent.LabService)
+
+local CaptureService = {}
+
+local rng = Random.new()
+
+function CaptureService.AttemptCapture(player: Player, opts: { freeRare: boolean?, count: number? }?)
+	local data = DataService.Get(player)
+	if not data then return end
+	opts = opts or {}
+	local count = (opts.count or 0)
+	if count == 0 then
+		count = if data.gamepasses["TripleCapture"] then Config.TRIPLE_CAPTURE_COUNT else Config.CAPTURE_BASE_COUNT
+	end
+
+	local cost = Config.CAPTURE_COST(data.rebirths)
+	if not opts.freeRare then
+		if not EconomyService.SpendCash(player, cost) then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+				kind = "error",
+				text = `Need {cost} cash to capture.`,
+			})
+			return
+		end
+	end
+
+	local luckyBias = if data.gamepasses["LuckyMutations"] then Config.MUTATION_LUCKY_RARITY_BIAS else 0
+	if opts.freeRare then luckyBias = math.max(luckyBias, 0.8) end
+
+	for _ = 1, count do
+		local def = BrainrotData.RollSpecies(rng, false, luckyBias)
+		local brainrot: Types.OwnedBrainrot = {
+			uid = Util.GenerateUid(),
+			speciesId = def.id,
+			mutationTier = 0,
+			mutations = {},
+			bornAt = os.time(),
+			lastMutationAt = os.time(),
+			placed = false,
+		}
+		LabService.GiveBrainrot(player, brainrot)
+		LabService.PlaceBrainrot(player, brainrot.uid)
+	end
+end
+
+function CaptureService.GiveOutbreakBrainrot(player: Player, speciesId: string)
+	local def = BrainrotData.Get(speciesId)
+	if not def then return end
+	local brainrot: Types.OwnedBrainrot = {
+		uid = Util.GenerateUid(),
+		speciesId = def.id,
+		mutationTier = 0,
+		mutations = {},
+		bornAt = os.time(),
+		lastMutationAt = os.time(),
+		placed = false,
+	}
+	LabService.GiveBrainrot(player, brainrot)
+	LabService.PlaceBrainrot(player, brainrot.uid)
+end
+
+function CaptureService.Init() end
+
+return CaptureService
+]=])
+	ensurePath(root, "CinematicService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local CinematicService = {}
+
+-- Fires a "cinematic" event to a player. Client side renders a brief
+-- full-screen overlay tuned per kind. Used for moments worth pausing for:
+-- big mutations, rebirths, full-combo equivalents.
+type Cinematic = {
+	kind: string,                 -- "rebirth" | "apex_mutation" | "mythic_drop"
+	title: string,
+	subtitle: string?,
+	color: { number }?,            -- {r,g,b}
+	durationSeconds: number?,
+}
+
+function CinematicService.Play(player: Player, cine: Cinematic)
+	Remotes.Event(Remotes.Names.Cinematic):FireClient(player, cine)
+end
+
+function CinematicService.OnPlayerAdded(_: Player) end
+
+function CinematicService.Init()
+	Remotes.Event(Remotes.Names.Cinematic)
+end
+
+return CinematicService
+]])
+	ensurePath(root, "CodeService", "ModuleScript", [=[
+--!strict
+--[[
+	CodeService — redeems marketing codes from Config.REDEMPTION_CODES.
+	Each (player, codeKey) pair is single-use; we track redemptions on the
+	profile so they survive reconnects.
+
+	Workflow: post a TikTok/Shorts/Reels with a redemption code at the end
+	of the video → viewers join → redeem → engagement spike → cash hooks
+	convert. This is the dial you control without redeploying code (just
+	add more entries to Config.REDEMPTION_CODES and republish).
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local InfectionService -- forward
+local CaptureService -- forward
+local MutationService -- forward
+
+local CodeService = {}
+
+-- Runtime-added codes (in-memory only; lost on shutdown). Filled by
+-- AdminService's /addcode command so the owner can drop a fresh code
+-- mid-stream without republishing the place.
+local runtimeCodes: { [string]: any } = {}
+
+local function deliverReward(player: Player, code: string, reward: any): boolean
+	if reward.kind == "cash" then
+		EconomyService.AwardCash(player, reward.amount or 0, `code {code}`)
+	elseif reward.kind == "infection_bomb" then
+		InfectionService.AddBombs(player, reward.amount or 1)
+	elseif reward.kind == "rare_egg" then
+		CaptureService.AttemptCapture(player, { freeRare = true, count = reward.amount or 1 })
+	elseif reward.kind == "instant_mutation" then
+		for _ = 1, (reward.amount or 1) do
+			MutationService.ForceInstantMutation(player)
+		end
+	else
+		warn(`[CodeService] Unknown reward kind: {tostring(reward.kind)}`)
+		return false
+	end
+	return true
+end
+
+function CodeService.Redeem(player: Player, codeRaw: string)
+	if typeof(codeRaw) ~= "string" then return end
+	local code = string.upper(string.gsub(codeRaw, "%s", ""))
+	local reward = (Config.REDEMPTION_CODES :: any)[code] or runtimeCodes[code]
+	if not reward then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Invalid code: {code}` })
+		return
+	end
+	if reward.expiresAt and os.time() > reward.expiresAt then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code expired: {code}` })
+		return
+	end
+	local data = DataService.Get(player)
+	if not data then return end
+	(data :: any)._redeemedCodes = (data :: any)._redeemedCodes or {}
+	local log = (data :: any)._redeemedCodes :: { [string]: boolean }
+	if log[code] then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Already redeemed: {code}` })
+		return
+	end
+	local ok = deliverReward(player, code, reward)
+	if not ok then return end
+	log[code] = true
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = `Code {code} — {reward.label or "reward"} granted!`,
+	})
+end
+
+function CodeService.Init()
+	InfectionService = require(script.Parent.InfectionService)
+	CaptureService = require(script.Parent.CaptureService)
+	MutationService = require(script.Parent.MutationService)
+end
+
+function CodeService.List(): { string }
+	local out: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for code, _ in pairs((Config.REDEMPTION_CODES or {}) :: any) do
+		if not seen[code] then table.insert(out, code); seen[code] = true end
+	end
+	for code, _ in pairs(runtimeCodes) do
+		if not seen[code] then table.insert(out, code .. " (runtime)"); seen[code] = true end
+	end
+	table.sort(out)
+	return out
+end
+
+function CodeService.AddRuntime(code: string, cashAmount: number)
+	runtimeCodes[string.upper(code)] = { kind = "cash", amount = cashAmount }
+end
+
+return CodeService
+]=])
+	ensurePath(root, "CrossServerShoutService", "ModuleScript", [[
+--!strict
+
+local MessagingService = game:GetService("MessagingService")
+local Players          = game:GetService("Players")
+local HttpService      = game:GetService("HttpService")
+local RunService       = game:GetService("RunService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log    = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local CrossServerShoutService = {}
+
+local TOPIC = "BrainrotLab_Shouts_v1"
+local ownServerId = HttpService:GenerateGUID(false)
+local MIN_SHOUT_THRESHOLD = {
+	rebirth = 25,    -- only shout cross-server for Rebirth 25+
+	cash    = 10000000, -- 10M total cash earned
+}
+
+-- Sends a notable event to every server in the experience. Used sparingly:
+-- the MessagingService budget is small (~60 req/min per server) so we only
+-- broadcast actually-meaningful milestones.
+
+function CrossServerShoutService.Publish(payload: any)
+	if RunService:IsStudio() then return end
+	pcall(function()
+		MessagingService:PublishAsync(TOPIC, {
+			source = ownServerId,
+			payload = payload,
+		})
+	end)
+end
+
+function CrossServerShoutService.NotifyRebirth(player: Player, rebirths: number)
+	if rebirths < MIN_SHOUT_THRESHOLD.rebirth then return end
+	CrossServerShoutService.Publish({
+		kind = "rebirth",
+		name = player.DisplayName,
+		rebirths = rebirths,
+	})
+end
+
+function CrossServerShoutService.NotifyCash(player: Player, totalEarned: number)
+	if totalEarned < MIN_SHOUT_THRESHOLD.cash then return end
+	CrossServerShoutService.Publish({
+		kind = "cash",
+		name = player.DisplayName,
+		totalEarned = totalEarned,
+	})
+end
+
+function CrossServerShoutService.Init()
+	if RunService:IsStudio() then return end
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	local ok = pcall(function()
+		MessagingService:SubscribeAsync(TOPIC, function(message: any)
+			local body = message.Data
+			if not body or body.source == ownServerId then return end
+			local p = body.payload
+			if not p then return end
+			if p.kind == "rebirth" and AnnouncementService then
+				AnnouncementService.Push(
+					string.format("🌐 Cross-server: %s reached Rebirth %d!", p.name, p.rebirths),
+					{ 255, 100, 220 }, 20)
+			elseif p.kind == "cash" and AnnouncementService then
+				AnnouncementService.Push(
+					string.format("🌐 Cross-server: %s passed %d total cash!", p.name, p.totalEarned),
+					{ 120, 220, 120 }, 20)
+			elseif p.kind == "owner_global" and AnnouncementService then
+				AnnouncementService.Push(
+					string.format("📢 %s: %s", p.name or "Owner", p.text or ""),
+					{ 255, 215, 80 }, 30)
+			end
+		end)
+	end)
+	if not ok then
+		Log.Warn("CrossShout", "MessagingService unavailable — cross-server shouts disabled")
+	end
+end
+
+return CrossServerShoutService
+]])
+	ensurePath(root, "DailyDealService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config  = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+local Log     = require(Shared.Log)
+
+local DailyDealService = {}
+
+-- Rotates through a fixed list of gamepass keys, one per UTC day. The
+-- price advertised to the player is the original price; Roblox's
+-- billing always charges the listed gamepass price, so the "30% off"
+-- positioning is for psychology — the actual discount lives in the
+-- bonus cash you grant inside MonetizationService when the user buys
+-- the deal-of-the-day pass. See applyDealBonusOnGamepass below for
+-- the hook point.
+
+local ROTATION = {
+	"Cash2x",
+	"MutationSpeed2x",
+	"LuckyMutations",
+	"VIPLab",
+	"TripleCapture",
+	"InfectionShield",
+	"RainbowTrail",
+	"GoldenPlot",
+	"PetLucky",
+	"DecorationPack",
+}
+
+local function todayDealKey(): string
+	local day = Util.DayIndex()
+	return ROTATION[(day % #ROTATION) + 1]
+end
+
+local function pushUpdate(player: Player)
+	local key = todayDealKey()
+	local gp = Config.GAMEPASSES[key]
+	if not gp then return end
+	local secondsLeft = (math.floor(os.time() / 86400) + 1) * 86400 - os.time()
+	Remotes.Event(Remotes.Names.DailyDeal):FireClient(player, {
+		key = key,
+		name = gp.name,
+		price = gp.price,
+		discountPct = 30,
+		secondsLeft = secondsLeft,
+		bonusCash = 5000,
+	})
+end
+
+-- Bonus delivered when a player buys the deal-of-the-day gamepass on
+-- the same UTC day the deal is active. Hooked from MonetizationService.
+function DailyDealService.OnGamepassPurchased(player: Player, key: string)
+	if key ~= todayDealKey() then return end
+	local EconomyService = require(script.Parent.EconomyService)
+	EconomyService.AwardCash(player, 5000, "daily deal bonus")
+	Log.Info("DailyDeal", "%s bought today's deal (%s), bonus delivered", player.Name, key)
+end
+
+function DailyDealService.OnPlayerAdded(player: Player)
+	task.delay(3, pushUpdate, player)
+end
+
+function DailyDealService.Init()
+	Remotes.Event(Remotes.Names.DailyDeal)
+	-- Re-push to every player every 5 minutes so the countdown stays accurate.
+	task.spawn(function()
+		while true do
+			task.wait(300)
+			for _, p in ipairs(Players:GetPlayers()) do pushUpdate(p) end
+		end
+	end)
+end
+
+return DailyDealService
+]])
+	ensurePath(root, "DailyRewardService", "ModuleScript", [=[
+--!strict
+--[[
+	DailyRewardService — 7-day cycle, Premium players get bonus on day 7.
+	Streak resets if a day is skipped.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Util = require(Shared.Util)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local InfectionService -- forward
+local CaptureService -- forward
+
+local DailyRewardService = {}
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local today = Util.DayIndex()
+	local canClaim = data.dailyReward.lastClaimDay < today
+	Remotes.Event(Remotes.Names.DailyRewardUpdate):FireClient(player, {
+		streak = data.dailyReward.streak,
+		canClaim = canClaim,
+		rewards = Config.DAILY_REWARDS,
+		isPremium = player.MembershipType == Enum.MembershipType.Premium,
+	})
+end
+
+function DailyRewardService.Claim(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local today = Util.DayIndex()
+	if data.dailyReward.lastClaimDay >= today then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Already claimed today." })
+		return
+	end
+	local streak = data.dailyReward.streak
+	if data.dailyReward.lastClaimDay == today - 1 then
+		streak += 1
+	else
+		streak = 1
+	end
+	if streak > #Config.DAILY_REWARDS then streak = 1 end
+	data.dailyReward.streak = streak
+	data.dailyReward.lastClaimDay = today
+	local r = Config.DAILY_REWARDS[streak]
+	if r.kind == "cash" then
+		EconomyService.AwardCash(player, r.amount, `daily reward day {streak}`)
+		if r.premium_bonus and player.MembershipType == Enum.MembershipType.Premium then
+			EconomyService.AwardCash(player, r.premium_bonus, "Premium bonus")
+		end
+	elseif r.kind == "infection_bomb" then
+		InfectionService.AddBombs(player, r.amount)
+	elseif r.kind == "rare_egg" then
+		CaptureService.AttemptCapture(player, { freeRare = true, count = r.amount or 1 })
+	end
+	pushUpdate(player)
+end
+
+function DailyRewardService.OnPlayerAdded(player: Player)
+	task.delay(1.5, pushUpdate, player)
+end
+
+function DailyRewardService.Init()
+	InfectionService = require(script.Parent.InfectionService)
+	CaptureService = require(script.Parent.CaptureService)
+end
+
+return DailyRewardService
+]=])
+	ensurePath(root, "DataService", "ModuleScript", [=[
+--!strict
+--[[
+	DataService — ProfileService-style session-locked DataStore wrapper.
+
+	Why session-locked: prevents the classic Roblox dupe — same player on two
+	servers loads the same profile, sells items on one, buys on another. Lost
+	purchases trigger refund-storm complaints, which sink revenue (and risk
+	store violation flags). We use the loleris/ProfileService Wally package
+	when present, and a thin in-memory fallback when it isn't (test/CI).
+]]
+
+local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Types = require(Shared.Types)
+local Util = require(Shared.Util)
+
+local DataService = {}
+
+local profiles: { [Player]: any } = {}
+local profileLoadedSignals: { [Player]: { (any) -> () } } = {}
+
+local DEFAULT_PROFILE: Types.PlayerProfileData = {
+	cash = Config.STARTING_CASH,
+	rebirths = 0,
+	inventory = {},
+	infectionBombs = Config.INFECTION_BOMB_STARTER_COUNT,
+	infectedUntil = 0,
+	plotId = nil,
+	gamepasses = {},
+	battlePass = {
+		xp = 0,
+		tier = 0,
+		claimed = {},
+		premium = false,
+		seasonId = "S1",
+	},
+	dailyReward = {
+		lastClaimDay = 0,
+		streak = 0,
+	},
+	stats = {
+		totalCaptured = 0,
+		totalMutations = 0,
+		totalSteals = 0,
+		totalInfections = 0,
+		totalCashEarned = 0,
+	},
+	createdAt = 0,
+}
+
+local function tryRequireProfileService()
+	local pkgs = ServerScriptService:FindFirstChild("ServerPackages")
+	if not pkgs then return nil end
+	local ps = pkgs:FindFirstChild("ProfileService")
+	if not ps then return nil end
+	local ok, mod = pcall(require, ps)
+	if not ok then return nil end
+	return mod
+end
+
+local ProfileStore: any = nil
+local ProfileService: any = nil
+
+function DataService.Init()
+	ProfileService = tryRequireProfileService()
+	if ProfileService then
+		ProfileStore = ProfileService.GetProfileStore(Config.DATASTORE_SCOPE, Util.DeepCopy(DEFAULT_PROFILE))
+	else
+		warn("[DataService] ProfileService not found in ServerPackages. Using in-memory fallback (no persistence).")
+	end
+end
+
+local function makeInMemoryProfile(): any
+	return {
+		Data = Util.DeepCopy(DEFAULT_PROFILE),
+		Release = function() end,
+		ListenToRelease = function(_, _) end,
+		Reconcile = function() end,
+		_isFallback = true,
+	}
+end
+
+function DataService.LoadProfile(player: Player)
+	if profiles[player] then return profiles[player] end
+
+	local profile: any
+	if ProfileStore then
+		local key = `Player_{player.UserId}`
+		profile = ProfileStore:LoadProfileAsync(key, "ForceLoad")
+		if profile == nil then
+			player:Kick("Profile load failed — please rejoin.")
+			return nil
+		end
+		profile:AddUserId(player.UserId)
+		profile:Reconcile()
+		profile:ListenToRelease(function()
+			profiles[player] = nil
+			player:Kick("Profile released — your session was opened on another server. Rejoin to continue.")
+		end)
+
+		if not player:IsDescendantOf(Players) then
+			profile:Release()
+			return nil
+		end
+	else
+		profile = makeInMemoryProfile()
+	end
+
+	if profile.Data.createdAt == 0 then
+		profile.Data.createdAt = os.time()
+	end
+
+	profiles[player] = profile
+
+	local waiters = profileLoadedSignals[player]
+	profileLoadedSignals[player] = nil
+	if waiters then
+		for _, cb in ipairs(waiters) do
+			task.spawn(cb, profile)
+		end
+	end
+
+	return profile
+end
+
+function DataService.ReleaseProfile(player: Player)
+	local profile = profiles[player]
+	if profile then
+		profile:Release()
+		profiles[player] = nil
+	end
+end
+
+function DataService.Get(player: Player): Types.PlayerProfileData?
+	local profile = profiles[player]
+	if not profile then return nil end
+	return profile.Data
+end
+
+function DataService.OnProfileLoaded(player: Player, cb: (any) -> ())
+	if profiles[player] then
+		task.spawn(cb, profiles[player])
+		return
+	end
+	local list = profileLoadedSignals[player]
+	if not list then
+		list = {}
+		profileLoadedSignals[player] = list
+	end
+	table.insert(list, cb)
+end
+
+function DataService.GetProfile(player: Player): any
+	return profiles[player]
+end
+
+function DataService.WaitForProfile(player: Player, timeout: number?): any
+	local deadline = os.clock() + (timeout or 10)
+	while os.clock() < deadline do
+		if profiles[player] then return profiles[player] end
+		task.wait(0.05)
+	end
+	return profiles[player]
+end
+
+-- Flush all profiles on shutdown so purchases aren't lost.
+game:BindToClose(function()
+	if RunService:IsStudio() then return end
+	-- ProfileService:Release fires our ListenToRelease callback which nils
+	-- profiles[player]. Whether that runs synchronously is internal to
+	-- ProfileService, so snapshot first to be safe under pairs() rules.
+	local toRelease: { any } = {}
+	for _, profile in pairs(profiles) do
+		if not profile._isFallback then table.insert(toRelease, profile) end
+	end
+	for _, profile in ipairs(toRelease) do
+		pcall(function() profile:Release() end)
+	end
+	task.wait(2)
+end)
+
+return DataService
+]=])
+	ensurePath(root, "DecorationService", "ModuleScript", [=[
+--!strict
+--[[
+	DecorationService — buying and placing cosmetic decorations on a plot.
+
+	Storage: data._decorations = { { id, posOffsetX, posOffsetZ, rotY } }
+	Placement: 12 fixed grid slots per plot in the decoration zone (back row).
+	Cap: 12 placed at once. Selling refunds 50% of purchase price.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local DecorationData = require(Shared.DecorationData)
+local Util = require(Shared.Util)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local LabService = require(script.Parent.LabService)
+
+local DecorationService = {}
+
+local placedModels: { [Player]: { [string]: Model } } = {}
+local DECO_PER_PLOT = 12
+
+local function decoSlotPositions(plotCenter: Vector3): { Vector3 }
+	local slots = {}
+	for c = 1, DECO_PER_PLOT do
+		local row = math.floor((c - 1) / 4)
+		local col = (c - 1) % 4
+		table.insert(slots, plotCenter + Vector3.new((col - 1.5) * 10, 2, -28 + row * 8))
+	end
+	return slots
+end
+
+local function ensureDecoField(data: any)
+	data._decorations = data._decorations or {}  -- { [uid] = { id, slot } }
+end
+
+local function buildDecoModel(def: any, pos: Vector3): Model
+	local model = Instance.new("Model")
+	model.Name = `Deco_{def.id}`
+	local body = Instance.new("Part")
+	body.Anchored = true
+	body.CanCollide = false
+	body.Size = def.size
+	body.Position = pos + Vector3.new(0, body.Size.Y/2, 0)
+	body.Color = def.color
+	body.Material = def.material
+	if def.primaryShape == "Ball" then body.Shape = Enum.PartType.Ball
+	elseif def.primaryShape == "Cylinder" then body.Shape = Enum.PartType.Cylinder end
+	body.Parent = model
+	model.PrimaryPart = body
+
+	if def.effect == "Sparkle" then
+		local s = Instance.new("Sparkles"); s.Parent = body
+	elseif def.effect == "Fire" then
+		local f = Instance.new("Fire"); f.Size = 4; f.Parent = body
+	elseif def.effect == "Rainbow" then
+		task.spawn(function()
+			local t = 0
+			while body.Parent do
+				t += 0.05
+				body.Color = Color3.fromHSV((t % 5)/5, 0.7, 1)
+				task.wait(0.1)
+			end
+		end)
+	end
+	return model
+end
+
+local function renderAll(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureDecoField(data)
+	local plotId = LabService.GetPlotIdForPlayer(player)
+	if not plotId then return end
+	local plot = LabService.GetPlot(plotId)
+	if not plot then return end
+
+	-- Clear existing
+	local models = placedModels[player] or {}
+	for _, m in pairs(models) do m:Destroy() end
+	placedModels[player] = {}
+
+	local slots = decoSlotPositions(plot.center)
+	for uid, entry in pairs(data._decorations) do
+		local def = DecorationData.Get(entry.id)
+		if def and entry.slot and slots[entry.slot] then
+			local model = buildDecoModel(def, slots[entry.slot])
+			model:SetAttribute("OwnerUserId", player.UserId)
+			model.Parent = plot.folder
+			placedModels[player][uid] = model
+		end
+	end
+end
+
+local function nextFreeSlot(data: any): number?
+	local used = {}
+	for _, entry in pairs(data._decorations) do
+		used[entry.slot] = true
+	end
+	for i = 1, DECO_PER_PLOT do
+		if not used[i] then return i end
+	end
+	return nil
+end
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureDecoField(data)
+	local owned = {}
+	for uid, entry in pairs(data._decorations) do
+		table.insert(owned, { uid = uid, id = entry.id, slot = entry.slot })
+	end
+	Remotes.Event(Remotes.Names.DecorationUpdate):FireClient(player, {
+		catalog = DecorationData.GetAll(),
+		owned = owned,
+		capacity = DECO_PER_PLOT,
+		hasPremium = (data.gamepasses :: any)["DecorationPack"] == true,
+	})
+end
+
+function DecorationService.Buy(player: Player, id: string)
+	local def = DecorationData.Get(id)
+	if not def then return end
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureDecoField(data)
+	if def.premium and not (data.gamepasses :: any)["DecorationPack"] then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Premium decoration — needs Decoration Pack gamepass." })
+		return
+	end
+	if not EconomyService.SpendCash(player, def.cost) then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Need {def.cost} cash.` })
+		return
+	end
+	local slot = nextFreeSlot(data)
+	if not slot then
+		EconomyService.AwardCash(player, def.cost) -- refund
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Decoration zone is full." })
+		return
+	end
+	local uid = Util.GenerateUid()
+	data._decorations[uid] = { id = def.id, slot = slot, cost = def.cost }
+	renderAll(player)
+	pushUpdate(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture", text = `Placed: {def.name}`,
+	})
+end
+
+function DecorationService.Sell(player: Player, uid: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureDecoField(data)
+	local entry = data._decorations[uid]
+	if not entry then return end
+	local refund = math.floor((entry.cost or 0) * 0.5)
+	data._decorations[uid] = nil
+	if refund > 0 then EconomyService.AwardCash(player, refund, "deco refund") end
+	renderAll(player)
+	pushUpdate(player)
+end
+
+function DecorationService.OnPlayerAdded(player: Player)
+	placedModels[player] = {}
+	task.delay(3, function()
+		renderAll(player)
+		pushUpdate(player)
+	end)
+end
+
+function DecorationService.OnPlayerRemoving(player: Player)
+	local models = placedModels[player]
+	if models then for _, m in pairs(models) do m:Destroy() end end
+	placedModels[player] = nil
+end
+
+function DecorationService.Init()
+	local _ = Config
+end
+
+return DecorationService
+]=])
+	ensurePath(root, "EconomyService", "ModuleScript", [=[
+--!strict
+--[[
+	EconomyService — cash, rebirths, income calculation, multipliers.
+
+	Income tick is driven from LabService (which owns placed brainrots), but
+	the math lives here so MonetizationService and BattlePassService can
+	consult it for previews and bonus calculations.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Types = require(Shared.Types)
+local BrainrotData = require(Shared.BrainrotData)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+
+local EconomyService = {}
+
+-- Compute income/sec for a single brainrot considering tier, mutations, and global multipliers.
+function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.OwnedBrainrot): number
+	local def = BrainrotData.Get(brainrot.speciesId)
+	if not def then return 0 end
+	local data = DataService.Get(player)
+	if not data then return 0 end
+
+	local base = def.baseIncomePerSecond
+	local tierMult = 1 + brainrot.mutationTier * Config.MUTATION_INCOME_MULT_PER_TIER
+	local rebirthMult = Config.REBIRTH_INCOME_MULT(data.rebirths)
+	local gamepassMult = if data.gamepasses["Cash2x"] then 2 else 1
+	local groupMult = if (data :: any)._inGroup then Config.GROUP_REWARD_MULT else 1
+	local premiumMult = if player.MembershipType == Enum.MembershipType.Premium then 1.10 else 1
+	local petMult = 1
+	local okPet, PetService = pcall(require, script.Parent.PetService)
+	if okPet then petMult = PetService.GetCashMult(player) end
+	local hotMult = 1
+	local okHot, HotStreakService = pcall(require, script.Parent.HotStreakService)
+	if okHot then hotMult = HotStreakService.GetMultiplier() end
+	local eventMult = 1
+	local okEvt, EventService = pcall(require, script.Parent.EventService)
+	if okEvt then eventMult = EventService.GetCashMult() end
+	local vipServerMult = 1
+	local okVip, VipServerService = pcall(require, script.Parent.VipServerService)
+	if okVip then vipServerMult = VipServerService.GetCashMult() end
+	local hourMult = 1
+	local okHour, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+	if okHour then hourMult = TopOfHourService.GetCashMult() end
+	local firstSessionMult = 1
+	local okFs, FirstSessionService = pcall(require, script.Parent.FirstSessionService)
+	if okFs then firstSessionMult = FirstSessionService.GetCashMult(player) end
+	local buffMult = 1
+	local okBf, BuffService = pcall(require, script.Parent.BuffService)
+	if okBf then buffMult = BuffService.GetIncomeMult(player) end
+	local infectionMult = 1
+	if data.infectedUntil > os.time() then
+		local penalty = Config.INFECTION_INCOME_MULT
+		if data.gamepasses["InfectionShield"] then
+			-- Full shield reduction.
+			penalty = penalty + (1 - penalty) * Config.INFECTION_SHIELD_GAMEPASS_REDUCTION
+		elseif data.gamepasses["VIPLab"] then
+			-- VIPLab gives a partial reduction (half the InfectionShield amount)
+			-- to match the shop description's 'partial steal/infection
+			-- protection' claim.
+			penalty = penalty + (1 - penalty) * (Config.INFECTION_SHIELD_GAMEPASS_REDUCTION * 0.5)
+		end
+		infectionMult = penalty
+	end
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * firstSessionMult * buffMult * infectionMult
+end
+
+function EconomyService.AwardCash(player: Player, amount: number, reason: string?)
+	local data = DataService.Get(player)
+	if not data then return end
+	local prevEarned = data.stats.totalCashEarned
+	data.cash += amount
+	data.stats.totalCashEarned += math.max(0, amount)
+	EconomyService.PushHud(player)
+	if reason then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "cash",
+			text = `+{amount} cash ({reason})`,
+		})
+	end
+	-- Badge triggers cross the 100k and 1m thresholds
+	if amount > 0 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then
+			if prevEarned < 100000 and data.stats.totalCashEarned >= 100000 then
+				BadgeService.Fire(player, "cash_100k")
+			end
+			if prevEarned < 1000000 and data.stats.totalCashEarned >= 1000000 then
+				BadgeService.Fire(player, "cash_1m")
+			end
+		end
+	end
+end
+
+function EconomyService.SpendCash(player: Player, amount: number): boolean
+	local data = DataService.Get(player)
+	if not data then return false end
+	if data.cash < amount then return false end
+	data.cash -= amount
+	EconomyService.PushHud(player)
+	return true
+end
+
+function EconomyService.TryRebirth(player: Player): boolean
+	local data = DataService.Get(player)
+	if not data then return false end
+	local cost = Config.REBIRTH_CASH_REQUIREMENT(data.rebirths)
+	if data.cash < cost then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "error",
+			text = `Need {cost} cash to rebirth.`,
+		})
+		return false
+	end
+	data.cash -= cost
+	data.rebirths += 1
+	-- Inventory persists across rebirths in this design (player-friendly)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "rebirth",
+		text = `Rebirth {data.rebirths}! Income multiplier {string.format("%.2fx", Config.REBIRTH_INCOME_MULT(data.rebirths))}`,
+	})
+	EconomyService.PushHud(player)
+	if data.rebirths == 1 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(player, "first_rebirth") end
+	end
+	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+	if okL then PlayerLevelService.AwardXp(player, "rebirth") end
+	local okC, CinematicService = pcall(require, script.Parent.CinematicService)
+	if okC then
+		CinematicService.Play(player, {
+			kind = "rebirth",
+			title = string.format("REBIRTH %d", data.rebirths),
+			subtitle = string.format("%.2fx income unlocked", Config.REBIRTH_INCOME_MULT(data.rebirths)),
+			color = { 255, 100, 220 },
+			durationSeconds = 3,
+		})
+	end
+	local okX, CrossServerShoutService = pcall(require, script.Parent.CrossServerShoutService)
+	if okX then CrossServerShoutService.NotifyRebirth(player, data.rebirths) end
+	return true
+end
+
+function EconomyService.SkipRebirth(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	data.rebirths += 1
+	data.cash = math.max(data.cash, Config.STARTING_CASH)
+	EconomyService.PushHud(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "rebirth",
+		text = `Skipped to Rebirth {data.rebirths}!`,
+	})
+end
+
+function EconomyService.PushHud(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local nextRebirthCost = Config.REBIRTH_CASH_REQUIREMENT(data.rebirths)
+	local cashMult = if data.gamepasses["Cash2x"] then 2 else 1
+	local infected = data.infectedUntil > os.time()
+	Remotes.Event(Remotes.Names.HudUpdate):FireClient(player, {
+		cash = data.cash,
+		rebirths = data.rebirths,
+		nextRebirthCost = nextRebirthCost,
+		cashMult = cashMult,
+		rebirthMult = Config.REBIRTH_INCOME_MULT(data.rebirths),
+		infected = infected,
+		infectedSecondsLeft = if infected then data.infectedUntil - os.time() else 0,
+		infectionBombs = data.infectionBombs,
+	})
+end
+
+function EconomyService.Init() end
+
+return EconomyService
+]=])
+	ensurePath(root, "EventService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+local Log     = require(Shared.Log)
+
+local EventService = {}
+
+-- Limited-time events are the strongest FOMO lever in the Roblox tycoon
+-- meta. We schedule them by absolute timestamps so all servers see the
+-- same window simultaneously. Add entries here when you want to push a
+-- live-ops moment; the client auto-picks up state via the EventUpdate remote.
+
+type EventDefinition = {
+	id: string,
+	name: string,
+	bannerColor: { number },     -- {r,g,b}
+	startTs: number,             -- unix time
+	endTs: number,
+	cashMult: number?,            -- global cash mult for participants
+	mutationSpeedMult: number?,   -- multiplier on mutation cadence
+	luckyBoost: number?,          -- biases capture/pet rolls
+}
+
+local EVENTS: { EventDefinition } = {}
+
+local function nowSec(): number return os.time() end
+
+local function buildDefaults()
+	-- Default rolling event: a 48-hour "Launch Hype" double-cash window
+	-- starting at the moment the server boots. Replace with hardcoded
+	-- timestamps to lock specific events to wall-clock weekends.
+	local now = nowSec()
+	table.insert(EVENTS, {
+		id = "launch_hype",
+		name = "🚀 LAUNCH HYPE — 2x cash for everyone",
+		bannerColor = { 255, 100, 200 },
+		startTs = now,
+		endTs   = now + 48 * 3600,
+		cashMult = 2.0,
+	})
+	table.insert(EVENTS, {
+		id = "weekend_mutation",
+		name = "🧬 WEEKEND MUTATION — 3x mutation speed",
+		bannerColor = { 120, 220, 255 },
+		startTs = now + 7 * 86400,
+		endTs   = now + 9 * 86400,
+		mutationSpeedMult = 3.0,
+	})
+end
+
+local function activeEvents(): { EventDefinition }
+	local out: { EventDefinition } = {}
+	local now = nowSec()
+	for _, e in ipairs(EVENTS) do
+		if now >= e.startTs and now < e.endTs then
+			table.insert(out, e)
+		end
+	end
+	return out
+end
+
+function EventService.GetCashMult(): number
+	local m = 1
+	for _, e in ipairs(activeEvents()) do
+		if e.cashMult then m *= e.cashMult end
+	end
+	return m
+end
+
+function EventService.GetMutationSpeedMult(): number
+	local m = 1
+	for _, e in ipairs(activeEvents()) do
+		if e.mutationSpeedMult then m *= e.mutationSpeedMult end
+	end
+	return m
+end
+
+function EventService.GetLuckyBoost(): number
+	local b = 0
+	for _, e in ipairs(activeEvents()) do
+		if e.luckyBoost then b += e.luckyBoost end
+	end
+	return b
+end
+
+local function broadcast()
+	local payload = {
+		active = activeEvents(),
+		upcoming = nil :: any,
+	}
+	-- Pick next-upcoming event for the "coming soon" banner.
+	local now = nowSec()
+	local nearest
+	for _, e in ipairs(EVENTS) do
+		if e.startTs > now then
+			if not nearest or e.startTs < nearest.startTs then
+				nearest = e
+			end
+		end
+	end
+	payload.upcoming = nearest
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.EventUpdate):FireClient(p, payload)
+	end
+end
+
+function EventService.OnPlayerAdded(_: Player)
+	task.delay(2, broadcast)
+end
+
+function EventService.Init()
+	buildDefaults()
+	Remotes.Event(Remotes.Names.EventUpdate)
+	task.spawn(function()
+		while true do
+			task.wait(20)
+			broadcast()
+		end
+	end)
+	Log.Info("Events", "%d events scheduled", #EVENTS)
+	local _ = Util
+end
+
+return EventService
+]])
+	ensurePath(root, "FirstSessionService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes      = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local Util         = require(Shared.Util)
+local Log          = require(Shared.Log)
+
+local DataService    = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local FirstSessionService = {}
+
+-- Brand-new players get a 5-minute "First Session" window where:
+--   * Cash income is boosted 3x (gives them tangible early progress)
+--   * A free Epic brainrot drops at 60s (the "wow moment" that hooks them)
+--   * A SocialService invite nudge appears at 3 min (peak engagement)
+-- Drives the single biggest D1 conversion lever: the player has to feel
+-- the dopamine of a juicy reward inside the first 90 seconds or they bounce.
+
+local FIRST_SESSION_DURATION = 300  -- 5 minutes
+local EPIC_GIFT_DELAY        = 60
+local INVITE_PROMPT_DELAY    = 180
+local INCOME_BOOST           = 3.0
+
+local activeFirstSession: { [number]: number } = {} -- userId -> expiresAt
+
+function FirstSessionService.GetCashMult(player: Player): number
+	local expires = activeFirstSession[player.UserId]
+	if expires and os.time() < expires then return INCOME_BOOST end
+	return 1
+end
+
+function FirstSessionService.IsActive(player: Player): boolean
+	local expires = activeFirstSession[player.UserId]
+	return expires ~= nil and os.time() < expires
+end
+
+local function isBrandNew(data: any): boolean
+	-- A "brand-new" player is one whose profile was created within the
+	-- last 60 seconds AND has zero stats activity.
+	if not data.createdAt or data.createdAt == 0 then return false end
+	if (os.time() - data.createdAt) > 60 then return false end
+	if (data.stats and data.stats.totalCashEarned > 100) then return false end
+	return true
+end
+
+local function giveEpicGift(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	-- Pick a random Epic species
+	local epics: { string } = {}
+	for _, def in ipairs(BrainrotData.GetAll()) do
+		if def.rarity == "Epic" then table.insert(epics, def.id) end
+	end
+	if #epics == 0 then return end
+	local pick = epics[math.random(1, #epics)]
+	local def = BrainrotData.Get(pick)
+	if not def then return end
+
+	local CaptureService = require(script.Parent.CaptureService)
+	CaptureService.GiveOutbreakBrainrot(player, pick)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = string.format("✨ FIRST-TIME GIFT: %s (%s) for free!", def.displayName, def.rarity),
+	})
+	Log.Info("FirstSession", "gave %s to %s", pick, player.Name)
+end
+
+local function nudgeInvite(player: Player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "info",
+		text = "👋 Invite a friend — both of you get a bonus when they join!",
+	})
+end
+
+function FirstSessionService.OnPlayerAdded(player: Player)
+	DataService.OnProfileLoaded(player, function()
+		local data = DataService.Get(player)
+		if not data then return end
+		if not isBrandNew(data) then return end
+
+		activeFirstSession[player.UserId] = os.time() + FIRST_SESSION_DURATION
+		EconomyService.PushHud(player)
+
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("🎉 Welcome! 3x cash for %s — make it count.",
+				Util.SecondsToClock(FIRST_SESSION_DURATION)),
+		})
+
+		task.delay(EPIC_GIFT_DELAY, function()
+			if player.Parent then giveEpicGift(player) end
+		end)
+		task.delay(INVITE_PROMPT_DELAY, function()
+			if player.Parent then nudgeInvite(player) end
+		end)
+		task.delay(FIRST_SESSION_DURATION, function()
+			activeFirstSession[player.UserId] = nil
+			if player.Parent then
+				EconomyService.PushHud(player)
+				Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+					kind = "info",
+					text = "First session boost ended. Keep grinding!",
+				})
+			end
+		end)
+	end)
+end
+
+function FirstSessionService.OnPlayerRemoving(player: Player)
+	activeFirstSession[player.UserId] = nil
+end
+
+function FirstSessionService.Init() end
+
+return FirstSessionService
+]])
+	ensurePath(root, "FusionService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes      = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local Util         = require(Shared.Util)
+local Log          = require(Shared.Log)
+local Types        = require(Shared.Types)
+
+local DataService = require(script.Parent.DataService)
+local LabService  = require(script.Parent.LabService)
+
+local FusionService = {}
+
+-- Combine 3 brainrots into a guaranteed roll from the next rarity tier.
+-- Inputs must be the same species (forces deeper grinding into the
+-- gacha) and unmutated. Outputs are a random species of the next rarity.
+local RARITY_LADDER = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" }
+
+local function nextRarityName(r: string): string?
+	for i, name in ipairs(RARITY_LADDER) do
+		if name == r and RARITY_LADDER[i + 1] then return RARITY_LADDER[i + 1] end
+	end
+	return nil
+end
+
+local function speciesOfRarity(rarity: string): { Types.BrainrotDefinition }
+	local out = {}
+	for _, d in ipairs(BrainrotData.GetAll()) do
+		if d.rarity == rarity then table.insert(out, d) end
+	end
+	return out
+end
+
+local rng = Random.new()
+
+function FusionService.Attempt(player: Player, uids: { string })
+	if #uids ~= 3 then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Fusion needs exactly 3 brainrots." })
+		return
+	end
+	local data = DataService.Get(player)
+	if not data then return end
+
+	-- Resolve all three; require same species & no mutations.
+	local resolved: { Types.OwnedBrainrot } = {}
+	for _, uid in ipairs(uids) do
+		local found
+		for _, b in ipairs(data.inventory) do
+			if b.uid == uid then found = b; break end
+		end
+		if not found then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Brainrot not in inventory." })
+			return
+		end
+		if found.mutationTier > 0 then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Cannot fuse mutated brainrots." })
+			return
+		end
+		table.insert(resolved, found)
+	end
+
+	local species = resolved[1].speciesId
+	for _, b in ipairs(resolved) do
+		if b.speciesId ~= species then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="All 3 must be the same species." })
+			return
+		end
+	end
+
+	local def = BrainrotData.Get(species)
+	if not def then return end
+	local nextRarity = nextRarityName(def.rarity)
+	if not nextRarity then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Already at top fuseable rarity." })
+		return
+	end
+
+	-- Roll the output species
+	local pool = speciesOfRarity(nextRarity)
+	if #pool == 0 then return end
+	local newDef = pool[rng:NextInteger(1, #pool)]
+
+	-- Atomically: remove the three inputs, give the output.
+	local toRemove: { [string]: boolean } = {}
+	for _, u in ipairs(uids) do toRemove[u] = true end
+
+	-- Unplace any that are placed (TransferBrainrot path expects this)
+	for _, u in ipairs(uids) do
+		LabService.UnplaceBrainrot(player, u)
+	end
+	for i = #data.inventory, 1, -1 do
+		if toRemove[data.inventory[i].uid] then
+			table.remove(data.inventory, i)
+		end
+	end
+
+	local newBrainrot: Types.OwnedBrainrot = {
+		uid = Util.GenerateUid(),
+		speciesId = newDef.id,
+		mutationTier = 0,
+		mutations = {},
+		bornAt = os.time(),
+		lastMutationAt = os.time(),
+		placed = false,
+	}
+	LabService.GiveBrainrot(player, newBrainrot)
+	LabService.PlaceBrainrot(player, newBrainrot.uid)
+	LabService.PushInventory(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = string.format("✨ Fused 3x %s → %s [%s]", def.displayName, newDef.displayName, newDef.rarity),
+	})
+	Log.Info("Fusion", "%s fused 3x %s -> %s", player.Name, def.id, newDef.id)
+end
+
+function FusionService.Init()
+	-- Suppress unused
+	local _ = Util
+end
+
+return FusionService
+]])
+	ensurePath(root, "GlobalLeaderboardService", "ModuleScript", [=[
+--!strict
+--[[
+	GlobalLeaderboardService — cross-server top-100 boards backed by
+	OrderedDataStore. Three boards (cash, mutations, steals) with weekly
+	resets. The board UID rolls forward every Sunday 00:00 UTC, so a fresh
+	competition starts every week (re-engagement spike).
+
+	Why weekly resets? Because permanent all-time boards stagnate after the
+	first month — the top spots feel unreachable and casual players bounce.
+	Weekly resets give every active player a real shot, every week, which
+	is the #1 retention pattern in tycoon games (proven by Pet Simulator 99,
+	Blade Ball, Anime Defenders, etc.).
+
+	Updates push every ~60s per active player (throttled). Reads happen on
+	demand when a player opens the global leaderboard tab.
+]]
+
+local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local DataService = require(script.Parent.DataService)
+
+local GlobalLeaderboardService = {}
+
+local BOARDS = { "cash", "mutations", "steals" }
+
+local stores: { [string]: OrderedDataStore? } = {}
+local nameStore: DataStore? = nil
+
+local function weekId(): string
+	-- ISO-ish: integer week number since the epoch. Boundary at Sun 00:00 UTC.
+	-- Epoch (1970-01-01) was a Thursday, so subtract 4 days to align week starts.
+	local days = math.floor(os.time() / 86400)
+	local week = math.floor((days + 4) / 7)
+	return tostring(week)
+end
+
+local function storeKey(board: string): string
+	return `BrainrotLab_GLB_{board}_{weekId()}`
+end
+
+local function ensureStores()
+	if RunService:IsStudio() then return end
+	for _, b in ipairs(BOARDS) do
+		stores[b] = DataStoreService:GetOrderedDataStore(storeKey(b))
+	end
+	nameStore = DataStoreService:GetDataStore("BrainrotLab_DisplayNames")
+end
+
+local lastUpdate: { [Player]: number } = {}
+
+local function pushPlayer(player: Player)
+	local now = os.clock()
+	if lastUpdate[player] and now - lastUpdate[player] < 55 then return end
+	lastUpdate[player] = now
+	if RunService:IsStudio() then return end
+	local data = DataService.Get(player)
+	if not data then return end
+
+	-- Cache display name once per session (cheap)
+	if nameStore then
+		pcall(function() nameStore:SetAsync(tostring(player.UserId), player.DisplayName) end)
+	end
+
+	-- Re-resolve stores in case week rolled over mid-session
+	ensureStores()
+
+	pcall(function()
+		if stores.cash then stores.cash:SetAsync(tostring(player.UserId), math.floor(data.cash)) end
+	end)
+	pcall(function()
+		if stores.mutations then stores.mutations:SetAsync(tostring(player.UserId), data.stats.totalMutations) end
+	end)
+	pcall(function()
+		if stores.steals then stores.steals:SetAsync(tostring(player.UserId), data.stats.totalSteals) end
+	end)
+end
+
+local function readBoard(board: string, limit: number): { { userId: number, name: string, value: number } }
+	local out = {}
+	if RunService:IsStudio() then return out end
+	local store = stores[board]
+	if not store then return out end
+	local ok, pages = pcall(function()
+		return store:GetSortedAsync(false, limit)
+	end)
+	if not ok or not pages then return out end
+	local page = pages:GetCurrentPage()
+	for _, entry in ipairs(page) do
+		local uid = tonumber(entry.key) or 0
+		local name = `User_{entry.key}`
+		if nameStore then
+			pcall(function() name = nameStore:GetAsync(entry.key) or name end)
+		end
+		table.insert(out, { userId = uid, name = name, value = entry.value })
+	end
+	return out
+end
+
+function GlobalLeaderboardService.PushAll()
+	local payload = {
+		weekId = weekId(),
+		nextResetIn = (math.floor((tonumber(weekId()) :: number + 1) * 7 - 4) * 86400) - os.time(),
+		cash = readBoard("cash", 25),
+		mutations = readBoard("mutations", 25),
+		steals = readBoard("steals", 25),
+	}
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.GlobalLeaderboardUpdate):FireClient(p, payload)
+	end
+end
+
+function GlobalLeaderboardService.OnPlayerAdded(player: Player)
+	task.delay(3, pushPlayer, player)
+end
+
+function GlobalLeaderboardService.OnPlayerRemoving(player: Player)
+	-- Final flush so people who quit while leading stay on the board
+	pushPlayer(player)
+	lastUpdate[player] = nil
+end
+
+function GlobalLeaderboardService.Init()
+	ensureStores()
+
+	-- Periodic per-player writes (throttled inside pushPlayer)
+	task.spawn(function()
+		while true do
+			task.wait(60)
+			for _, p in ipairs(Players:GetPlayers()) do
+				pushPlayer(p)
+			end
+		end
+	end)
+
+	-- Read + broadcast every 5 minutes
+	task.spawn(function()
+		while true do
+			GlobalLeaderboardService.PushAll()
+			task.wait(300)
+		end
+	end)
+end
+
+return GlobalLeaderboardService
+]=])
+	ensurePath(root, "GraceShutdownService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local DataService    = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local GraceShutdownService = {}
+
+-- BindToClose only gets ~30s from Roblox before the server is hard-killed.
+-- We use that budget to:
+--   1. Broadcast a visible 'server restart in 30s' toast.
+--   2. Award a small 'sorry for the inconvenience' cash bonus so the
+--      memory of the session ends on a positive note (key for D2 return).
+--   3. Wait long enough that profile autosaves complete.
+-- ProfileService's release-on-shutdown lives in DataService; this service
+-- *adds* the user-facing layer on top of it.
+
+local SHUTDOWN_BONUS = 5000
+
+local function broadcast(text: string)
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.Notify):FireClient(p, { kind = "info", text = text })
+	end
+end
+
+function GraceShutdownService.Init()
+	game:BindToClose(function()
+		if RunService:IsStudio() then return end
+		Log.Info("Shutdown", "shutdown signal received, broadcasting + awarding bonus")
+		broadcast("⚠ Server restart in 30 seconds. Cash bonus awarded — rejoin to continue!")
+		for _, p in ipairs(Players:GetPlayers()) do
+			pcall(EconomyService.AwardCash, p, SHUTDOWN_BONUS, "shutdown bonus")
+		end
+		-- Give clients ~3s to render the toast, then let DataService.BindToClose
+		-- run (it has its own task.wait(2) for profile release).
+		task.wait(3)
+	end)
+end
+
+return GraceShutdownService
+]])
+	ensurePath(root, "GroupRewardService", "ModuleScript", [=[
+--!strict
+--[[
+	GroupRewardService — checks if the player is a member of Config.GROUP_ID
+	on join and on demand (after they click "Join Group" in the banner).
+	Group members get a permanent +25% cash income mult, which encourages
+	join → encourages Premium-eligible community → encourages Premium Payouts.
+]]
+
+local GroupService = game:GetService("GroupService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local GroupRewardService = {}
+
+local function isInGroup(player: Player): boolean
+	if Config.GROUP_ID <= 0 then return false end
+	local ok, inGroup = pcall(function()
+		return player:IsInGroup(Config.GROUP_ID)
+	end)
+	return ok and inGroup
+end
+
+function GroupRewardService.Check(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local prev = (data :: any)._inGroup == true
+	local now = isInGroup(player)
+	;(data :: any)._inGroup = now
+	if now and not prev then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = `Group member +{math.floor((Config.GROUP_REWARD_MULT - 1) * 100)}% cash unlocked!`,
+		})
+	end
+	EconomyService.PushHud(player)
+end
+
+function GroupRewardService.OnPlayerAdded(player: Player)
+	task.delay(2, GroupRewardService.Check, player)
+end
+
+function GroupRewardService.Init()
+	-- Re-check every 3 minutes so newly-joined members get rewarded without
+	-- needing to rejoin the server.
+	task.spawn(function()
+		while true do
+			task.wait(180)
+			for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+				GroupRewardService.Check(p)
+			end
+		end
+	end)
+
+	-- Suppress unused-import lint
+	local _ = GroupService
+end
+
+return GroupRewardService
+]=])
+	ensurePath(root, "HealthCheckService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log    = require(Shared.Log)
+local Remotes= require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+
+local HealthCheckService = {}
+
+-- Lightweight periodic check that the data plane is healthy. Logs at
+-- Warn level if any invariant is broken so the user sees it in the
+-- Studio Output or in a connected analytics sink. Designed to catch
+-- the regressions that don't show up in static audits: profiles
+-- silently failing to load, remotes folder being deleted by a
+-- third-party plugin, etc.
+
+type Probe = {
+	name: string,
+	check: () -> (boolean, string?),
+}
+
+local probes: { Probe } = {}
+
+local function addProbe(name: string, check: () -> (boolean, string?))
+	table.insert(probes, { name = name, check = check })
+end
+
+addProbe("RemotesFolder", function()
+	local rs = ReplicatedStorage:FindFirstChild("Remotes")
+	if not rs then return false, "ReplicatedStorage.Remotes missing" end
+	if #rs:GetChildren() < 30 then return false, "Remotes folder has < 30 children" end
+	return true
+end)
+
+addProbe("ProfilesLoaded", function()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if not DataService.Get(p) then
+			-- Allow up to 10s for joiners to load. Stale "never loaded" is
+			-- the actual signal — we just warn if a player has been here
+			-- for >30s without a profile.
+			local joinedAt = p:GetAttribute("_joinedAt")
+			if joinedAt and (os.clock() - joinedAt) > 30 then
+				return false, p.Name .. " has no profile after 30s"
+			end
+		end
+	end
+	return true
+end)
+
+addProbe("WorkspacePlots", function()
+	local plots = workspace:FindFirstChild("Plots")
+	if not plots then return false, "Workspace.Plots missing" end
+	return true
+end)
+
+local function runAll()
+	local fails = 0
+	for _, probe in ipairs(probes) do
+		local ok, healthy, detail = pcall(probe.check)
+		if not ok then
+			Log.Warn("Health", "probe '%s' errored: %s", probe.name, tostring(healthy))
+			fails += 1
+		elseif not healthy then
+			Log.Warn("Health", "probe '%s' failed: %s", probe.name, tostring(detail))
+			fails += 1
+		end
+	end
+	if fails == 0 then
+		Log.Debug("Health", "%d probes passed", #probes)
+	end
+end
+
+function HealthCheckService.OnPlayerAdded(player: Player)
+	player:SetAttribute("_joinedAt", os.clock())
+end
+
+function HealthCheckService.AddProbe(name: string, check: () -> (boolean, string?))
+	addProbe(name, check)
+end
+
+function HealthCheckService.RunOnce(): string
+	local results: { string } = {}
+	for _, probe in ipairs(probes) do
+		local ok, healthy, detail = pcall(probe.check)
+		if not ok then
+			table.insert(results, string.format("%s: ERROR %s", probe.name, tostring(healthy)))
+		elseif not healthy then
+			table.insert(results, string.format("%s: FAIL %s", probe.name, tostring(detail or "")))
+		else
+			table.insert(results, string.format("%s: ok", probe.name))
+		end
+	end
+	return table.concat(results, " | ")
+end
+
+function HealthCheckService.Init()
+	task.spawn(function()
+		while true do
+			task.wait(60)
+			runAll()
+		end
+	end)
+	local _ = Remotes  -- suppress unused
+end
+
+return HealthCheckService
+]])
+	ensurePath(root, "HotStreakService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local HotStreakService = {}
+
+-- Cash multiplier ramps with concurrent player count. Drives social proof
+-- (high CCU server feels rewarding to be in) and counter-intuitively
+-- *retains* players when a server is full — they don't want to leave the
+-- party.
+local STREAK_TIERS = {
+	{ minPlayers = 2,  mult = 1.10, label = "Cozy"  },
+	{ minPlayers = 4,  mult = 1.25, label = "Warm"  },
+	{ minPlayers = 6,  mult = 1.50, label = "Hot"   },
+	{ minPlayers = 8,  mult = 1.75, label = "BLAZING"},
+}
+
+local currentMult = 1
+local currentLabel = ""
+
+local function recompute()
+	local n = #Players:GetPlayers()
+	local mult = 1
+	local label = ""
+	for _, tier in ipairs(STREAK_TIERS) do
+		if n >= tier.minPlayers then
+			mult = tier.mult
+			label = tier.label
+		end
+	end
+	if mult ~= currentMult then
+		Log.Info("HotStreak", "%d players → %s (%.2fx)", n, label, mult)
+		if label ~= "" and AnnouncementService then
+			AnnouncementService.Push(string.format("🔥 %s server — every player earns %.2fx cash!", label, mult),
+				{ 255, 120, 60 }, 30)
+		end
+	end
+	currentMult = mult
+	currentLabel = label
+end
+
+function HotStreakService.GetMultiplier(): number
+	return currentMult
+end
+
+function HotStreakService.GetLabel(): string
+	return currentLabel
+end
+
+function HotStreakService.OnPlayerAdded(_: Player)
+	recompute()
+end
+
+function HotStreakService.OnPlayerRemoving(_: Player)
+	task.defer(recompute)
+end
+
+function HotStreakService.Init()
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	Players.PlayerAdded:Connect(function() recompute() end)
+	Players.PlayerRemoving:Connect(function() task.defer(recompute) end)
+	recompute()
+	-- Suppress unused
+	local _ = Remotes
+end
+
+return HotStreakService
+]])
+	ensurePath(root, "InfectionService", "ModuleScript", [=[
+--!strict
+--[[
+	InfectionService — the second PvP novelty. Attacker spends one
+	Infection Bomb to debuff a victim's whole income for INFECTION_DEBUFF_DURATION.
+	The visual is a green smoke cloud over the victim's plot.
+
+	Bombs come from: (a) starter grant, (b) daily reward, (c) dev product purchase.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local LabService = require(script.Parent.LabService)
+local BattlePassService -- forward
+
+local InfectionService = {}
+
+local function playInfectionVfx(plotId: number)
+	local plot = LabService.GetPlot(plotId)
+	if not plot then return end
+	local part = Instance.new("Part")
+	part.Anchored = true
+	part.CanCollide = false
+	part.Transparency = 1
+	part.Size = Vector3.new(1,1,1)
+	part.Position = plot.center + Vector3.new(0, 30, 0)
+	part.Parent = Workspace
+	local smoke = Instance.new("Smoke")
+	smoke.Color = Color3.fromRGB(80, 220, 80)
+	smoke.Size = 40
+	smoke.Opacity = 0.7
+	smoke.RiseVelocity = 5
+	smoke.Parent = part
+	task.delay(10, function() part:Destroy() end)
+end
+
+function InfectionService.AddBombs(player: Player, count: number)
+	local data = DataService.Get(player)
+	if not data then return end
+	data.infectionBombs += count
+	EconomyService.PushHud(player)
+end
+
+function InfectionService.GrantInfectionBomb(player: Player, count: number)
+	InfectionService.AddBombs(player, count)
+end
+
+function InfectionService.AttemptInfect(attacker: Player, victimUserId: number)
+	if attacker.UserId == victimUserId then
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Cannot infect yourself." })
+		return
+	end
+	local atkData = DataService.Get(attacker)
+	if not atkData then return end
+	if atkData.infectionBombs <= 0 then
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Out of Infection Bombs — buy more in the shop." })
+		return
+	end
+	local victim = Players:GetPlayerByUserId(victimUserId)
+	if not victim then return end
+	local victimData = DataService.Get(victim)
+	if not victimData then return end
+
+	atkData.infectionBombs -= 1
+	victimData.infectedUntil = math.max(victimData.infectedUntil, os.time()) + Config.INFECTION_DEBUFF_DURATION
+	atkData.stats.totalInfections += 1
+	if BattlePassService then BattlePassService.AwardXp(attacker, "infection") end
+	if atkData.stats.totalInfections == 1 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(attacker, "first_infect") end
+	end
+	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+	if okL then PlayerLevelService.AwardXp(attacker, "infect") end
+
+	local victimPlot = LabService.GetPlotIdForPlayer(victim)
+	if victimPlot then playInfectionVfx(victimPlot) end
+
+	EconomyService.PushHud(attacker)
+	EconomyService.PushHud(victim)
+
+	Remotes.Event(Remotes.Names.Notify):FireClient(attacker, {
+		kind="capture", text=`Infected {victim.DisplayName}!`,
+	})
+	Remotes.Event(Remotes.Names.Notify):FireClient(victim, {
+		kind="error", text=`{attacker.DisplayName} infected your lab! Income reduced.`,
+	})
+end
+
+function InfectionService.Init()
+	BattlePassService = require(script.Parent.BattlePassService)
+end
+
+return InfectionService
+]=])
+	ensurePath(root, "InviteService", "ModuleScript", [=[
+--!strict
+--[[
+	InviteService — referral codes. Every player gets an auto-generated
+	personal code (REF-<6 chars>). When a new player joins and redeems
+	someone else's code in their first session, both get a reward
+	(referrer: cash + bombs, referee: cash bonus).
+
+	Single-use per redeemer; one referrer per referee. This is the
+	cheapest growth lever — every existing player becomes a recruiter.
+]]
+
+local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local InfectionService -- forward
+
+local InviteService = {}
+
+local REFERRER_CASH = 3000
+local REFEREE_CASH = 1500
+local REFERRER_BOMBS = 2
+
+local codeStore: DataStore? = nil
+if not RunService:IsStudio() then
+	pcall(function() codeStore = DataStoreService:GetDataStore("BrainrotLab_RefCodes_v1") end)
+end
+
+local function generateCode(): string
+	local chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+	local buf = {}
+	for i = 1, 6 do
+		local idx = math.random(1, #chars)
+		table.insert(buf, string.sub(chars, idx, idx))
+	end
+	return "REF-" .. table.concat(buf)
+end
+
+local function ensureInviteField(data: any, player: Player)
+	if not data._refCode then
+		data._refCode = generateCode()
+		if codeStore then
+			pcall(function() codeStore:SetAsync(data._refCode, player.UserId) end)
+		end
+	end
+	if data._refRedeemed == nil then data._refRedeemed = false end
+	if data._refUsedBy == nil then data._refUsedBy = {} end
+end
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureInviteField(data, player)
+	Remotes.Event(Remotes.Names.InviteUpdate):FireClient(player, {
+		code = data._refCode,
+		redeemed = data._refRedeemed,
+		recruitsCount = #(data._refUsedBy :: any),
+	})
+end
+
+function InviteService.Redeem(player: Player, codeRaw: string)
+	if typeof(codeRaw) ~= "string" then return end
+	local code = string.upper(string.gsub(codeRaw, "%s", ""))
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureInviteField(data, player)
+	if data._refRedeemed then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="You already redeemed a referral code." })
+		return
+	end
+	if code == data._refCode then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="That's your own code." })
+		return
+	end
+
+	-- Look up referrer
+	local referrerUserId: number? = nil
+	if codeStore then
+		pcall(function() referrerUserId = codeStore:GetAsync(code) end)
+	end
+	if not referrerUserId then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Code {code} not found.` })
+		return
+	end
+
+	data._refRedeemed = true
+	EconomyService.AwardCash(player, REFEREE_CASH, "referral")
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Referral redeemed — +{REFEREE_CASH} cash` })
+	pushUpdate(player)
+
+	-- Reward referrer if in this server
+	local referrer = Players:GetPlayerByUserId(referrerUserId)
+	if referrer then
+		local rdata = DataService.Get(referrer)
+		if rdata then
+			ensureInviteField(rdata, referrer)
+			table.insert(rdata._refUsedBy :: any, player.UserId)
+			EconomyService.AwardCash(referrer, REFERRER_CASH, "recruit bonus")
+			if InfectionService then InfectionService.AddBombs(referrer, REFERRER_BOMBS) end
+			Remotes.Event(Remotes.Names.Notify):FireClient(referrer, {
+				kind = "capture",
+				text = `{player.DisplayName} used your referral! +{REFERRER_CASH} cash, +{REFERRER_BOMBS} bombs`,
+			})
+			pushUpdate(referrer)
+		end
+	end
+	-- (Cross-server reward is intentionally skipped to avoid a DataStore round trip per claim.
+	--  Referrers in other servers still see their recruit count update on next login.)
+end
+
+function InviteService.OnPlayerAdded(player: Player)
+	task.delay(2, pushUpdate, player)
+end
+
+function InviteService.Init()
+	InfectionService = require(script.Parent.InfectionService)
+end
+
+return InviteService
+]=])
+	ensurePath(root, "LabService", "ModuleScript", [=[
+--!strict
+--[[
+	LabService — owns plots, placed brainrots (the visual scene), capture
+	pads, and the income tick that converts placed brainrots into cash.
+
+	Plot layout: 8 plots arranged in a 2x4 grid on the baseplate. Each plot
+	is 80x80 studs. Slot count = STARTING_CAPACITY + rebirths*CAPACITY_PER_REBIRTH
+	(soft-cap on how many you can place at once).
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Types = require(Shared.Types)
+local BrainrotData = require(Shared.BrainrotData)
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local LabService = {}
+
+local PLOT_COUNT = 8
+local PLOT_SIZE = 80
+local PLOT_SPACING = 12
+
+local plots: { Plot } = {}
+local plotOwner: { [number]: Player? } = {}
+local playerPlot: { [Player]: number? } = {}
+-- Active placed brainrot models keyed by player -> uid -> model
+local placedModels: { [Player]: { [string]: Model } } = {}
+
+type Plot = {
+	id: number,
+	folder: Folder,
+	center: Vector3,
+	slots: { Vector3 },
+	signPart: Part,
+	captureButton: Part,
+}
+
+local function buildPlot(id: number): Plot
+	local plotsFolder = Workspace:WaitForChild("Plots") :: Folder
+	local folder = Instance.new("Folder")
+	folder.Name = `Plot_{id}`
+	folder.Parent = plotsFolder
+
+	local col = (id - 1) % 4
+	local row = math.floor((id - 1) / 4)
+	local center = Vector3.new(
+		(col - 1.5) * (PLOT_SIZE + PLOT_SPACING),
+		1,
+		(row - 0.5) * (PLOT_SIZE + PLOT_SPACING)
+	)
+
+	-- Floor
+	local floor = Instance.new("Part")
+	floor.Name = "Floor"
+	floor.Anchored = true
+	floor.Size = Vector3.new(PLOT_SIZE, 1, PLOT_SIZE)
+	floor.Position = center
+	floor.Color = Color3.fromRGB(60, 60, 80)
+	floor.Material = Enum.Material.SmoothPlastic
+	floor.Parent = folder
+
+	-- Sign
+	local sign = Instance.new("Part")
+	sign.Name = "Sign"
+	sign.Anchored = true
+	sign.Size = Vector3.new(10, 6, 0.5)
+	sign.Position = center + Vector3.new(0, 6, -PLOT_SIZE/2 + 1)
+	sign.Color = Color3.fromRGB(40, 40, 60)
+	sign.Material = Enum.Material.Neon
+	sign.Parent = folder
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Back
+	gui.CanvasSize = Vector2.new(800, 480)
+	gui.Parent = sign
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.TextScaled = true
+	label.Font = Enum.Font.GothamBlack
+	label.TextColor3 = Color3.fromRGB(255, 230, 120)
+	label.Text = "UNCLAIMED LAB"
+	label.Parent = gui
+
+	-- Capture button
+	local capture = Instance.new("Part")
+	capture.Name = "CaptureButton"
+	capture.Anchored = true
+	capture.Size = Vector3.new(8, 1, 8)
+	capture.Position = center + Vector3.new(-PLOT_SIZE/2 + 8, 1.5, -PLOT_SIZE/2 + 8)
+	capture.Color = Color3.fromRGB(60, 200, 100)
+	capture.Material = Enum.Material.Neon
+	capture.Parent = folder
+	capture:SetAttribute("PlotId", id)
+	capture:SetAttribute("Kind", "Capture")
+
+	-- Slot positions (10 evenly-spaced points along a 4x3 grid on the plot)
+	local slots: { Vector3 } = {}
+	for r = 1, 3 do
+		for c = 1, 4 do
+			local sp = Vector3.new(
+				center.X + (c - 2.5) * 14,
+				2,
+				center.Z + (r - 2) * 14 + 8
+			)
+			table.insert(slots, sp)
+		end
+	end
+
+	return {
+		id = id,
+		folder = folder,
+		center = center,
+		slots = slots,
+		signPart = sign,
+		captureButton = capture,
+	}
+end
+
+local function updatePlotSign(plot: Plot, ownerName: string?, info: string?)
+	local label = plot.signPart:FindFirstChildOfClass("SurfaceGui")
+	if label then
+		local txt = label:FindFirstChild("Label") :: TextLabel?
+		if txt then
+			if ownerName then
+				txt.Text = `{ownerName}'s Lab\n{info or ""}`
+			else
+				txt.Text = "UNCLAIMED LAB"
+			end
+		end
+	end
+end
+
+local function applyPlotCosmetics(player: Player, plot: Plot)
+	local data = DataService.Get(player)
+	if not data then return end
+	local floor = plot.folder:FindFirstChild("Floor") :: BasePart?
+	if not floor then return end
+	-- VIPLab includes the golden plot effect per the shop description;
+	-- treat it as if GoldenPlot were also owned. Don't auto-grant
+	-- GoldenPlot in data.gamepasses because that would silently rebate
+	-- the GoldenPlot purchase for non-VIP players if Roblox returns true
+	-- for UserOwnsGamePassAsync later.
+	if data.gamepasses["GoldenPlot"] or data.gamepasses["VIPLab"] then
+		floor.Color = Color3.fromRGB(255, 215, 60)
+		floor.Material = Enum.Material.Neon
+		plot.signPart.Color = Color3.fromRGB(200, 160, 30)
+	else
+		floor.Color = Color3.fromRGB(60, 60, 80)
+		floor.Material = Enum.Material.SmoothPlastic
+		plot.signPart.Color = Color3.fromRGB(40, 40, 60)
+	end
+end
+
+local function assignPlot(player: Player): number?
+	for id = 1, PLOT_COUNT do
+		if plotOwner[id] == nil then
+			plotOwner[id] = player
+			playerPlot[player] = id
+			placedModels[player] = {}
+			updatePlotSign(plots[id], player.DisplayName, "")
+			applyPlotCosmetics(player, plots[id])
+			return id
+		end
+	end
+	return nil
+end
+
+function LabService.RefreshPlotCosmetics(player: Player)
+	local id = playerPlot[player]
+	if not id then return end
+	applyPlotCosmetics(player, plots[id])
+end
+
+local function releasePlot(player: Player)
+	local id = playerPlot[player]
+	if not id then return end
+	local models = placedModels[player]
+	if models then
+		for _, m in pairs(models) do m:Destroy() end
+	end
+	placedModels[player] = nil
+	plotOwner[id] = nil
+	playerPlot[player] = nil
+	updatePlotSign(plots[id], nil, nil)
+end
+
+-- ============================================================
+-- Brainrot model construction (placeholder primitives)
+-- ============================================================
+local function buildBrainrotModel(brainrot: Types.OwnedBrainrot, position: Vector3): Model
+	local def = BrainrotData.Get(brainrot.speciesId)
+	local MutationData = require(Shared.MutationData)
+	if not def then
+		-- shouldn't happen; build a question-mark cube
+		local fallback = Instance.new("Model")
+		local p = Instance.new("Part")
+		p.Anchored = true
+		p.Size = Vector3.new(2,2,2)
+		p.Position = position
+		p.Color = Color3.fromRGB(255,0,255)
+		p.Parent = fallback
+		fallback.PrimaryPart = p
+		return fallback
+	end
+
+	local model = Instance.new("Model")
+	model.Name = `Brainrot_{brainrot.uid}`
+
+	-- Compose color & scale from mutation chain
+	local color = def.color
+	local scaleMult = 1
+	local effects: { string } = {}
+	for _, mutId in ipairs(brainrot.mutations) do
+		local m = MutationData.Get(mutId)
+		if m then
+			if m.colorShift then
+				color = color:Lerp(m.colorShift, 0.5)
+			end
+			scaleMult *= m.scaleMult
+			if m.effect ~= "None" then
+				table.insert(effects, m.effect)
+			end
+		end
+	end
+
+	local size = def.sizeStuds * scaleMult
+
+	local body = Instance.new("Part")
+	body.Name = "Body"
+	body.Anchored = true
+	body.Size = size
+	body.Position = position + Vector3.new(0, size.Y/2 + 0.5, 0)
+	body.Color = color
+	body.Material = Enum.Material.SmoothPlastic
+	if def.primaryShape == "Ball" then
+		body.Shape = Enum.PartType.Ball
+	elseif def.primaryShape == "Cylinder" then
+		body.Shape = Enum.PartType.Cylinder
+	elseif def.primaryShape == "Wedge" then
+		-- Use WedgePart
+		body:Destroy()
+		body = Instance.new("WedgePart")
+		body.Name = "Body"
+		body.Anchored = true
+		body.Size = size
+		body.Position = position + Vector3.new(0, size.Y/2 + 0.5, 0)
+		body.Color = color
+		body.Material = Enum.Material.SmoothPlastic
+	end
+	body.Parent = model
+
+	-- Effects
+	for _, e in ipairs(effects) do
+		if e == "Sparkle" then
+			local s = Instance.new("Sparkles")
+			s.Parent = body
+		elseif e == "Fire" then
+			local f = Instance.new("Fire")
+			f.Size = 5
+			f.Heat = 8
+			f.Parent = body
+		elseif e == "Smoke" then
+			local sm = Instance.new("Smoke")
+			sm.Size = 3
+			sm.Opacity = 0.4
+			sm.Parent = body
+		elseif e == "Rainbow" then
+			task.spawn(function()
+				local t = 0
+				while body.Parent do
+					t += 0.05
+					body.Color = Color3.fromHSV((t % 5)/5, 0.6, 1)
+					task.wait(0.1)
+				end
+			end)
+		elseif e == "Glitch" then
+			task.spawn(function()
+				while body.Parent do
+					body.Transparency = math.random(0, 4) * 0.1
+					task.wait(0.15)
+				end
+			end)
+		end
+	end
+
+	-- Floating name label
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.fromOffset(220, 60)
+	bb.StudsOffset = Vector3.new(0, size.Y/2 + 2, 0)
+	bb.AlwaysOnTop = true
+	bb.Parent = body
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.fromScale(1,1)
+	lbl.BackgroundTransparency = 1
+	lbl.TextScaled = true
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextColor3 = Color3.fromRGB(255,255,255)
+	lbl.TextStrokeTransparency = 0
+	local displayName = def.displayName
+	for _, mutId in ipairs(brainrot.mutations) do
+		local m = MutationData.Get(mutId)
+		if m then displayName = `{m.suffix} {displayName}` end
+	end
+	lbl.Text = `{displayName}\n[T{brainrot.mutationTier}]`
+	lbl.Parent = bb
+
+	-- Click-to-collect detector
+	local cd = Instance.new("ClickDetector")
+	cd.MaxActivationDistance = 18
+	cd.Parent = body
+
+	model.PrimaryPart = body
+	model:SetAttribute("BrainrotUid", brainrot.uid)
+	model:SetAttribute("OwnerUserId", 0) -- set when parented
+	return model
+end
+
+-- Pull a brainrot's underlying record from inventory
+local function findBrainrot(player: Player, uid: string): Types.OwnedBrainrot?
+	local data = DataService.Get(player)
+	if not data then return nil end
+	for _, b in ipairs(data.inventory) do
+		if b.uid == uid then return b end
+	end
+	return nil
+end
+
+function LabService.GetPlotIdForPlayer(player: Player): number?
+	return playerPlot[player]
+end
+
+function LabService.GetPlotOwner(plotId: number): Player?
+	return plotOwner[plotId]
+end
+
+function LabService.GetPlot(plotId: number): Plot?
+	return plots[plotId]
+end
+
+function LabService.GetPlacedModels(player: Player): { [string]: Model }
+	return placedModels[player] or {}
+end
+
+function LabService.PlaceBrainrot(player: Player, uid: string): boolean
+	local data = DataService.Get(player)
+	if not data then return false end
+	local plotId = playerPlot[player]
+	if not plotId then return false end
+	local plot = plots[plotId]
+	if not plot then return false end
+
+	local brainrot = findBrainrot(player, uid)
+	if not brainrot or brainrot.placed then return false end
+
+	local capacity = Config.STARTING_CAPACITY + data.rebirths * Config.CAPACITY_PER_REBIRTH
+	local placedCount = 0
+	for _, b in ipairs(data.inventory) do
+		if b.placed then placedCount += 1 end
+	end
+	if placedCount >= capacity or placedCount >= #plot.slots then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "error",
+			text = "Lab is full. Sell, rebirth (more capacity), or unplace one.",
+		})
+		return false
+	end
+
+	-- find first free slot index
+	local used: { [number]: boolean } = {}
+	for _, b in ipairs(data.inventory) do
+		if b.placed and b.slotIndex then used[b.slotIndex] = true end
+	end
+	local slotIdx = 1
+	while used[slotIdx] do slotIdx += 1 end
+
+	brainrot.placed = true
+	brainrot.slotIndex = slotIdx
+	local pos = plot.slots[slotIdx] or plot.center
+	local model = buildBrainrotModel(brainrot, pos)
+	model:SetAttribute("OwnerUserId", player.UserId)
+	model.Parent = plot.folder
+	placedModels[player] = placedModels[player] or {}
+	placedModels[player][uid] = model
+
+	LabService.PushInventory(player)
+	return true
+end
+
+function LabService.UnplaceBrainrot(player: Player, uid: string): boolean
+	local brainrot = findBrainrot(player, uid)
+	if not brainrot or not brainrot.placed then return false end
+	brainrot.placed = false
+	brainrot.slotIndex = nil
+	local models = placedModels[player]
+	if models and models[uid] then
+		models[uid]:Destroy()
+		models[uid] = nil
+	end
+	LabService.PushInventory(player)
+	return true
+end
+
+function LabService.RebuildBrainrotVisual(player: Player, uid: string)
+	local brainrot = findBrainrot(player, uid)
+	if not brainrot or not brainrot.placed then return end
+	local plotId = playerPlot[player]
+	if not plotId then return end
+	local plot = plots[plotId]
+	if not plot then return end
+	local models = placedModels[player]
+	if not models then return end
+	if models[uid] then
+		models[uid]:Destroy()
+	end
+	local pos = plot.slots[brainrot.slotIndex or 1] or plot.center
+	local model = buildBrainrotModel(brainrot, pos)
+	model:SetAttribute("OwnerUserId", player.UserId)
+	model.Parent = plot.folder
+	models[uid] = model
+end
+
+function LabService.SellBrainrot(player: Player, uid: string): boolean
+	local data = DataService.Get(player)
+	if not data then return false end
+	for i, b in ipairs(data.inventory) do
+		if b.uid == uid then
+			local def = BrainrotData.Get(b.speciesId)
+			local refund = 0
+			if def then
+				local tierMult = 1 + b.mutationTier * Config.MUTATION_INCOME_MULT_PER_TIER
+				refund = math.floor(def.baseIncomePerSecond * 60 * tierMult)
+			end
+			if b.placed then
+				LabService.UnplaceBrainrot(player, uid)
+			end
+			table.remove(data.inventory, i)
+			EconomyService.AwardCash(player, refund, "sold")
+			LabService.PushInventory(player)
+			return true
+		end
+	end
+	return false
+end
+
+function LabService.GiveBrainrot(player: Player, brainrot: Types.OwnedBrainrot)
+	local data = DataService.Get(player)
+	if not data then return end
+	if #data.inventory >= Config.MAX_INVENTORY_SIZE then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "error",
+			text = "Inventory full — sell some brainrots first.",
+		})
+		return
+	end
+	brainrot.placed = false
+	brainrot.slotIndex = nil
+	table.insert(data.inventory, brainrot)
+	data.stats.totalCaptured += 1
+	LabService.PushInventory(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = `Captured {BrainrotData.Get(brainrot.speciesId) and BrainrotData.Get(brainrot.speciesId).displayName or "?"}!`,
+	})
+	if data.stats.totalCaptured == 1 then
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(player, "first_capture") end
+	end
+	local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+	if okL then PlayerLevelService.AwardXp(player, "capture") end
+	local okA, AutoSellService = pcall(require, script.Parent.AutoSellService)
+	if okA then AutoSellService.OnCapture(player, brainrot.uid) end
+	local okM, MythicCelebrationService = pcall(require, script.Parent.MythicCelebrationService)
+	if okM then MythicCelebrationService.OnCapture(player, brainrot.speciesId) end
+end
+
+function LabService.TransferBrainrot(fromPlayer: Player, toPlayer: Player, uid: string): boolean
+	local data = DataService.Get(fromPlayer)
+	if not data then return false end
+	for i, b in ipairs(data.inventory) do
+		if b.uid == uid then
+			if b.placed then
+				LabService.UnplaceBrainrot(fromPlayer, uid)
+			end
+			table.remove(data.inventory, i)
+			LabService.GiveBrainrot(toPlayer, b)
+			LabService.PushInventory(fromPlayer)
+			return true
+		end
+	end
+	return false
+end
+
+function LabService.PushInventory(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	Remotes.Event(Remotes.Names.InventoryUpdate):FireClient(player, {
+		inventory = data.inventory,
+		capacity = Config.STARTING_CAPACITY + data.rebirths * Config.CAPACITY_PER_REBIRTH,
+		max = Config.MAX_INVENTORY_SIZE,
+	})
+end
+
+-- ============================================================
+-- Income tick (server-authoritative)
+-- ============================================================
+local lastAccrue: { [Player]: number } = {}
+
+function LabService.AccruePlayer(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local now = os.clock()
+	local last = lastAccrue[player] or now
+	local dt = now - last
+	lastAccrue[player] = now
+	local total = 0
+	for _, b in ipairs(data.inventory) do
+		if b.placed then
+			total += EconomyService.ComputeBrainrotIncome(player, b) * dt
+		end
+	end
+	if total > 0 then
+		EconomyService.AwardCash(player, total)
+	end
+end
+
+function LabService.OnPlayerAdded(player: Player)
+	local plotId = assignPlot(player)
+	if not plotId then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "error",
+			text = "Server full — no lab available. Try another server.",
+		})
+		return
+	end
+	local data = DataService.Get(player)
+	if data then
+		data.plotId = plotId
+		-- Reset placed flags from previous session (positions don't persist)
+		for _, b in ipairs(data.inventory) do
+			b.placed = false
+			b.slotIndex = nil
+		end
+		-- Auto-place up to capacity
+		local cap = Config.STARTING_CAPACITY + data.rebirths * Config.CAPACITY_PER_REBIRTH
+		local placed = 0
+		for _, b in ipairs(data.inventory) do
+			if placed >= cap then break end
+			LabService.PlaceBrainrot(player, b.uid)
+			placed += 1
+		end
+		-- Give starter brainrot if inventory empty
+		if #data.inventory == 0 then
+			local rng = Random.new()
+			local def = BrainrotData.Get("tralalero") or BrainrotData.RollSpecies(rng, false)
+			local starter: Types.OwnedBrainrot = {
+				uid = Util.GenerateUid(),
+				speciesId = def.id,
+				mutationTier = 0,
+				mutations = {},
+				bornAt = os.time(),
+				lastMutationAt = os.time(),
+				placed = false,
+			}
+			LabService.GiveBrainrot(player, starter)
+			LabService.PlaceBrainrot(player, starter.uid)
+		end
+	end
+	LabService.PushInventory(player)
+end
+
+function LabService.OnPlayerRemoving(player: Player)
+	releasePlot(player)
+	lastAccrue[player] = nil
+end
+
+function LabService.Init()
+	for i = 1, PLOT_COUNT do
+		plots[i] = buildPlot(i)
+	end
+
+	-- Click capture button handler
+	for _, plot in pairs(plots) do
+		local btn = plot.captureButton
+		local cd = Instance.new("ClickDetector")
+		cd.MaxActivationDistance = 16
+		cd.Parent = btn
+		cd.MouseClick:Connect(function(player)
+			local owner = plotOwner[plot.id]
+			if owner ~= player then
+				Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+					kind = "error",
+					text = "That's not your lab.",
+				})
+				return
+			end
+			local CaptureService = require(script.Parent.CaptureService)
+			CaptureService.AttemptCapture(player)
+		end)
+	end
+
+	-- Income heartbeat (5 Hz is enough; smooth accrual)
+	task.spawn(function()
+		while true do
+			for _, player in ipairs(Players:GetPlayers()) do
+				LabService.AccruePlayer(player)
+			end
+			task.wait(0.2)
+		end
+	end)
+end
+
+return LabService
+]=])
+	ensurePath(root, "LeaderboardService", "ModuleScript", [=[
+--!strict
+--[[
+	LeaderboardService — pushes a server-local top-10 every 10s. Three boards:
+	Top Cash, Top Mutations, Top Thieves. Resets per server, not global —
+	keeps it cheap (no OrderedDataStore queries on tick).
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes = require(Shared.Remotes)
+local DataService = require(script.Parent.DataService)
+
+local LeaderboardService = {}
+
+local function snapshot()
+	local entries = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		local d = DataService.Get(p)
+		if d then
+			table.insert(entries, {
+				userId = p.UserId,
+				name = p.DisplayName,
+				cash = d.cash,
+				rebirths = d.rebirths,
+				mutations = d.stats.totalMutations,
+				steals = d.stats.totalSteals,
+				infections = d.stats.totalInfections,
+			})
+		end
+	end
+
+	local function topBy(key: string, limit: number)
+		local sorted = table.clone(entries)
+		table.sort(sorted, function(a, b) return (a :: any)[key] > (b :: any)[key] end)
+		local out = {}
+		for i = 1, math.min(limit, #sorted) do table.insert(out, sorted[i]) end
+		return out
+	end
+
+	return {
+		cash = topBy("cash", 10),
+		mutations = topBy("mutations", 10),
+		thieves = topBy("steals", 10),
+	}
+end
+
+local function pushAll()
+	local payload = snapshot()
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.LeaderboardUpdate):FireClient(p, payload)
+	end
+end
+
+function LeaderboardService.Init()
+	task.spawn(function()
+		while true do
+			pushAll()
+			task.wait(10)
+		end
+	end)
+end
+
+return LeaderboardService
+]=])
+	ensurePath(root, "LoginStreakService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Util    = require(Shared.Util)
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local DataService    = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local LoginStreakService = {}
+
+-- Distinct from DailyRewardService (which is a 7-day chest cycle the
+-- player claims). LoginStreak is silent compounding: just by logging in
+-- on consecutive UTC days the player accumulates a streak that is *also*
+-- displayed in the HUD. Every 7-day streak milestone (7/14/30/60/100)
+-- awards a notable cash bonus.
+
+local MILESTONES = { [7] = 5000, [14] = 15000, [30] = 50000, [60] = 150000, [100] = 500000 }
+
+local function ensure(data: any)
+	data._streak = data._streak or {
+		count = 0,
+		lastDay = 0,
+		highest = 0,
+	}
+end
+
+function LoginStreakService.GetStreak(player: Player): number
+	local data = DataService.Get(player)
+	if not data then return 0 end
+	ensure(data)
+	return data._streak.count
+end
+
+function LoginStreakService.OnPlayerAdded(player: Player)
+	DataService.OnProfileLoaded(player, function()
+		local data = DataService.Get(player)
+		if not data then return end
+		ensure(data)
+		local today = Util.DayIndex()
+		if data._streak.lastDay == today then return end
+		if data._streak.lastDay == today - 1 then
+			data._streak.count += 1
+		else
+			data._streak.count = 1
+		end
+		data._streak.lastDay = today
+		if data._streak.count > data._streak.highest then
+			data._streak.highest = data._streak.count
+		end
+		local bonus = MILESTONES[data._streak.count]
+		if bonus then
+			EconomyService.AwardCash(player, bonus, `{data._streak.count}-day streak`)
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+				kind = "capture",
+				text = string.format("🔥 %d-day streak — bonus +%s cash!",
+					data._streak.count, Util.FormatShortNumber(bonus)),
+			})
+		else
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+				kind = "info",
+				text = string.format("🔥 Day %d streak — keep it going!", data._streak.count),
+			})
+		end
+		Log.Info("Streak", "%s day=%d (highest=%d)", player.Name, data._streak.count, data._streak.highest)
+	end)
+end
+
+function LoginStreakService.Init() end
+
+return LoginStreakService
+]])
+	ensurePath(root, "LuckyWheelService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+local Log     = require(Shared.Log)
+
+local DataService     = require(script.Parent.DataService)
+local EconomyService  = require(script.Parent.EconomyService)
+
+local InfectionService -- forward
+local CaptureService -- forward
+
+local LuckyWheelService = {}
+
+-- Wheel segments. Each segment has a weight (probability mass) and a reward.
+-- Weights are relative; the wheel rolls a single segment per spin.
+type Segment = {
+	id: string,
+	label: string,
+	color: { number },     -- {r,g,b} for client display
+	weight: number,
+	kind: string,
+	amount: number?,
+}
+
+local SEGMENTS: { Segment } = {
+	{ id = "cash_small",  label = "500 cash",   color = {200,200,80},  weight = 30, kind = "cash",            amount = 500   },
+	{ id = "cash_med",    label = "1.5K cash",  color = {120,220,80},  weight = 22, kind = "cash",            amount = 1500  },
+	{ id = "cash_big",    label = "5K cash",    color = {80,200,160},  weight = 10, kind = "cash",            amount = 5000  },
+	{ id = "cash_huge",   label = "20K cash",   color = {80,140,255},  weight = 2,  kind = "cash",            amount = 20000 },
+	{ id = "bomb",        label = "+1 bomb",    color = {120,255,120}, weight = 14, kind = "infection_bomb", amount = 1     },
+	{ id = "bombs",       label = "+3 bombs",   color = {60,200,60},   weight = 6,  kind = "infection_bomb", amount = 3     },
+	{ id = "rare_egg",    label = "Rare Egg",   color = {255,180,40},  weight = 4,  kind = "rare_egg",        amount = 1     },
+	{ id = "dud",         label = "Try again",  color = {120,120,140}, weight = 12, kind = "dud",             amount = 0     },
+}
+
+local FREE_SPIN_INTERVAL_HOURS = 12   -- one free spin per 12 hours
+
+local function ensure(data: any)
+	data._wheel = data._wheel or {
+		lastFreeSpinAt = 0,
+		spinsAvailable = 1,     -- new players get their first spin immediately
+		totalSpins     = 0,
+	}
+end
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	local now = os.time()
+	local freeReady = now - data._wheel.lastFreeSpinAt >= FREE_SPIN_INTERVAL_HOURS * 3600
+	Remotes.Event(Remotes.Names.WheelUpdate):FireClient(player, {
+		segments = SEGMENTS,
+		spinsAvailable = data._wheel.spinsAvailable,
+		freeReady = freeReady,
+		secondsToFree = math.max(0, FREE_SPIN_INTERVAL_HOURS * 3600 - (now - data._wheel.lastFreeSpinAt)),
+	})
+end
+
+local function deliver(player: Player, segment: Segment)
+	if segment.kind == "cash" then
+		EconomyService.AwardCash(player, segment.amount or 0, "wheel")
+	elseif segment.kind == "infection_bomb" then
+		if InfectionService then InfectionService.AddBombs(player, segment.amount or 1) end
+	elseif segment.kind == "rare_egg" then
+		if CaptureService then CaptureService.AttemptCapture(player, { freeRare = true, count = segment.amount or 1 }) end
+	end
+end
+
+local function rollSegment(rng: Random): (Segment, number)
+	local total = 0
+	for _, seg in ipairs(SEGMENTS) do total += seg.weight end
+	local pick = rng:NextNumber(0, total)
+	local cursor = 0
+	for i, seg in ipairs(SEGMENTS) do
+		cursor += seg.weight
+		if pick <= cursor then return seg, i end
+	end
+	return SEGMENTS[#SEGMENTS], #SEGMENTS
+end
+
+local rng = Random.new()
+
+function LuckyWheelService.Spin(player: Player, kind: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	local now = os.time()
+
+	if kind == "free" then
+		if now - data._wheel.lastFreeSpinAt < FREE_SPIN_INTERVAL_HOURS * 3600 then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+				kind = "error",
+				text = string.format("Free spin in %s",
+					Util.SecondsToClock(FREE_SPIN_INTERVAL_HOURS * 3600 - (now - data._wheel.lastFreeSpinAt))),
+			})
+			return
+		end
+		data._wheel.lastFreeSpinAt = now
+	elseif kind == "stored" then
+		if data._wheel.spinsAvailable <= 0 then
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind = "error", text = "No spins available." })
+			return
+		end
+		data._wheel.spinsAvailable -= 1
+	else
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind = "error", text = "Invalid spin kind." })
+		return
+	end
+
+	local segment, index = rollSegment(rng)
+	data._wheel.totalSpins += 1
+	deliver(player, segment)
+
+	Remotes.Event(Remotes.Names.WheelSpinResult):FireClient(player, {
+		segmentIndex = index,
+		segmentId = segment.id,
+		label = segment.label,
+	})
+	pushUpdate(player)
+	Log.Info("Wheel", "%s %s spin -> %s", player.Name, kind, segment.id)
+end
+
+function LuckyWheelService.GrantSpins(player: Player, count: number)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	data._wheel.spinsAvailable += count
+	pushUpdate(player)
+end
+
+function LuckyWheelService.OnPlayerAdded(player: Player)
+	task.delay(2, pushUpdate, player)
+end
+
+function LuckyWheelService.Init()
+	InfectionService = require(script.Parent.InfectionService)
+	CaptureService   = require(script.Parent.CaptureService)
+	Remotes.Event(Remotes.Names.WheelUpdate)
+	Remotes.Event(Remotes.Names.WheelSpinResult)
+end
+
+return LuckyWheelService
+]])
+	ensurePath(root, "MilestoneAnnounceService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local MilestoneAnnounceService = {}
+
+-- Watches the same hook points that fire badges, but instead of awarding
+-- the badge to the achieving player, it shouts to the *whole server* so
+-- everyone sees the social proof. Compounding effect: seeing "Mark just
+-- hit Rebirth 5" is the cheapest in-game motivator there is.
+
+local REBIRTH_TIERS = { 1, 3, 5, 10, 25, 50 }
+local CAPTURE_TIERS = { 100, 500, 1000 }
+
+local lastFiredFor: { [string]: { [number]: boolean } } = {}
+
+local function fire(player: Player, kind: string, milestone: number, text: string, color: { number })
+	lastFiredFor[kind] = lastFiredFor[kind] or {}
+	if lastFiredFor[kind][player.UserId] == nil then
+		lastFiredFor[kind][player.UserId] = true
+	end
+	if not AnnouncementService then return end
+	AnnouncementService.Push(text, color, 12)
+	-- Also fire a Notify to the achieving player so they get a personal toast
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = `🎉 Server-wide shoutout: {text}`,
+	})
+	Log.Info("Milestone", "%s %s %d", player.Name, kind, milestone)
+end
+
+local watchedProfiles: { [Player]: { rebirths: number, captures: number } } = {}
+
+local function snapshot(player: Player)
+	local DataService = require(script.Parent.DataService)
+	local data = DataService.Get(player)
+	if not data then return end
+	local snap = watchedProfiles[player] or { rebirths = 0, captures = 0 }
+	watchedProfiles[player] = snap
+
+	for _, tier in ipairs(REBIRTH_TIERS) do
+		if data.rebirths == tier and snap.rebirths < tier then
+			fire(player, "rebirth", tier,
+				string.format("🚀 %s reached Rebirth %d!", player.DisplayName, tier),
+				{ 255, 100, 220 })
+		end
+	end
+	for _, tier in ipairs(CAPTURE_TIERS) do
+		if data.stats.totalCaptured >= tier and snap.captures < tier then
+			fire(player, "captures", tier,
+				string.format("🧠 %s has captured %d brainrots!", player.DisplayName, tier),
+				{ 120, 220, 255 })
+		end
+	end
+	snap.rebirths = data.rebirths
+	snap.captures = data.stats.totalCaptured
+end
+
+function MilestoneAnnounceService.OnPlayerAdded(player: Player)
+	watchedProfiles[player] = { rebirths = 0, captures = 0 }
+end
+
+function MilestoneAnnounceService.OnPlayerRemoving(player: Player)
+	watchedProfiles[player] = nil
+end
+
+function MilestoneAnnounceService.Init()
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	task.spawn(function()
+		while true do
+			task.wait(5)
+			for _, p in ipairs(Players:GetPlayers()) do
+				snapshot(p)
+			end
+		end
+	end)
+end
+
+return MilestoneAnnounceService
+]])
+	ensurePath(root, "MonetizationService", "ModuleScript", [=[
+--!strict
+--[[
+	MonetizationService — the revenue plumbing. Three flows:
+
+	  1. Gamepass purchases — PromptPurchaseFinished -> set gamepasses[key] = true
+	     and recompute multipliers. On every join we ALSO re-check ownership in
+	     case the player bought the pass off-experience.
+
+	  2. Developer products — ProcessReceipt callback. Order matters: we
+	     deliver the goods, save the profile, THEN return PurchaseGranted.
+	     Returning Granted before save risks lost purchases (which trigger
+	     refund requests = revenue loss + store violation flags).
+
+	  3. Premium payouts — Roblox does this automatically when the experience
+	     is enrolled. We don't do anything in code, but we log analytics so
+	     the user can see how much Premium playtime is generated.
+]]
+
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local LabService = require(script.Parent.LabService)
+local CaptureService = require(script.Parent.CaptureService)
+local MutationService = require(script.Parent.MutationService)
+local InfectionService = require(script.Parent.InfectionService)
+local PetService = require(script.Parent.PetService)
+local LuckyWheelService -- forward
+local BattlePassService -- forward
+local AnalyticsService -- forward
+local TrailService -- forward
+
+local MonetizationService = {}
+
+-- Indexes: id -> {key, def}
+local gamepassById: { [number]: { key: string, def: any } } = {}
+local productById: { [number]: { key: string, def: any } } = {}
+
+local function rebuildIndexes()
+	gamepassById = {}
+	productById = {}
+	for key, gp in pairs(Config.GAMEPASSES) do
+		if gp.id and gp.id > 0 then
+			gamepassById[gp.id] = { key = key, def = gp }
+		end
+	end
+	for key, dp in pairs(Config.DEV_PRODUCTS) do
+		if dp.id and dp.id > 0 then
+			productById[dp.id] = { key = key, def = dp }
+		end
+	end
+end
+
+local function checkGamepasses(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	for key, gp in pairs(Config.GAMEPASSES) do
+		if gp.id and gp.id > 0 then
+			local ok, owned = pcall(MarketplaceService.UserOwnsGamePassAsync, MarketplaceService, player.UserId, gp.id)
+			if ok and owned then
+				data.gamepasses[key] = true
+			end
+		end
+	end
+	EconomyService.PushHud(player)
+end
+
+local function grantGamepass(player: Player, key: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	data.gamepasses[key] = true
+	EconomyService.PushHud(player)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "info", text = `Gamepass unlocked: {(Config.GAMEPASSES[key] or {name=key}).name}`,
+	})
+	if TrailService then
+		TrailService.OnGamepassGranted(player, key)
+	end
+	if key == "GoldenPlot" then
+		LabService.RefreshPlotCosmetics(player)
+	end
+	local okDD, DailyDealService = pcall(require, script.Parent.DailyDealService)
+	if okDD then DailyDealService.OnGamepassPurchased(player, key) end
+	if AnalyticsService then
+		AnalyticsService.LogPurchase(player, "gamepass", key, (Config.GAMEPASSES[key] or {}).price or 0)
+	end
+end
+
+local function deliverProduct(player: Player, key: string): boolean
+	local def = Config.DEV_PRODUCTS[key]
+	if not def then return false end
+	if def.kind == "cash" then
+		EconomyService.AwardCash(player, def.amount or 0, "purchase")
+	elseif def.kind == "instant_mutation" then
+		MutationService.ForceInstantMutation(player)
+	elseif def.kind == "skip_rebirth" then
+		EconomyService.SkipRebirth(player)
+	elseif def.kind == "rare_egg" then
+		CaptureService.AttemptCapture(player, { freeRare = true, count = 1 })
+	elseif def.kind == "infection_bomb" then
+		InfectionService.AddBombs(player, def.amount or 1)
+	elseif def.kind == "battle_pass" then
+		if BattlePassService then BattlePassService.GrantPremium(player) end
+	elseif def.kind == "pet_egg" then
+		PetService.Hatch(player, false)
+	elseif def.kind == "pet_egg_lucky" then
+		PetService.Hatch(player, true)
+	elseif def.kind == "wheel_spins" then
+		if LuckyWheelService then LuckyWheelService.GrantSpins(player, def.amount or 1) end
+	elseif def.kind == "tip" then
+		-- Tips deliver nothing tangible — that's the point. Mark the profile
+		-- so chat tags / leaderboard recognize the tipper, and award a small
+		-- cash thank-you so it's not entirely empty.
+		local data = DataService.Get(player)
+		if data then
+			(data :: any)._totalTipped = ((data :: any)._totalTipped or 0) + (def.amount or 0)
+		end
+		EconomyService.AwardCash(player, (def.amount or 0) * 100, "tip thank-you")
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("💖 Thank you for the %d R$ tip! You're amazing.", def.amount or 0),
+		})
+	else
+		warn(`[Monetization] Unknown product kind: {tostring(def.kind)}`)
+		return false
+	end
+	if AnalyticsService then
+		AnalyticsService.LogPurchase(player, "product", key, def.price or 0)
+	end
+	return true
+end
+
+function MonetizationService.PromptPurchase(player: Player, kind: string, key: string)
+	if kind == "gamepass" then
+		local gp = Config.GAMEPASSES[key]
+		if gp and gp.id and gp.id > 0 then
+			MarketplaceService:PromptGamePassPurchase(player, gp.id)
+		else
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+				kind="error",
+				text=`{(gp and gp.name) or key}: gamepass not configured (set ID in Config.luau).`,
+			})
+			warn(`[Monetization] PromptPurchase requested for unconfigured gamepass {key}`)
+		end
+	elseif kind == "product" then
+		local dp = Config.DEV_PRODUCTS[key]
+		if dp and dp.id and dp.id > 0 then
+			MarketplaceService:PromptProductPurchase(player, dp.id)
+		else
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+				kind="error",
+				text=`{(dp and dp.name) or key}: dev product not configured (set ID in Config.luau).`,
+			})
+			warn(`[Monetization] PromptPurchase requested for unconfigured product {key}`)
+		end
+	end
+end
+
+function MonetizationService.OnPlayerAdded(player: Player)
+	checkGamepasses(player)
+end
+
+function MonetizationService.Init()
+	BattlePassService = require(script.Parent.BattlePassService)
+	LuckyWheelService = require(script.Parent.LuckyWheelService)
+	AnalyticsService = require(script.Parent.AnalyticsService)
+	TrailService = require(script.Parent.TrailService)
+	rebuildIndexes()
+
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, gamePassId, wasPurchased)
+		if not wasPurchased then return end
+		local entry = gamepassById[gamePassId]
+		if not entry then return end
+		grantGamepass(player, entry.key)
+	end)
+
+	MarketplaceService.ProcessReceipt = function(receiptInfo)
+		local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
+		if not player then return Enum.ProductPurchaseDecision.NotProcessedYet end
+		local entry = productById[receiptInfo.ProductId]
+		if not entry then
+			warn(`[Monetization] ProcessReceipt: unknown product {receiptInfo.ProductId}`)
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
+
+		-- Idempotency: keep a small ring buffer of granted PurchaseIds on the profile.
+		local data = DataService.Get(player)
+		if not data then return Enum.ProductPurchaseDecision.NotProcessedYet end
+		(data :: any)._purchaseLog = (data :: any)._purchaseLog or {}
+		local log = (data :: any)._purchaseLog :: { string }
+		for _, id in ipairs(log) do
+			if id == receiptInfo.PurchaseId then
+				return Enum.ProductPurchaseDecision.PurchaseGranted
+			end
+		end
+
+		local ok, delivered = pcall(deliverProduct, player, entry.key)
+		if not ok or not delivered then
+			warn(`[Monetization] Delivery failed for {entry.key}: {tostring(delivered)}`)
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
+
+		table.insert(log, receiptInfo.PurchaseId)
+		if #log > Config.PURCHASE_LOG_RING_SIZE then
+			table.remove(log, 1)
+		end
+
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+end
+
+-- Owner-only test path: deliver a product without ProcessReceipt firing.
+-- Used by AdminService's /test-purchase command. Wraps deliverProduct in
+-- a pcall so a broken delivery doesn't crash the admin loop.
+function MonetizationService.DeliverProductTestOnly(player: Player, key: string): boolean
+	local ok, result = pcall(deliverProduct, player, key)
+	return ok and result == true
+end
+
+return MonetizationService
+]=])
+	ensurePath(root, "MutationRerollService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes      = require(Shared.Remotes)
+local MutationData = require(Shared.MutationData)
+local Log          = require(Shared.Log)
+
+local DataService    = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local LabService     = require(script.Parent.LabService)
+
+local MutationRerollService = {}
+
+-- Reroll the most-recently-applied mutation on an owned brainrot. Costs
+-- scale with current tier so high-tier rerolls cost real money — drives
+-- the cash-pack purchase loop (the player has 99k cash, the reroll
+-- costs 250k, the cash pack is 199 R$ for 25k cash).
+
+local BASE_COST = 500
+local function rerollCost(tier: number): number
+	return math.floor(BASE_COST * (2.5 ^ tier))
+end
+
+local rng = Random.new()
+
+function MutationRerollService.Reroll(player: Player, uid: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	local target
+	for _, b in ipairs(data.inventory) do
+		if b.uid == uid then target = b; break end
+	end
+	if not target then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Brainrot not in inventory." })
+		return
+	end
+	if target.mutationTier == 0 then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="No mutation to reroll." })
+		return
+	end
+
+	local cost = rerollCost(target.mutationTier)
+	if not EconomyService.SpendCash(player, cost) then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind="error", text=string.format("Need %d cash to reroll.", cost),
+		})
+		return
+	end
+
+	-- Use the Lucky bias for VIP players so it feels like a perk.
+	local luckyBias = if data.gamepasses["LuckyMutations"] then 0.35 else 0
+	local newMutation = MutationData.RollMutation(rng, luckyBias)
+	local oldId = target.mutations[#target.mutations]
+	target.mutations[#target.mutations] = newMutation.id
+
+	LabService.RebuildBrainrotVisual(player, target.uid)
+	LabService.PushInventory(player)
+
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "mutation",
+		text = string.format("🎲 Reroll: %s → %s (T%d)",
+			(oldId and MutationData.Get(oldId) and MutationData.Get(oldId).suffix) or "?",
+			newMutation.suffix, target.mutationTier),
+	})
+	Log.Info("Reroll", "%s rerolled %s T%d %s -> %s for %d",
+		player.Name, target.uid, target.mutationTier,
+		tostring(oldId), newMutation.id, cost)
+end
+
+function MutationRerollService.GetCost(tier: number): number
+	return rerollCost(tier)
+end
+
+function MutationRerollService.Init() end
+
+return MutationRerollService
+]])
+	ensurePath(root, "MutationService", "ModuleScript", [=[
+--!strict
+--[[
+	MutationService — the novel mechanic. Every placed brainrot rolls for a
+	mutation tier-up on a per-brainrot interval. Each successful roll picks
+	a mutation from MutationData, appends it to the chain, and rebuilds the
+	visual so the player SEES the change.
+
+	The interval is gated by the 2x Mutation Speed gamepass.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local MutationData = require(Shared.MutationData)
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local LabService = require(script.Parent.LabService)
+local BattlePassService -- forward
+local BadgeService -- forward
+
+local MutationService = {}
+
+local rng = Random.new()
+
+local function intervalForPlayer(player: Player): number
+	local data = DataService.Get(player)
+	if not data then return Config.MUTATION_INTERVAL end
+	local interval = Config.MUTATION_INTERVAL
+	if data.gamepasses["MutationSpeed2x"] then
+		interval = interval / Config.MUTATION_GAMEPASS_SPEED_MULT
+	end
+	local okPet, PetService = pcall(require, script.Parent.PetService)
+	if okPet then
+		local petMult = PetService.GetMutationSpeedMult(player)
+		if petMult > 1 then interval = interval / petMult end
+	end
+	local okHour, TopOfHourService = pcall(require, script.Parent.TopOfHourService)
+	if okHour then
+		local hourMult = TopOfHourService.GetMutationMult()
+		if hourMult > 1 then interval = interval / hourMult end
+	end
+	local okEvt, EventService = pcall(require, script.Parent.EventService)
+	if okEvt then
+		local eventMult = EventService.GetMutationSpeedMult()
+		if eventMult > 1 then interval = interval / eventMult end
+	end
+	local okBf, BuffService = pcall(require, script.Parent.BuffService)
+	if okBf then
+		local buffMult = BuffService.GetMutationMult(player)
+		if buffMult > 1 then interval = interval / buffMult end
+	end
+	return interval
+end
+
+local function rollOne(player: Player, brainrotUid: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	for _, b in ipairs(data.inventory) do
+		if b.uid == brainrotUid then
+			if b.mutationTier >= Config.MUTATION_MAX_TIER then return end
+			local luckyBias = if data.gamepasses["LuckyMutations"] then Config.MUTATION_LUCKY_RARITY_BIAS else 0
+			local mutation = MutationData.RollMutation(rng, luckyBias)
+			b.mutationTier += 1
+			table.insert(b.mutations, mutation.id)
+			b.lastMutationAt = os.time()
+			data.stats.totalMutations += 1
+			LabService.RebuildBrainrotVisual(player, b.uid)
+			LabService.PushInventory(player)
+			Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+				kind = "mutation",
+				text = `{mutation.suffix}! T{b.mutationTier}`,
+			})
+			if BattlePassService then
+				BattlePassService.AwardXp(player, "mutation")
+			end
+			local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+			if okL then PlayerLevelService.AwardXp(player, "mutation") end
+			if BadgeService then
+				if data.stats.totalMutations == 1 then
+					BadgeService.Fire(player, "first_mutation")
+				end
+				if b.mutationTier >= Config.MUTATION_MAX_TIER then
+					BadgeService.Fire(player, "apex_mutation")
+				end
+			end
+			if b.mutationTier >= Config.MUTATION_MAX_TIER then
+				local okC, CinematicService = pcall(require, script.Parent.CinematicService)
+				if okC then
+					CinematicService.Play(player, {
+						kind = "apex_mutation",
+						title = "APEX MUTATION",
+						subtitle = mutation.suffix .. " achieved",
+						color = { 255, 60, 60 },
+						durationSeconds = 4,
+					})
+				end
+			end
+			return
+		end
+	end
+end
+
+function MutationService.ForceInstantMutation(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	-- Pick a placed brainrot still below max tier; prefer the one with the highest tier (rarity climb)
+	local target
+	for _, b in ipairs(data.inventory) do
+		if b.placed and b.mutationTier < Config.MUTATION_MAX_TIER then
+			if not target or b.mutationTier > target.mutationTier then
+				target = b
+			end
+		end
+	end
+	if target then
+		rollOne(player, target.uid)
+	end
+end
+
+function MutationService.Init()
+	BattlePassService = require(script.Parent.BattlePassService)
+	BadgeService = require(script.Parent.BadgeService)
+	task.spawn(function()
+		while true do
+			for _, player in ipairs(Players:GetPlayers()) do
+				local data = DataService.Get(player)
+				if data then
+					local interval = intervalForPlayer(player)
+					for _, b in ipairs(data.inventory) do
+						if b.placed and b.mutationTier < Config.MUTATION_MAX_TIER then
+							if os.time() - b.lastMutationAt >= interval then
+								rollOne(player, b.uid)
+							end
+						end
+					end
+				end
+			end
+			task.wait(1)
+		end
+	end)
+end
+
+return MutationService
+]=])
+	ensurePath(root, "MythicCelebrationService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local Workspace         = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes      = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local Log          = require(Shared.Log)
+
+local LabService -- forward
+local AnnouncementService -- forward
+local CinematicService -- forward
+
+local MythicCelebrationService = {}
+
+-- When any player captures a Mythic or Outbreak brainrot, we shoot
+-- visible fireworks from their plot, fire a server-wide announcement,
+-- and play a cinematic for the achiever. The fireworks are a
+-- screenshot/clip moment for them and a 'wow that could be me' moment
+-- for everyone else — designed to surface as TikTok clips.
+
+local function shootFireworks(player: Player)
+	if not LabService then return end
+	local plotId = LabService.GetPlotIdForPlayer(player)
+	if not plotId then return end
+	local plot = LabService.GetPlot(plotId)
+	if not plot then return end
+	local origin = plot.center + Vector3.new(0, 6, 0)
+
+	for i = 1, 12 do
+		task.delay(i * 0.15, function()
+			local part = Instance.new("Part")
+			part.Anchored = false
+			part.CanCollide = false
+			part.Size = Vector3.new(0.6, 0.6, 0.6)
+			part.Material = Enum.Material.Neon
+			part.Color = Color3.fromHSV(math.random(), 0.8, 1)
+			part.Position = origin + Vector3.new(math.random(-3, 3), 0, math.random(-3, 3))
+			part.AssemblyLinearVelocity = Vector3.new(
+				math.random(-15, 15),
+				60 + math.random(0, 30),
+				math.random(-15, 15))
+			part.Parent = Workspace
+			local fire = Instance.new("Fire")
+			fire.Color = part.Color
+			fire.Size = 4
+			fire.Parent = part
+			task.delay(2.0, function() part:Destroy() end)
+		end)
+	end
+end
+
+function MythicCelebrationService.OnCapture(player: Player, speciesId: string)
+	local def = BrainrotData.Get(speciesId)
+	if not def then return end
+	if def.rarity ~= "Mythic" and def.rarity ~= "Outbreak" then return end
+
+	shootFireworks(player)
+
+	local color = if def.rarity == "Outbreak" then { 255, 80, 60 } else { 255, 100, 220 }
+
+	if AnnouncementService then
+		AnnouncementService.Push(
+			string.format("✨ %s captured a %s — %s!",
+				player.DisplayName, def.rarity, def.displayName),
+			color, 18)
+	end
+
+	if CinematicService then
+		CinematicService.Play(player, {
+			kind = "mythic_drop",
+			title = `{string.upper(def.rarity)} DROP`,
+			subtitle = def.displayName,
+			color = color,
+			durationSeconds = 4,
+		})
+	end
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then
+			Remotes.Event(Remotes.Names.Notify):FireClient(p, {
+				kind = "info",
+				text = string.format("✨ %s captured %s [%s]!",
+					player.DisplayName, def.displayName, def.rarity),
+			})
+		end
+	end
+
+	Log.Info("MythicCelebration", "%s captured %s (%s)", player.Name, speciesId, def.rarity)
+end
+
+function MythicCelebrationService.Init()
+	LabService = require(script.Parent.LabService)
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	CinematicService = require(script.Parent.CinematicService)
+end
+
+return MythicCelebrationService
+]])
+	ensurePath(root, "OfflineCashService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config       = require(Shared.Config)
+local Remotes      = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local Util         = require(Shared.Util)
+local Log          = require(Shared.Log)
+
+local DataService    = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local OfflineCashService = {}
+
+-- How much of a player's offline time we credit. We cap at 8 hours so that
+-- players who leave for days don't return to absurd payouts that destroy
+-- the early-game economy.
+local MAX_OFFLINE_HOURS    = 8
+local OFFLINE_INCOME_RATIO = 0.40    -- offline income at 40% of live rate
+local MIN_OFFLINE_SECONDS  = 60      -- ignore session-resume blips
+
+local function estimatedIncomePerSec(player: Player): number
+	local data = DataService.Get(player)
+	if not data then return 0 end
+	-- We use the *inventory* (not just placed) at 60% to reflect the fact
+	-- that placed slots are bounded by plot capacity. Players with deep
+	-- benches benefit from the offline window even without re-placing.
+	local total = 0
+	local rebirthMult = Config.REBIRTH_INCOME_MULT(data.rebirths)
+	local cashMult = if data.gamepasses["Cash2x"] then 2 else 1
+	for _, b in ipairs(data.inventory) do
+		local def = BrainrotData.Get(b.speciesId)
+		if def then
+			local tierMult = 1 + b.mutationTier * Config.MUTATION_INCOME_MULT_PER_TIER
+			total += def.baseIncomePerSecond * tierMult
+		end
+	end
+	return total * rebirthMult * cashMult * 0.6
+end
+
+function OfflineCashService.OnPlayerAdded(player: Player)
+	DataService.OnProfileLoaded(player, function()
+		local data = DataService.Get(player)
+		if not data then return end
+		local prevLeftAt = (data :: any)._lastLeftAt or 0
+		if prevLeftAt == 0 then
+			(data :: any)._lastLeftAt = os.time()
+			return
+		end
+		local elapsed = math.min(os.time() - prevLeftAt, MAX_OFFLINE_HOURS * 3600)
+		if elapsed < MIN_OFFLINE_SECONDS then return end
+		local perSec = estimatedIncomePerSec(player)
+		if perSec <= 0 then return end
+		local earned = math.floor(perSec * elapsed * OFFLINE_INCOME_RATIO)
+		if earned <= 0 then return end
+		EconomyService.AwardCash(player, earned)
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("Welcome back! +%s cash earned while away (%s).",
+				Util.FormatShortNumber(earned), Util.SecondsToClock(elapsed)),
+		})
+		Log.Info("OfflineCash", "%s offline %ds -> +%d cash", player.Name, elapsed, earned)
+	end)
+end
+
+function OfflineCashService.OnPlayerRemoving(player: Player)
+	local data = DataService.Get(player)
+	if data then (data :: any)._lastLeftAt = os.time() end
+end
+
+function OfflineCashService.Init() end
+
+return OfflineCashService
+]])
+	ensurePath(root, "OutbreakService", "ModuleScript", [=[
+--!strict
+--[[
+	OutbreakService — runs a server-wide "Outbreak" event on a timer:
+	spawns OUTBREAK_SPAWN_COUNT rare brainrots in the center plaza. Whoever
+	touches one captures it (free, no cash cost). FOMO + multiplayer drama.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+
+local CaptureService = require(script.Parent.CaptureService)
+local BattlePassService -- forward
+
+local OutbreakService = {}
+
+local nextOutbreakAt: number = os.time() + Config.OUTBREAK_INTERVAL
+local activeUntil: number = 0
+local activeSpawns: { Model } = {}
+local rng = Random.new()
+
+local function plazaCenter(): Vector3
+	return Vector3.new(0, 4, -200)
+end
+
+local function pushOutbreakState()
+	local payload = {
+		active = os.time() < activeUntil,
+		secondsToStart = math.max(0, nextOutbreakAt - os.time()),
+		secondsLeft = math.max(0, activeUntil - os.time()),
+		spawnsRemaining = #activeSpawns,
+	}
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.OutbreakUpdate):FireClient(p, payload)
+	end
+end
+
+local function spawnOne()
+	local def = BrainrotData.RollSpecies(rng, true)
+	local center = plazaCenter()
+	local pos = center + Vector3.new(rng:NextNumber(-30,30), 0, rng:NextNumber(-30,30))
+
+	local model = Instance.new("Model")
+	model.Name = `OutbreakBrainrot_{def.id}`
+	local body = Instance.new("Part")
+	body.Anchored = true
+	body.Size = def.sizeStuds * 1.4
+	body.Position = pos + Vector3.new(0, body.Size.Y/2, 0)
+	body.Color = def.color
+	body.Material = Enum.Material.Neon
+	if def.primaryShape == "Ball" then body.Shape = Enum.PartType.Ball end
+	if def.primaryShape == "Cylinder" then body.Shape = Enum.PartType.Cylinder end
+	body.Parent = model
+	model.PrimaryPart = body
+
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.fromOffset(260, 80)
+	bb.StudsOffset = Vector3.new(0, body.Size.Y/2 + 2, 0)
+	bb.AlwaysOnTop = true
+	bb.Parent = body
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1,1)
+	lbl.TextScaled = true
+	lbl.Font = Enum.Font.GothamBlack
+	lbl.TextColor3 = Color3.fromRGB(255,80,80)
+	lbl.TextStrokeTransparency = 0
+	lbl.Text = `OUTBREAK!\n{def.displayName}\n[{def.rarity}]`
+	lbl.Parent = bb
+
+	local fire = Instance.new("Fire")
+	fire.Size = 8
+	fire.Color = Color3.fromRGB(120, 255, 120)
+	fire.Parent = body
+
+	local touched = false
+	body.Touched:Connect(function(hit)
+		if touched then return end
+		local char = hit:FindFirstAncestorOfClass("Model")
+		if not char then return end
+		local player = Players:GetPlayerFromCharacter(char)
+		if not player then return end
+		touched = true
+		CaptureService.GiveOutbreakBrainrot(player, def.id)
+		if BattlePassService then BattlePassService.AwardXp(player, "outbreak_brainrot") end
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok then BadgeService.Fire(player, "first_outbreak") end
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind="capture",
+			text=`OUTBREAK CAPTURE: {def.displayName}!`,
+		})
+		for _, other in ipairs(Players:GetPlayers()) do
+			if other ~= player then
+				Remotes.Event(Remotes.Names.Notify):FireClient(other, {
+					kind="info",
+					text=`{player.DisplayName} captured {def.displayName}!`,
+				})
+			end
+		end
+		model:Destroy()
+		for i, m in ipairs(activeSpawns) do
+			if m == model then table.remove(activeSpawns, i) break end
+		end
+		pushOutbreakState()
+	end)
+
+	model.Parent = Workspace
+	table.insert(activeSpawns, model)
+end
+
+local function startOutbreak()
+	activeUntil = os.time() + Config.OUTBREAK_DURATION
+	nextOutbreakAt = os.time() + Config.OUTBREAK_INTERVAL
+	for _ = 1, Config.OUTBREAK_SPAWN_COUNT do
+		spawnOne()
+	end
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.Notify):FireClient(p, {
+			kind="info",
+			text=`OUTBREAK at the plaza! {Config.OUTBREAK_SPAWN_COUNT} rare brainrots spawned.`,
+		})
+	end
+	pushOutbreakState()
+end
+
+local function endOutbreak()
+	for _, m in ipairs(activeSpawns) do
+		m:Destroy()
+	end
+	activeSpawns = {}
+	activeUntil = 0    -- reset so the active=now<activeUntil check + loop-guard are honest
+	pushOutbreakState()
+end
+
+function OutbreakService.Init()
+	BattlePassService = require(script.Parent.BattlePassService)
+	-- Plaza visual: a glowing pad
+	local plaza = Instance.new("Part")
+	plaza.Anchored = true
+	plaza.Size = Vector3.new(80, 1, 80)
+	plaza.Position = plazaCenter() - Vector3.new(0, 4, 0)
+	plaza.Color = Color3.fromRGB(80, 0, 120)
+	plaza.Material = Enum.Material.Neon
+	plaza.Name = "OutbreakPlaza"
+	plaza.Parent = Workspace
+
+	local sign = Instance.new("Part")
+	sign.Anchored = true
+	sign.Size = Vector3.new(20, 8, 0.5)
+	sign.Position = plazaCenter() + Vector3.new(0, 12, -42)
+	sign.Color = Color3.fromRGB(20, 0, 30)
+	sign.Material = Enum.Material.Neon
+	sign.Parent = Workspace
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Back
+	gui.CanvasSize = Vector2.new(800, 320)
+	gui.Parent = sign
+	local lbl = Instance.new("TextLabel")
+	lbl.Name = "Label"
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.TextScaled = true
+	lbl.Font = Enum.Font.GothamBlack
+	lbl.TextColor3 = Color3.fromRGB(255, 100, 255)
+	lbl.Text = "OUTBREAK PLAZA"
+	lbl.Parent = gui
+
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			if os.time() >= nextOutbreakAt and os.time() >= activeUntil then
+				startOutbreak()
+			end
+			if activeUntil > 0 and os.time() >= activeUntil and #activeSpawns > 0 then
+				endOutbreak()
+			end
+			if os.time() % 5 == 0 then pushOutbreakState() end
+		end
+	end)
+end
+
+function OutbreakService.ForceStart()
+	if os.time() < activeUntil then return end
+	startOutbreak()
+end
+
+function OutbreakService.OnPlayerAdded(player: Player)
+	task.delay(2, pushOutbreakState)
+end
+
+return OutbreakService
+]=])
+	ensurePath(root, "PerformanceService", "ModuleScript", [[
+--!strict
+
+local Players          = game:GetService("Players")
+local Workspace        = game:GetService("Workspace")
+local Stats            = game:GetService("Stats")
+local RunService       = game:GetService("RunService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log    = require(Shared.Log)
+
+local PerformanceService = {}
+
+-- Runtime server-side performance monitor. Logs a warning if the
+-- physics/heartbeat step time blows up, which is the early signal of
+-- a runaway loop or an unbounded model-creation pattern (the most
+-- common cause of low-end device drop-off).
+
+local SAMPLE_INTERVAL    = 15      -- seconds
+local STEP_WARN_MS       = 30      -- single-step ceiling we care about
+local PLOT_PART_LIMIT    = 800     -- if a plot folder exceeds this we warn
+
+local function countDescendantsBaseparts(folder: Instance): number
+	local n = 0
+	for _, d in ipairs(folder:GetDescendants()) do
+		if d:IsA("BasePart") then n += 1 end
+	end
+	return n
+end
+
+local function checkPlotBudgets()
+	local plots = Workspace:FindFirstChild("Plots")
+	if not plots then return end
+	for _, plot in ipairs(plots:GetChildren()) do
+		local count = countDescendantsBaseparts(plot)
+		if count > PLOT_PART_LIMIT then
+			Log.Warn("Perf", "%s has %d parts (limit %d) — consider mesh consolidation",
+				plot.Name, count, PLOT_PART_LIMIT)
+		end
+	end
+end
+
+local function snapshotStats()
+	local heartbeat = Stats:FindFirstChild("Heartbeat") and Stats.Heartbeat:GetValue() or 0
+	local physics   = Stats:FindFirstChild("Physics") and Stats.Physics:GetValue() or 0
+	local players   = #Players:GetPlayers()
+	Log.Debug("Perf", "players=%d heartbeat=%.2fms physics=%.2fms", players, heartbeat * 1000, physics * 1000)
+	if heartbeat * 1000 > STEP_WARN_MS then
+		Log.Warn("Perf", "heartbeat exceeded %dms (was %.1fms) — investigate hot loops",
+			STEP_WARN_MS, heartbeat * 1000)
+	end
+end
+
+function PerformanceService.Init()
+	if RunService:IsClient() then return end
+	task.spawn(function()
+		while true do
+			task.wait(SAMPLE_INTERVAL)
+			snapshotStats()
+			checkPlotBudgets()
+		end
+	end)
+end
+
+return PerformanceService
+]])
+	ensurePath(root, "PetService", "ModuleScript", [=[
+--!strict
+--[[
+	PetService — pet inventory, hatching from Pet Eggs (dev product), and
+	equipping a single active pet that hovers next to the character and
+	applies its buff to the player.
+
+	Pet buffs are added to EconomyService via a hook on PetService.GetCashMult.
+	On equip the active pet's id is written to profile so it persists.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local PetData = require(Shared.PetData)
+local Util = require(Shared.Util)
+
+local DataService = require(script.Parent.DataService)
+
+local PetService = {}
+
+local petModels: { [Player]: Model } = {}
+
+local function ensurePetField(data: any)
+	data._pets = data._pets or {}        -- { [uid] = petId }
+	data._equippedPet = data._equippedPet or nil
+end
+
+local function applyVisual(player: Player)
+	if petModels[player] then petModels[player]:Destroy(); petModels[player] = nil end
+	local data = DataService.Get(player)
+	if not data then return end
+	ensurePetField(data)
+	local petId = data._equippedPet
+	if not petId then return end
+	local def = PetData.Get(petId)
+	if not def then return end
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return end
+
+	local model = Instance.new("Model")
+	model.Name = "Pet"
+	local body = Instance.new("Part")
+	body.Shape = Enum.PartType.Ball
+	body.Size = Vector3.new(2, 2, 2)
+	body.Color = def.color
+	body.Material = Enum.Material.Neon
+	body.CanCollide = false
+	body.Anchored = false
+	body.Massless = true
+	body.Parent = model
+
+	local att0 = Instance.new("Attachment"); att0.Parent = hrp
+	local att1 = Instance.new("Attachment"); att1.Position = Vector3.new(0, 0, 0); att1.Parent = body
+
+	local align = Instance.new("AlignPosition")
+	align.Attachment0 = att1
+	align.Attachment1 = att0
+	align.MaxForce = 1e6
+	align.Responsiveness = 35
+	align.Parent = body
+
+	-- Offset target via a "leash" attachment
+	att0.Position = Vector3.new(3, 2, -2)
+
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.fromOffset(120, 24)
+	bb.StudsOffset = Vector3.new(0, 1.5, 0)
+	bb.AlwaysOnTop = true
+	bb.Parent = body
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.BackgroundTransparency = 1
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextScaled = true
+	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.TextStrokeTransparency = 0
+	lbl.Text = def.name
+	lbl.Parent = bb
+
+	model.PrimaryPart = body
+	model.Parent = char
+	petModels[player] = model
+end
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensurePetField(data)
+	local list = {}
+	for uid, petId in pairs(data._pets) do
+		local def = PetData.Get(petId)
+		if def then
+			table.insert(list, {
+				uid = uid,
+				id = def.id,
+				name = def.name,
+				rarity = def.rarity,
+				buffKind = def.buffKind,
+				buffValue = def.buffValue,
+				tagline = def.tagline,
+				equipped = data._equippedPet == uid,
+			})
+		end
+	end
+	Remotes.Event(Remotes.Names.PetUpdate):FireClient(player, list)
+end
+
+function PetService.Hatch(player: Player, lucky: boolean?)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensurePetField(data)
+	local rng = Random.new()
+	local bias = 0
+	if lucky then bias = 0.5 end
+	-- PetLucky is the dedicated pet-egg bias pass. (LuckyMutations is its
+	-- mutation-roll counterpart and intentionally does NOT apply here.)
+	if data.gamepasses["PetLucky"] then bias += 0.2 end
+	local def = PetData.Roll(rng, bias)
+	local uid = Util.GenerateUid()
+	data._pets[uid] = def.id
+	-- Auto-equip if none equipped
+	if not data._equippedPet then
+		data._equippedPet = uid
+		applyVisual(player)
+	end
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "capture",
+		text = `🥚 Hatched: {def.name} [{def.rarity}] — {def.tagline}`,
+	})
+	pushUpdate(player)
+end
+
+function PetService.Equip(player: Player, uid: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensurePetField(data)
+	if not data._pets[uid] then return end
+	data._equippedPet = uid
+	applyVisual(player)
+	pushUpdate(player)
+end
+
+function PetService.Unequip(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	data._equippedPet = nil
+	applyVisual(player)
+	pushUpdate(player)
+end
+
+function PetService.GetEquippedDef(player: Player): any?
+	local data = DataService.Get(player)
+	if not data then return nil end
+	ensurePetField(data)
+	local uid = data._equippedPet
+	if not uid then return nil end
+	local petId = data._pets[uid]
+	if not petId then return nil end
+	return PetData.Get(petId)
+end
+
+-- Hook for EconomyService to multiply income
+function PetService.GetCashMult(player: Player): number
+	local def = PetService.GetEquippedDef(player)
+	if def and def.buffKind == "cashMult" then return def.buffValue end
+	return 1
+end
+
+function PetService.GetMutationSpeedMult(player: Player): number
+	local def = PetService.GetEquippedDef(player)
+	if def and def.buffKind == "mutationSpeed" then return def.buffValue end
+	return 1
+end
+
+function PetService.OnPlayerAdded(player: Player)
+	player.CharacterAdded:Connect(function() task.delay(0.5, applyVisual, player) end)
+	task.delay(2, function()
+		applyVisual(player)
+		pushUpdate(player)
+	end)
+end
+
+function PetService.Init()
+	-- Suppress unused
+	local _ = Config
+	local _2 = Players
+end
+
+return PetService
+]=])
+	ensurePath(root, "PlayerLevelService", "ModuleScript", [=[
+--!strict
+--[[
+	PlayerLevelService — persistent XP/level system separate from rebirth
+	and battle pass. XP comes from every meaningful action; level rewards
+	land in a chest the player claims from the Levels tab.
+
+	Rationale: rebirth is a soft reset (the loop), battle pass is seasonal
+	(14 days), but PlayerLevel is *permanent* progression. Players who hit
+	level 100 stay engaged trying to hit 150. Long-tail retention curve
+	that no other system in the game provides.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local PlayerLevelService = {}
+
+local XP_PER_LEVEL = 1500
+local XP_SOURCES: { [string]: number } = {
+	capture = 25,
+	mutation = 40,
+	steal = 100,
+	infect = 60,
+	rebirth = 1000,
+	boss_damage = 1,
+	outbreak_capture = 200,
+	trade = 50,
+	pet_hatch = 75,
+	achievement = 250,
+}
+
+local function ensure(data: any)
+	data._level = data._level or { xp = 0, level = 1, claimed = {} }
+end
+
+local function pushUpdate(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	local lvl = data._level
+	local xpInLevel = lvl.xp - (lvl.level - 1) * XP_PER_LEVEL
+	Remotes.Event(Remotes.Names.LevelUpdate):FireClient(player, {
+		level = lvl.level,
+		xp = lvl.xp,
+		xpInLevel = xpInLevel,
+		xpPerLevel = XP_PER_LEVEL,
+		claimed = lvl.claimed,
+	})
+end
+
+function PlayerLevelService.AwardXp(player: Player, source: string, amount: number?)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	local xp = amount or XP_SOURCES[source] or 0
+	if xp <= 0 then return end
+	data._level.xp += xp
+	-- level ups
+	local newLevel = math.floor(data._level.xp / XP_PER_LEVEL) + 1
+	if newLevel > data._level.level then
+		data._level.level = newLevel
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "rebirth",
+			text = `⭐ LEVEL UP — now level {newLevel}! Claim reward in Levels tab.`,
+		})
+	end
+	pushUpdate(player)
+end
+
+function PlayerLevelService.ClaimLevelReward(player: Player, level: number)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	if level > data._level.level then return end
+	if data._level.claimed[tostring(level)] then return end
+	data._level.claimed[tostring(level)] = true
+	local cash = level * 500
+	EconomyService.AwardCash(player, cash, `level {level} reward`)
+	pushUpdate(player)
+end
+
+function PlayerLevelService.OnPlayerAdded(player: Player)
+	task.delay(2, pushUpdate, player)
+end
+
+function PlayerLevelService.Init() end
+
+return PlayerLevelService
+]=])
+	ensurePath(root, "PresenceService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local TextChatService   = game:GetService("TextChatService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Util = require(Shared.Util)
+
+local DataService   = require(script.Parent.DataService)
+local AdminService  = require(script.Parent.AdminService)
+
+local PresenceService = {}
+
+local LEADERSTATS_REFRESH = 2 -- seconds
+
+-- ============================================================
+-- Roblox default player-list leaderstats
+-- ============================================================
+local function ensureLeaderstats(player: Player)
+	local existing = player:FindFirstChild("leaderstats")
+	if existing then return existing :: Folder end
+	local folder = Instance.new("Folder")
+	folder.Name = "leaderstats"
+	folder.Parent = player
+
+	local cash = Instance.new("StringValue")
+	cash.Name = "Cash"
+	cash.Value = "0"
+	cash.Parent = folder
+
+	local rebirths = Instance.new("IntValue")
+	rebirths.Name = "Rebirths"
+	rebirths.Value = 0
+	rebirths.Parent = folder
+
+	return folder
+end
+
+local function updateLeaderstats(player: Player)
+	local folder = player:FindFirstChild("leaderstats")
+	if not folder then return end
+	local data = DataService.Get(player)
+	if not data then return end
+	local cash = folder:FindFirstChild("Cash") :: StringValue?
+	local rebirths = folder:FindFirstChild("Rebirths") :: IntValue?
+	if cash then cash.Value = Util.FormatShortNumber(data.cash) end
+	if rebirths then rebirths.Value = data.rebirths end
+end
+
+-- ============================================================
+-- Owner / admin chat tag (new TextChatService)
+-- ============================================================
+local function applyChatTags()
+	if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then return end
+	TextChatService.OnIncomingMessage = function(message: TextChatMessage)
+		local props = Instance.new("TextChatMessageProperties")
+		local src = message.TextSource
+		if not src then return props end
+		local player = Players:GetPlayerByUserId(src.UserId)
+		if not player then return props end
+		if AdminService.IsOwner(player) then
+			props.PrefixText = `<font color="rgb(255,215,80)">[OWNER]</font> {message.PrefixText}`
+		elseif AdminService.IsAdmin(player) then
+			props.PrefixText = `<font color="rgb(120,220,120)">[ADMIN]</font> {message.PrefixText}`
+		else
+			local d = DataService.Get(player)
+			if d and (d :: any)._totalTipped and (d :: any)._totalTipped >= 200 then
+				props.PrefixText = `<font color="rgb(255,120,180)">[TIPPER]</font> {message.PrefixText}`
+			end
+		end
+		return props
+	end
+end
+
+function PresenceService.OnPlayerAdded(player: Player)
+	ensureLeaderstats(player)
+	DataService.OnProfileLoaded(player, function()
+		updateLeaderstats(player)
+	end)
+end
+
+function PresenceService.Init()
+	applyChatTags()
+	task.spawn(function()
+		while true do
+			task.wait(LEADERSTATS_REFRESH)
+			for _, p in ipairs(Players:GetPlayers()) do
+				updateLeaderstats(p)
+			end
+		end
+	end)
+end
+
+return PresenceService
+]])
+	ensurePath(root, "QuestService", "ModuleScript", [=[
+--!strict
+--[[
+	QuestService — 3 quests per day, deterministic per-player from
+	(userId, dayIndex). Quests use the same stats counters as
+	achievements but track a delta from the day-start baseline. Reward
+	on completion is meaningful but not gamebreaking — cash + a bomb or
+	mutation occasionally.
+
+	Why have these alongside daily rewards + achievements? Because the
+	quest panel gives a *list of things to do right now*. Players who
+	open with a clear short-term goal stay 30–50% longer per session,
+	which is the single biggest revenue lever after first-session
+	conversion.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+local DataService = require(script.Parent.DataService)
+local EconomyService = require(script.Parent.EconomyService)
+local InfectionService -- forward
+local CaptureService -- forward
+local MutationService -- forward
+
+local QuestService = {}
+
+type QuestTemplate = {
+	id: string,
+	statKey: string,
+	amount: number,
+	label: string,
+	reward: { kind: string, amount: number },
+}
+
+local templates: { QuestTemplate } = {
+	{ id="cap3",  statKey="totalCaptured",   amount=3,  label="Capture 3 brainrots",         reward={ kind="cash", amount=1500 } },
+	{ id="cap10", statKey="totalCaptured",   amount=10, label="Capture 10 brainrots",        reward={ kind="cash", amount=4000 } },
+	{ id="mut5",  statKey="totalMutations",  amount=5,  label="Trigger 5 mutations",         reward={ kind="instant_mutation", amount=1 } },
+	{ id="mut15", statKey="totalMutations",  amount=15, label="Trigger 15 mutations",        reward={ kind="cash", amount=5000 } },
+	{ id="steal2",statKey="totalSteals",     amount=2,  label="Steal 2 brainrots",           reward={ kind="cash", amount=3000 } },
+	{ id="inf2",  statKey="totalInfections", amount=2,  label="Infect 2 players",            reward={ kind="infection_bomb", amount=2 } },
+	{ id="reb1",  statKey="rebirths",        amount=1,  label="Rebirth once today",          reward={ kind="cash", amount=8000 } },
+	{ id="cash5k",statKey="totalCashEarned", amount=5000, label="Earn 5,000 cash today",     reward={ kind="cash", amount=2500 } },
+	{ id="cash20k",statKey="totalCashEarned",amount=20000,label="Earn 20,000 cash today",    reward={ kind="rare_egg", amount=1 } },
+}
+
+local function statValue(data: any, key: string): number
+	if key == "rebirths" then return data.rebirths or 0 end
+	return (data.stats and data.stats[key]) or 0
+end
+
+local function pickQuests(userId: number, dayIndex: number): { string }
+	-- deterministic shuffle by seeding RNG with userId+day
+	local rng = Random.new(userId * 1000003 + dayIndex)
+	local indices = {}
+	for i = 1, #templates do table.insert(indices, i) end
+	-- Fisher-Yates
+	for i = #indices, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		indices[i], indices[j] = indices[j], indices[i]
+	end
+	return { templates[indices[1]].id, templates[indices[2]].id, templates[indices[3]].id }
+end
+
+local function ensureToday(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	local today = Util.DayIndex()
+	local q = (data :: any)._quests :: any
+	if not q or q.day ~= today then
+		-- new day baseline
+		local ids = pickQuests(player.UserId, today)
+		local baseline: { [string]: number } = {}
+		for _, t in ipairs(templates) do
+			baseline[t.statKey] = statValue(data, t.statKey)
+		end
+		;(data :: any)._quests = {
+			day = today,
+			ids = ids,
+			baseline = baseline,
+			claimed = {},
+		}
+	end
+end
+
+local function templateById(id: string): QuestTemplate?
+	for _, t in ipairs(templates) do
+		if t.id == id then return t end
+	end
+	return nil
+end
+
+function QuestService.Push(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureToday(player)
+	local q = (data :: any)._quests :: any
+	local payload = {}
+	for _, id in ipairs(q.ids) do
+		local t = templateById(id)
+		if t then
+			local delta = statValue(data, t.statKey) - (q.baseline[t.statKey] or 0)
+			if delta < 0 then delta = 0 end
+			table.insert(payload, {
+				id = t.id,
+				label = t.label,
+				progress = math.min(delta, t.amount),
+				target = t.amount,
+				complete = delta >= t.amount,
+				claimed = q.claimed[t.id] == true,
+				rewardKind = t.reward.kind,
+				rewardAmount = t.reward.amount,
+			})
+		end
+	end
+	Remotes.Event(Remotes.Names.QuestUpdate):FireClient(player, payload)
+end
+
+local function deliver(player: Player, reward: any)
+	if reward.kind == "cash" then
+		EconomyService.AwardCash(player, reward.amount, "quest")
+	elseif reward.kind == "infection_bomb" then
+		InfectionService.AddBombs(player, reward.amount)
+	elseif reward.kind == "rare_egg" then
+		CaptureService.AttemptCapture(player, { freeRare = true, count = reward.amount })
+	elseif reward.kind == "instant_mutation" then
+		for _ = 1, reward.amount do MutationService.ForceInstantMutation(player) end
+	end
+end
+
+function QuestService.Claim(player: Player, id: string)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensureToday(player)
+	local q = (data :: any)._quests :: any
+	local t = templateById(id)
+	if not t then return end
+	local listed = false
+	for _, qid in ipairs(q.ids) do if qid == id then listed = true; break end end
+	if not listed then return end
+	if q.claimed[id] then return end
+	local delta = statValue(data, t.statKey) - (q.baseline[t.statKey] or 0)
+	if delta < t.amount then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Quest not complete." })
+		return
+	end
+	q.claimed[id] = true
+	deliver(player, t.reward)
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="capture", text=`Quest done: {t.label}` })
+	QuestService.Push(player)
+end
+
+function QuestService.OnPlayerAdded(player: Player)
+	task.delay(2, QuestService.Push, player)
+end
+
+function QuestService.Init()
+	InfectionService = require(script.Parent.InfectionService)
+	CaptureService = require(script.Parent.CaptureService)
+	MutationService = require(script.Parent.MutationService)
+	task.spawn(function()
+		while true do
+			task.wait(6)
+			for _, p in ipairs(Players:GetPlayers()) do QuestService.Push(p) end
+		end
+	end)
+end
+
+return QuestService
+]=])
+	ensurePath(root, "SeasonService", "ModuleScript", [=[
+--!strict
+--[[
+	SeasonService — manages a 2-week seasonal brainrot rotation. Each
+	"season" gates one limited brainrot variant that's only obtainable
+	during that window. After the season ends, the brainrot is no longer
+	dropable (existing copies remain) — which gives them trade value and
+	creates a strong FOMO pull for the next season.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local SeasonService = {}
+
+type Season = {
+	id: string,
+	name: string,
+	limitedBrainrotId: string,
+	startTs: number,
+	endTs: number,
+}
+
+local SEASON_DURATION = 14 * 24 * 3600
+
+-- Hardcoded seasons table — add more as you ship new content.
+-- Existing seasons in the past are kept for the patch-notes ribbon.
+local SEASONS: { Season } = {
+	{ id="s1_outbreak", name="Outbreak Season", limitedBrainrotId="patriarch",
+	  startTs = 0, endTs = 0 }, -- filled in dynamically on Init below
+}
+
+local activeSeason: Season? = nil
+
+local function broadcast()
+	for _, p in ipairs(Players:GetPlayers()) do
+		Remotes.Event(Remotes.Names.SeasonUpdate):FireClient(p, {
+			active = activeSeason ~= nil,
+			id = activeSeason and activeSeason.id,
+			name = activeSeason and activeSeason.name,
+			endTs = activeSeason and activeSeason.endTs,
+			limitedBrainrotId = activeSeason and activeSeason.limitedBrainrotId,
+			secondsLeft = activeSeason and math.max(0, activeSeason.endTs - os.time()) or 0,
+		})
+	end
+end
+
+function SeasonService.GetActiveSeason(): Season?
+	return activeSeason
+end
+
+function SeasonService.IsSeasonalBrainrotAvailable(brainrotId: string): boolean
+	if not activeSeason then return false end
+	return activeSeason.limitedBrainrotId == brainrotId
+end
+
+function SeasonService.OnPlayerAdded(player: Player)
+	task.delay(2, broadcast)
+end
+
+function SeasonService.Init()
+	-- Pin season 1 to "now" so it just works in fresh installs. In live
+	-- ops, replace these with real timestamps so seasons stay aligned
+	-- across servers.
+	SEASONS[1].startTs = os.time()
+	SEASONS[1].endTs = os.time() + SEASON_DURATION
+
+	-- pick active season
+	local now = os.time()
+	for _, s in ipairs(SEASONS) do
+		if now >= s.startTs and now < s.endTs then
+			activeSeason = s
+			break
+		end
+	end
+
+	-- season tick (every minute)
+	task.spawn(function()
+		while true do
+			task.wait(60)
+			local cur = os.time()
+			local prev = activeSeason
+			activeSeason = nil
+			for _, s in ipairs(SEASONS) do
+				if cur >= s.startTs and cur < s.endTs then
+					activeSeason = s; break
+				end
+			end
+			if prev ~= activeSeason then
+				broadcast()
+			end
+		end
+	end)
+end
+
+return SeasonService
+]=])
+	ensurePath(root, "SocialInviteService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local SocialService     = game:GetService("SocialService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local SocialInviteService = {}
+
+function SocialInviteService.CanInvite(player: Player): boolean
+	local ok, can = pcall(function()
+		return SocialService:CanSendGameInviteAsync(player)
+	end)
+	return ok and can or false
+end
+
+function SocialInviteService.Prompt(player: Player)
+	local can = SocialInviteService.CanInvite(player)
+	if not can then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "error",
+			text = "Invites unavailable in this session — try from the Roblox app on mobile.",
+		})
+		return
+	end
+	local ok, err = pcall(function()
+		SocialService:PromptGameInvite(player)
+	end)
+	if not ok then
+		Log.Warn("Social", "PromptGameInvite failed for %s: %s", player.Name, tostring(err))
+	end
+end
+
+function SocialInviteService.Init() end
+
+return SocialInviteService
+]])
+	ensurePath(root, "StealService", "ModuleScript", [=[
+--!strict
+--[[
+	StealService — the PvP "raid" mechanic. An attacker standing within
+	STEAL_DETECTION_RADIUS of a rival's placed brainrot can fire a
+	RequestSteal remote with the brainrot uid. If cooldown + tier-delta
+	checks pass, the brainrot transfers to the attacker's inventory.
+
+	Defensive constraints (revenue-protecting):
+	  * Grace period for new joiners
+	  * Per-attacker per-victim cooldown
+	  * Tier delta cap (can't steal mythic with a fresh account)
+	  * VIP / InfectionShield gamepass holders get partial steal protection
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+
+local DataService = require(script.Parent.DataService)
+local LabService = require(script.Parent.LabService)
+local BattlePassService -- forward
+
+local StealService = {}
+
+-- attacker userId -> victim userId -> last steal time (os.clock)
+local cooldowns: { [number]: { [number]: number } } = {}
+local joinTimes: { [Player]: number } = {}
+
+local function bestTier(player: Player): number
+	local data = DataService.Get(player)
+	if not data then return 0 end
+	local best = 0
+	for _, b in ipairs(data.inventory) do
+		if b.mutationTier > best then best = b.mutationTier end
+	end
+	return best
+end
+
+local function playerNear(attacker: Player, brainrotModel: Model): boolean
+	local char = attacker.Character
+	if not char then return false end
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return false end
+	local body = brainrotModel.PrimaryPart
+	if not body then return false end
+	local d = (hrp.Position - body.Position).Magnitude
+	return d <= Config.STEAL_DETECTION_RADIUS
+end
+
+function StealService.AttemptSteal(attacker: Player, victimUserId: number, brainrotUid: string)
+	if attacker.UserId == victimUserId then return end
+	local victim = Players:GetPlayerByUserId(victimUserId)
+	if not victim then
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Target left the server." })
+		return
+	end
+
+	-- Grace period — treat a missing record as 'just-joined' rather than
+	-- 'unprotected'. There's a brief window between Players.PlayerAdded and
+	-- StealService.OnPlayerAdded (which waits on profile load) where
+	-- joinTimes[victim] is nil; previously the `and` short-circuit let the
+	-- check pass, allowing a steal in that window.
+	local victimJoinedAt = joinTimes[victim]
+	if not victimJoinedAt or os.clock() - victimJoinedAt < Config.STEAL_GRACE_PERIOD_AFTER_JOIN then
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Target is in grace period." })
+		return
+	end
+
+	-- Cooldown
+	local atk = cooldowns[attacker.UserId]
+	if atk and atk[victimUserId] and os.clock() - atk[victimUserId] < Config.STEAL_COOLDOWN then
+		local rem = Config.STEAL_COOLDOWN - (os.clock() - atk[victimUserId])
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text=`Cooldown: {math.ceil(rem)}s` })
+		return
+	end
+
+	-- VIP / InfectionShield partial protection — 50% chance to fully resist
+	local victimData = DataService.Get(victim)
+	if victimData and (victimData.gamepasses["InfectionShield"] or victimData.gamepasses["VIPLab"]) then
+		if math.random() < 0.5 then
+			Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Their security blocked you." })
+			Remotes.Event(Remotes.Names.Notify):FireClient(victim, { kind="info", text=`{attacker.DisplayName} tried to raid you — blocked!` })
+			cooldowns[attacker.UserId] = cooldowns[attacker.UserId] or {}
+			cooldowns[attacker.UserId][victimUserId] = os.clock()
+			return
+		end
+	end
+
+	-- Find the brainrot and its placed model
+	local models = LabService.GetPlacedModels(victim)
+	local model = models[brainrotUid]
+	if not model then
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Brainrot not on plot." })
+		return
+	end
+
+	-- Proximity
+	if not playerNear(attacker, model) then
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Get closer to it." })
+		return
+	end
+
+	-- Tier delta check
+	if not victimData then return end
+	local target
+	for _, b in ipairs(victimData.inventory) do
+		if b.uid == brainrotUid then target = b; break end
+	end
+	if not target then return end
+	local myBest = bestTier(attacker)
+	if target.mutationTier > myBest + Config.STEAL_MAX_TIER_DELTA then
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, { kind="error", text="Too high tier — mutate yours first." })
+		return
+	end
+
+	-- Execute
+	cooldowns[attacker.UserId] = cooldowns[attacker.UserId] or {}
+	cooldowns[attacker.UserId][victimUserId] = os.clock()
+	if LabService.TransferBrainrot(victim, attacker, brainrotUid) then
+		local atkData = DataService.Get(attacker)
+		if atkData then atkData.stats.totalSteals += 1 end
+		local def = BrainrotData.Get(target.speciesId)
+		Remotes.Event(Remotes.Names.Notify):FireClient(attacker, {
+			kind="capture",
+			text=`STOLE {def and def.displayName or "brainrot"}!`,
+		})
+		Remotes.Event(Remotes.Names.Notify):FireClient(victim, {
+			kind="error",
+			text=`{attacker.DisplayName} stole your {def and def.displayName or "brainrot"}!`,
+		})
+		if BattlePassService then
+			BattlePassService.AwardXp(attacker, "steal")
+		end
+		local ok, BadgeService = pcall(require, script.Parent.BadgeService)
+		if ok and atkData and atkData.stats.totalSteals == 1 then
+			BadgeService.Fire(attacker, "first_steal")
+		end
+		local okL, PlayerLevelService = pcall(require, script.Parent.PlayerLevelService)
+		if okL then PlayerLevelService.AwardXp(attacker, "steal") end
+	end
+end
+
+function StealService.OnPlayerAdded(player: Player)
+	joinTimes[player] = os.clock()
+end
+
+function StealService.OnPlayerRemoving(player: Player)
+	joinTimes[player] = nil
+	cooldowns[player.UserId] = nil
+	for _, t in pairs(cooldowns) do
+		t[player.UserId] = nil
+	end
+end
+
+function StealService.Init()
+	BattlePassService = require(script.Parent.BattlePassService)
+end
+
+return StealService
+]=])
+	ensurePath(root, "TopOfHourService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Log = require(Shared.Log)
+
+local AnnouncementService -- forward
+
+local TopOfHourService = {}
+
+-- Predictable 5-minute event every hour on the hour (HH:00 - HH:05 UTC).
+-- Players know exactly when to log in. Combined with daily reward and
+-- HotStreak this creates 24 daily engagement windows / day.
+
+local EVENT_DURATION = 300
+
+local activeUntil = 0
+local currentMult = 1
+
+local EVENT_TYPES = {
+	{ label = "💰 GOLDEN HOUR — 3x cash for 5 minutes!",     color = { 255, 215, 80 },  cashMult = 3.0 },
+	{ label = "🧬 MUTATION RUSH — 4x mutation speed for 5 minutes!", color = { 255, 100, 220 }, cashMult = 1.5, mutationMult = 4.0 },
+	{ label = "🎰 SPIN HOUR — every player gets 1 free wheel spin!",  color = { 120, 220, 255 }, cashMult = 1.5, freeSpins = 1 },
+}
+
+local currentEvent: any = nil
+
+local function startEvent()
+	currentEvent = EVENT_TYPES[math.random(1, #EVENT_TYPES)]
+	activeUntil = os.time() + EVENT_DURATION
+	currentMult = currentEvent.cashMult or 1
+	if AnnouncementService then
+		AnnouncementService.Push(currentEvent.label, currentEvent.color, EVENT_DURATION)
+	end
+
+	-- Grant any one-time perks declared by this event
+	if currentEvent.freeSpins then
+		local ok, LuckyWheelService = pcall(require, script.Parent.LuckyWheelService)
+		if ok then
+			for _, p in ipairs(Players:GetPlayers()) do
+				LuckyWheelService.GrantSpins(p, currentEvent.freeSpins)
+			end
+		end
+	end
+
+	Log.Info("TopOfHour", "%s for %ds", currentEvent.label, EVENT_DURATION)
+end
+
+local function endEvent()
+	currentEvent = nil
+	currentMult = 1
+	activeUntil = 0
+end
+
+function TopOfHourService.ForceStart(indexOrName: any?)
+	local pick = nil
+	if typeof(indexOrName) == "number" then
+		pick = EVENT_TYPES[math.clamp(indexOrName, 1, #EVENT_TYPES)]
+	elseif typeof(indexOrName) == "string" then
+		local lower = string.lower(indexOrName)
+		for _, e in ipairs(EVENT_TYPES) do
+			if string.find(string.lower(e.label), lower, 1, true) then pick = e; break end
+		end
+	end
+	if pick then
+		currentEvent = pick
+		activeUntil = os.time() + EVENT_DURATION
+		currentMult = currentEvent.cashMult or 1
+		if AnnouncementService then
+			AnnouncementService.Push(currentEvent.label, currentEvent.color, EVENT_DURATION)
+		end
+		if currentEvent.freeSpins then
+			local ok, LuckyWheelService = pcall(require, script.Parent.LuckyWheelService)
+			if ok then
+				for _, p in ipairs(Players:GetPlayers()) do
+					LuckyWheelService.GrantSpins(p, currentEvent.freeSpins)
+				end
+			end
+		end
+		return true
+	end
+	startEvent()
+	return true
+end
+
+function TopOfHourService.GetCashMult(): number
+	if os.time() < activeUntil then return currentMult end
+	return 1
+end
+
+function TopOfHourService.GetMutationMult(): number
+	if os.time() < activeUntil and currentEvent and currentEvent.mutationMult then
+		return currentEvent.mutationMult
+	end
+	return 1
+end
+
+function TopOfHourService.GetActive(): any?
+	if os.time() < activeUntil then return currentEvent end
+	return nil
+end
+
+function TopOfHourService.Init()
+	AnnouncementService = require(script.Parent.AnnouncementService)
+	task.spawn(function()
+		while true do
+			task.wait(5)
+			local now = os.time()
+			local minute = math.floor(now / 60) % 60
+			local second = now % 60
+			if activeUntil > 0 and now >= activeUntil then
+				endEvent()
+			elseif activeUntil == 0 and minute == 0 and second < 6 then
+				startEvent()
+				task.wait(10) -- avoid double-trigger within the same minute
+			end
+		end
+	end)
+end
+
+return TopOfHourService
+]])
+	ensurePath(root, "TradeService", "ModuleScript", [=[
+--!strict
+--[[
+	TradeService — player-to-player brainrot swap. Two-party confirm flow:
+
+	  1. Player A requests a trade with Player B → pending invite.
+	  2. Player B accepts → trade window opens (state replicated to both).
+	  3. Each side stages up to 4 brainrots + a cash offer.
+	  4. Each side hits "confirm". Both confirmed + still valid? Atomic swap.
+	  5. Either side editing the offer un-confirms both sides (anti-scam).
+
+	Why have a trade system at all if it doesn't directly take Robux?
+	Because trades 3-5x average session length. Longer sessions = more
+	gamepass impressions = more Premium-Payout time. It's a revenue
+	multiplier, not a revenue source.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local DataService = require(script.Parent.DataService)
+local LabService = require(script.Parent.LabService)
+local EconomyService = require(script.Parent.EconomyService)
+
+local TradeService = {}
+
+type Side = {
+	userId: number,
+	brainrotUids: { string },
+	cash: number,
+	confirmed: boolean,
+}
+
+type Trade = {
+	id: string,
+	a: Side,
+	b: Side,
+	createdAt: number,
+}
+
+local activeTrades: { [string]: Trade } = {}
+local userToTrade: { [number]: string } = {}
+local pendingInvites: { [number]: { from: number, at: number } } = {} -- to userId -> from userId
+local MAX_PER_SIDE = 4
+local INVITE_TTL = 30
+local TRADE_TTL = 180
+
+local function pushTrade(trade: Trade)
+	local a = Players:GetPlayerByUserId(trade.a.userId)
+	local b = Players:GetPlayerByUserId(trade.b.userId)
+	local payload = {
+		id = trade.id,
+		a = trade.a,
+		b = trade.b,
+	}
+	if a then Remotes.Event(Remotes.Names.TradeUpdate):FireClient(a, payload) end
+	if b then Remotes.Event(Remotes.Names.TradeUpdate):FireClient(b, payload) end
+end
+
+local function sendCancel(userId: number, reason: string)
+	local p = Players:GetPlayerByUserId(userId)
+	if not p then return end
+	Remotes.Event(Remotes.Names.TradeUpdate):FireClient(p, { id = "", cancelled = true, reason = reason })
+end
+
+local function endTrade(trade: Trade, reason: string)
+	activeTrades[trade.id] = nil
+	userToTrade[trade.a.userId] = nil
+	userToTrade[trade.b.userId] = nil
+	sendCancel(trade.a.userId, reason)
+	sendCancel(trade.b.userId, reason)
+end
+
+local function getSide(trade: Trade, userId: number): Side?
+	if trade.a.userId == userId then return trade.a end
+	if trade.b.userId == userId then return trade.b end
+	return nil
+end
+
+local function otherSide(trade: Trade, userId: number): Side
+	if trade.a.userId == userId then return trade.b end
+	return trade.a
+end
+
+local function brainrotIsPlaceable(player: Player, uid: string): boolean
+	local data = DataService.Get(player)
+	if not data then return false end
+	for _, b in ipairs(data.inventory) do
+		if b.uid == uid then return true end
+	end
+	return false
+end
+
+function TradeService.Invite(fromPlayer: Player, targetUserId: number)
+	if fromPlayer.UserId == targetUserId then return end
+	if userToTrade[fromPlayer.UserId] then
+		Remotes.Event(Remotes.Names.Notify):FireClient(fromPlayer, { kind="error", text="Already in a trade." })
+		return
+	end
+	if userToTrade[targetUserId] then
+		Remotes.Event(Remotes.Names.Notify):FireClient(fromPlayer, { kind="error", text="Player is busy." })
+		return
+	end
+	local target = Players:GetPlayerByUserId(targetUserId)
+	if not target then return end
+	pendingInvites[targetUserId] = { from = fromPlayer.UserId, at = os.clock() }
+	Remotes.Event(Remotes.Names.TradeInvite):FireClient(target, {
+		fromUserId = fromPlayer.UserId,
+		fromName = fromPlayer.DisplayName,
+		ttl = INVITE_TTL,
+	})
+	Remotes.Event(Remotes.Names.Notify):FireClient(fromPlayer, { kind="info", text=`Trade request sent to {target.DisplayName}` })
+end
+
+function TradeService.Accept(player: Player)
+	local invite = pendingInvites[player.UserId]
+	if not invite then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="No trade request." })
+		return
+	end
+	pendingInvites[player.UserId] = nil
+	if os.clock() - invite.at > INVITE_TTL then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="Trade request expired." })
+		return
+	end
+	if userToTrade[player.UserId] or userToTrade[invite.from] then
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text="One of you is busy." })
+		return
+	end
+	local other = Players:GetPlayerByUserId(invite.from)
+	if not other then return end
+	local trade: Trade = {
+		id = Util.GenerateUid(),
+		a = { userId = invite.from, brainrotUids = {}, cash = 0, confirmed = false },
+		b = { userId = player.UserId, brainrotUids = {}, cash = 0, confirmed = false },
+		createdAt = os.time(),
+	}
+	activeTrades[trade.id] = trade
+	userToTrade[trade.a.userId] = trade.id
+	userToTrade[trade.b.userId] = trade.id
+	pushTrade(trade)
+end
+
+function TradeService.Decline(player: Player)
+	local invite = pendingInvites[player.UserId]
+	if not invite then return end
+	pendingInvites[player.UserId] = nil
+	local other = Players:GetPlayerByUserId(invite.from)
+	if other then
+		Remotes.Event(Remotes.Names.Notify):FireClient(other, { kind="info", text=`{player.DisplayName} declined the trade.` })
+	end
+end
+
+function TradeService.AddBrainrot(player: Player, uid: string)
+	local tid = userToTrade[player.UserId]
+	if not tid then return end
+	local trade = activeTrades[tid]
+	if not trade then return end
+	local side = getSide(trade, player.UserId)
+	if not side then return end
+	if #side.brainrotUids >= MAX_PER_SIDE then return end
+	if not brainrotIsPlaceable(player, uid) then return end
+	for _, existing in ipairs(side.brainrotUids) do
+		if existing == uid then return end
+	end
+	table.insert(side.brainrotUids, uid)
+	-- Editing un-confirms both
+	trade.a.confirmed = false
+	trade.b.confirmed = false
+	pushTrade(trade)
+end
+
+function TradeService.RemoveBrainrot(player: Player, uid: string)
+	local tid = userToTrade[player.UserId]
+	if not tid then return end
+	local trade = activeTrades[tid]
+	if not trade then return end
+	local side = getSide(trade, player.UserId)
+	if not side then return end
+	for i, existing in ipairs(side.brainrotUids) do
+		if existing == uid then
+			table.remove(side.brainrotUids, i)
+			trade.a.confirmed = false
+			trade.b.confirmed = false
+			pushTrade(trade)
+			return
+		end
+	end
+end
+
+function TradeService.SetCash(player: Player, amount: number)
+	local tid = userToTrade[player.UserId]
+	if not tid then return end
+	local trade = activeTrades[tid]
+	if not trade then return end
+	local side = getSide(trade, player.UserId)
+	if not side then return end
+	local data = DataService.Get(player)
+	if not data then return end
+	amount = math.max(0, math.floor(amount))
+	if amount > data.cash then amount = data.cash end
+	side.cash = amount
+	trade.a.confirmed = false
+	trade.b.confirmed = false
+	pushTrade(trade)
+end
+
+function TradeService.Confirm(player: Player)
+	local tid = userToTrade[player.UserId]
+	if not tid then return end
+	local trade = activeTrades[tid]
+	if not trade then return end
+	local side = getSide(trade, player.UserId)
+	if not side then return end
+	side.confirmed = true
+	pushTrade(trade)
+
+	if trade.a.confirmed and trade.b.confirmed then
+		-- Re-validate both sides
+		local pa = Players:GetPlayerByUserId(trade.a.userId)
+		local pb = Players:GetPlayerByUserId(trade.b.userId)
+		if not pa or not pb then endTrade(trade, "A player left."); return end
+		local da = DataService.Get(pa); local db = DataService.Get(pb)
+		if not da or not db then endTrade(trade, "Data unavailable."); return end
+		if da.cash < trade.a.cash or db.cash < trade.b.cash then
+			endTrade(trade, "Insufficient cash."); return
+		end
+		for _, u in ipairs(trade.a.brainrotUids) do
+			if not brainrotIsPlaceable(pa, u) then endTrade(trade, "Inventory changed."); return end
+		end
+		for _, u in ipairs(trade.b.brainrotUids) do
+			if not brainrotIsPlaceable(pb, u) then endTrade(trade, "Inventory changed."); return end
+		end
+
+		-- Atomic swap
+		for _, u in ipairs(trade.a.brainrotUids) do
+			LabService.TransferBrainrot(pa, pb, u)
+		end
+		for _, u in ipairs(trade.b.brainrotUids) do
+			LabService.TransferBrainrot(pb, pa, u)
+		end
+		-- Spend-before-award and bail on a failed spend so we never mint cash
+		-- out of thin air. The validation above already gated this, but a
+		-- DataService.Get returning nil between then and now would silently
+		-- skip the spend without the award checking — fixed by gating.
+		if trade.a.cash > 0 then
+			if not EconomyService.SpendCash(pa, trade.a.cash) then
+				endTrade(trade, "Insufficient cash."); return
+			end
+			EconomyService.AwardCash(pb, trade.a.cash, "trade")
+		end
+		if trade.b.cash > 0 then
+			if not EconomyService.SpendCash(pb, trade.b.cash) then
+				-- Refund pa what we already took, then abort. The brainrots are
+				-- already swapped at this point, but un-swapping is expensive; we
+				-- accept the partial-execution as the lesser evil vs free cash.
+				if trade.a.cash > 0 then EconomyService.AwardCash(pa, trade.a.cash, "trade refund") end
+				endTrade(trade, "Insufficient cash."); return
+			end
+			EconomyService.AwardCash(pa, trade.b.cash, "trade")
+		end
+
+		Remotes.Event(Remotes.Names.Notify):FireClient(pa, { kind="capture", text="Trade complete!" })
+		Remotes.Event(Remotes.Names.Notify):FireClient(pb, { kind="capture", text="Trade complete!" })
+		endTrade(trade, "complete")
+	end
+end
+
+function TradeService.Cancel(player: Player)
+	local tid = userToTrade[player.UserId]
+	if not tid then return end
+	local trade = activeTrades[tid]
+	if not trade then return end
+	endTrade(trade, "Cancelled by player.")
+end
+
+function TradeService.OnPlayerRemoving(player: Player)
+	pendingInvites[player.UserId] = nil
+	local tid = userToTrade[player.UserId]
+	if tid then
+		local trade = activeTrades[tid]
+		if trade then endTrade(trade, "Player left.") end
+	end
+end
+
+function TradeService.Init()
+	-- TTL sweeper
+	task.spawn(function()
+		while true do
+			task.wait(15)
+			-- Snapshot expired entries before mutating to avoid
+			-- pairs()-during-nil-assignment undefined behavior.
+			local now = os.clock()
+			local expiredInvites: { number } = {}
+			for userId, inv in pairs(pendingInvites) do
+				if now - inv.at > INVITE_TTL then
+					table.insert(expiredInvites, userId)
+				end
+			end
+			for _, userId in ipairs(expiredInvites) do
+				pendingInvites[userId] = nil
+			end
+			local expiredTrades: { Trade } = {}
+			for _, trade in pairs(activeTrades) do
+				if os.time() - trade.createdAt > TRADE_TTL then
+					table.insert(expiredTrades, trade)
+				end
+			end
+			for _, trade in ipairs(expiredTrades) do
+				endTrade(trade, "Trade timed out.")
+			end
+		end
+	end)
+end
+
+return TradeService
+]=])
+	ensurePath(root, "TrailService", "ModuleScript", [=[
+--!strict
+--[[
+	TrailService — attaches a cycling-rainbow Trail to the character of any
+	player with the Rainbow Trail gamepass. Cosmetic, status-symbol, high
+	conversion rate among "look at me" players. Re-attaches on respawn.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+
+local DataService = require(script.Parent.DataService)
+
+local TrailService = {}
+
+local function attachTrail(character: Model)
+	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return end
+	if hrp:FindFirstChild("RainbowTrail") then return end
+
+	local a0 = Instance.new("Attachment")
+	a0.Name = "RainbowTrailA0"
+	a0.Position = Vector3.new(0, 1.5, 0)
+	a0.Parent = hrp
+	local a1 = Instance.new("Attachment")
+	a1.Name = "RainbowTrailA1"
+	a1.Position = Vector3.new(0, -1.5, 0)
+	a1.Parent = hrp
+
+	local trail = Instance.new("Trail")
+	trail.Name = "RainbowTrail"
+	trail.Attachment0 = a0
+	trail.Attachment1 = a1
+	trail.Lifetime = 1.2
+	trail.MinLength = 0
+	trail.WidthScale = NumberSequence.new(1, 0)
+	local hue = 0
+	trail.Color = ColorSequence.new(Color3.fromHSV(0, 1, 1))
+	trail.Parent = hrp
+
+	task.spawn(function()
+		while trail.Parent do
+			hue = (hue + 0.02) % 1
+			trail.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromHSV(hue, 1, 1)),
+				ColorSequenceKeypoint.new(0.5, Color3.fromHSV((hue + 0.33) % 1, 1, 1)),
+				ColorSequenceKeypoint.new(1, Color3.fromHSV((hue + 0.66) % 1, 1, 1)),
+			})
+			task.wait(0.1)
+		end
+	end)
+end
+
+local function tryAttach(player: Player)
+	local data = DataService.Get(player)
+	if not data or not data.gamepasses["RainbowTrail"] then return end
+	if player.Character then attachTrail(player.Character) end
+end
+
+function TrailService.OnPlayerAdded(player: Player)
+	player.CharacterAdded:Connect(function(char)
+		task.wait(0.5)
+		tryAttach(player)
+	end)
+	task.delay(2, tryAttach, player)
+end
+
+function TrailService.OnGamepassGranted(player: Player, key: string)
+	if key == "RainbowTrail" then tryAttach(player) end
+end
+
+function TrailService.Init()
+	-- Suppress unused
+	local _ = Players
+	local _2 = ReplicatedStorage
+	local _3 = Shared
+end
+
+return TrailService
+]=])
+	ensurePath(root, "VipServerService", "ModuleScript", [[
+--!strict
+
+local Players = game:GetService("Players")
+
+local VipServerService = {}
+
+-- A "VIP server" in Roblox lingo is a private server a player rents from
+-- the experience for a recurring R$ price (you set it on Creator Dashboard).
+-- game.PrivateServerId is non-empty when the current server is one.
+-- Players in a VIP server get +50% cash on top of every other mult — this
+-- is real recurring revenue with zero ongoing dev cost per subscription.
+local VIP_CASH_BONUS = 1.50
+
+function VipServerService.IsVipServer(): boolean
+	return game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
+end
+
+function VipServerService.GetCashMult(): number
+	return if VipServerService.IsVipServer() then VIP_CASH_BONUS else 1
+end
+
+function VipServerService.OwnerUserId(): number
+	return game.PrivateServerOwnerId
+end
+
+function VipServerService.OnPlayerAdded(player: Player)
+	-- Optional: print a welcome message for players joining a VIP server.
+	-- Done at OnPlayerAdded so the player sees this once on join.
+	if not VipServerService.IsVipServer() then return end
+	task.delay(2, function()
+		if not player.Parent then return end
+		local Remotes = require(game:GetService("ReplicatedStorage").Shared.Remotes)
+		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+			kind = "capture",
+			text = string.format("💎 VIP Server — +%d%% cash for everyone here!",
+				math.floor((VIP_CASH_BONUS - 1) * 100)),
+		})
+	end)
+	-- Suppress unused
+	local _ = Players
+end
+
+function VipServerService.Init() end
+
+return VipServerService
+]])
+	ensurePath(root, "WebhookService", "ModuleScript", [=[
+--!strict
+--[[
+	WebhookService — posts notable events to a Discord webhook URL. Two
+	channels supported by default:
+	  * SALES — purchase notifications (gamepass + dev product receipts)
+	  * MILESTONES — boss kills, rare drops, Apex mutations, big rebirths
+
+	Setup:
+	  1. In Discord server settings → Integrations → Webhooks → New
+	  2. Copy the URL
+	  3. Paste into the URL constants below and republish
+
+	Discord webhook responses can fail in waves under high traffic; we
+	silently swallow errors so a Discord outage never breaks the game.
+]]
+
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local WebhookService = {}
+
+-- IMPORTANT: never commit a real webhook URL — anyone who has the URL
+-- can spam your channel. Use environment-style replacement on publish.
+local SALES_WEBHOOK_URL: string? = nil      -- e.g. "https://discord.com/api/webhooks/.../..."
+local MILESTONES_WEBHOOK_URL: string? = nil
+
+local function postAsync(url: string, payload: any)
+	if RunService:IsStudio() then return end
+	if not url or url == "" then return end
+	local body = HttpService:JSONEncode(payload)
+	pcall(function()
+		HttpService:PostAsync(url, body, Enum.HttpContentType.ApplicationJson)
+	end)
+end
+
+function WebhookService.PostSale(player: Player, kind: string, key: string, price: number)
+	if not SALES_WEBHOOK_URL then return end
+	postAsync(SALES_WEBHOOK_URL, {
+		username = "BrainrotLab Sales",
+		content = string.format("💰 **%s** bought **%s** (%s) for **%d R$**",
+			player.DisplayName, key, kind, price),
+	})
+end
+
+function WebhookService.PostMilestone(message: string, severity: string?)
+	if not MILESTONES_WEBHOOK_URL then return end
+	postAsync(MILESTONES_WEBHOOK_URL, {
+		username = "BrainrotLab",
+		content = (severity == "big" and "🚨 " or "✨ ") .. message,
+	})
+end
+
+function WebhookService.Init()
+	if RunService:IsStudio() then return end
+	if not SALES_WEBHOOK_URL and not MILESTONES_WEBHOOK_URL then
+		print("[WebhookService] No webhook URLs configured. Edit src/server/WebhookService.luau before publishing if you want Discord notifications.")
+	end
+end
+
+return WebhookService
+]=])
+	ensurePath(root, "WelcomeOfferService", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config  = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local Log     = require(Shared.Log)
+
+local DataService = require(script.Parent.DataService)
+
+local WelcomeOfferService = {}
+
+local OFFER_DURATION_SECONDS = 600   -- 10 min visibility window
+local OFFER_SHOW_DELAY        = 90    -- give them ~90s of play first
+local OFFER_PRODUCT_KEY      = "CashLarge"   -- bundles 7,500 cash
+
+local function ensure(data: any)
+	data._welcomeOffer = data._welcomeOffer or {
+		shown = false,
+		usedAt = 0,
+		shownAt = 0,
+	}
+end
+
+local function pushOffer(player: Player)
+	local data = DataService.Get(player)
+	if not data then return end
+	ensure(data)
+	local product = Config.DEV_PRODUCTS[OFFER_PRODUCT_KEY]
+	if not product then return end
+	Remotes.Event(Remotes.Names.WelcomeOffer):FireClient(player, {
+		kind = "show",
+		productKey = OFFER_PRODUCT_KEY,
+		title = `STARTER PACK · 50% extra cash`,
+		body  = string.format("Get %s cash for just %d R$. Today only — applies to your first purchase.",
+			tostring(product.amount or 0), product.price),
+		productPrice = product.price,
+		expiresIn = OFFER_DURATION_SECONDS,
+	})
+	data._welcomeOffer.shown = true
+	data._welcomeOffer.shownAt = os.time()
+	Log.Info("WelcomeOffer", "shown to %s", player.Name)
+end
+
+function WelcomeOfferService.OnPlayerAdded(player: Player)
+	DataService.OnProfileLoaded(player, function()
+		local data = DataService.Get(player)
+		if not data then return end
+		ensure(data)
+		-- Only first-time players (never bought anything) see this.
+		local hasBought = (data :: any)._purchaseLog and #((data :: any)._purchaseLog) > 0
+		if data._welcomeOffer.shown or hasBought then return end
+		task.delay(OFFER_SHOW_DELAY, function()
+			-- player.Parent vs Players:FindFirstChild(name): the latter is
+			-- true even if the player left and a same-named account rejoined,
+			-- which would surprise the new session with a leftover offer.
+			-- Parent check ties to this specific Player instance.
+			if not player.Parent then return end
+			pushOffer(player)
+		end)
+	end)
+end
+
+function WelcomeOfferService.Init()
+	Remotes.Event(Remotes.Names.WelcomeOffer)
+end
+
+return WelcomeOfferService
+]])
+end
+
+do  -- StarterPlayer.StarterPlayerScripts/Client
+	local container = resolveContainer("StarterPlayer.StarterPlayerScripts")
+	local root = ensureRootScript(container, "Client", "LocalScript", [=[
+--!strict
+--[[
+	Client bootstrap — instantiates ScreenGui hierarchy, then hands off to
+	individual UI controllers.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui") :: PlayerGui
+
+local screen = Instance.new("ScreenGui")
+screen.Name = "BrainrotLabUI"
+screen.ResetOnSpawn = false
+screen.IgnoreGuiInset = true
+screen.Parent = playerGui
+
+local UIController = require(script.UIController)
+UIController.Init(screen)
+
+local HUD = require(script.HUD)
+HUD.Init(screen)
+
+local ShopUI = require(script.ShopUI)
+ShopUI.Init(screen, UIController)
+
+local InventoryUI = require(script.InventoryUI)
+InventoryUI.Init(screen, UIController)
+
+local LeaderboardUI = require(script.LeaderboardUI)
+LeaderboardUI.Init(screen, UIController)
+
+local OutbreakUI = require(script.OutbreakUI)
+OutbreakUI.Init(screen)
+
+local BattlePassUI = require(script.BattlePassUI)
+BattlePassUI.Init(screen, UIController)
+
+local DailyRewardUI = require(script.DailyRewardUI)
+DailyRewardUI.Init(screen, UIController)
+
+local NotificationUI = require(script.NotificationUI)
+NotificationUI.Init(screen)
+
+local PlotUI = require(script.PlotUI)
+PlotUI.Init(screen)
+
+local CodeRedeemUI = require(script.CodeRedeemUI)
+CodeRedeemUI.Init(screen, UIController)
+
+local GroupBannerUI = require(script.GroupBannerUI)
+GroupBannerUI.Init(screen)
+
+local TutorialUI = require(script.TutorialUI)
+TutorialUI.Init(screen)
+
+local AchievementUI = require(script.AchievementUI)
+AchievementUI.Init(screen, UIController)
+
+local QuestUI = require(script.QuestUI)
+QuestUI.Init(screen, UIController)
+
+local TradeUI = require(script.TradeUI)
+TradeUI.Init(screen, UIController)
+
+local GlobalLeaderboardUI = require(script.GlobalLeaderboardUI)
+GlobalLeaderboardUI.Init(screen, UIController)
+
+local BossUI = require(script.BossUI)
+BossUI.Init(screen)
+
+local AnnouncementUI = require(script.AnnouncementUI)
+AnnouncementUI.Init(screen)
+
+local PetUI = require(script.PetUI)
+PetUI.Init(screen, UIController)
+
+local LevelUI = require(script.LevelUI)
+LevelUI.Init(screen, UIController)
+
+local PatchNotesUI = require(script.PatchNotesUI)
+PatchNotesUI.Init(screen, UIController)
+
+local DecorationUI = require(script.DecorationUI)
+DecorationUI.Init(screen, UIController)
+
+local InviteUI = require(script.InviteUI)
+InviteUI.Init(screen, UIController)
+
+local AdminPanelUI = require(script.AdminPanelUI)
+AdminPanelUI.Init(screen)
+
+local WelcomeOfferUI = require(script.WelcomeOfferUI)
+WelcomeOfferUI.Init(screen)
+
+local LuckyWheelUI = require(script.LuckyWheelUI)
+LuckyWheelUI.Init(screen, UIController)
+
+local CinematicUI = require(script.CinematicUI)
+CinematicUI.Init(screen)
+
+local AutoSellUI = require(script.AutoSellUI)
+AutoSellUI.Init(screen, UIController)
+
+local NextEventUI = require(script.NextEventUI)
+NextEventUI.Init(screen)
+
+local SpectateController = require(script.SpectateController)
+SpectateController.Init(screen)
+
+local LoadingScreen = require(script.LoadingScreen)
+LoadingScreen.Init()
+
+local SoundController = require(script.SoundController)
+SoundController.Init()
+
+print("[BrainrotLab] Client ready.")
+]=])
+	ensurePath(root, "AchievementUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local AchievementUI = {}
+
+local list: ScrollingFrame
+
+local function rebuild(payload: any)
+	list:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 6)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = list
+
+	for i, a in ipairs(payload) do
+		local row = Instance.new("Frame")
+		row.LayoutOrder = if a.complete and not a.claimed then i
+			elseif a.claimed then i + 1000
+			else i + 500
+		row.Size = UDim2.new(1, -10, 0, 64)
+		row.BackgroundColor3 = if a.claimed then Color3.fromRGB(40, 60, 40)
+			elseif a.complete then Color3.fromRGB(70, 70, 35)
+			else Color3.fromRGB(40, 40, 55)
+		row.BorderSizePixel = 0
+		row.Parent = list
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+
+		local title = Instance.new("TextLabel")
+		title.Position = UDim2.fromOffset(12, 4)
+		title.Size = UDim2.new(1, -150, 0, 22)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.TextColor3 = if a.claimed then Color3.fromRGB(120, 200, 120)
+			elseif a.complete then Color3.fromRGB(255, 215, 80)
+			else Color3.fromRGB(220, 220, 220)
+		title.Text = a.name
+		title.Parent = row
+
+		local sub = Instance.new("TextLabel")
+		sub.Position = UDim2.fromOffset(12, 26)
+		sub.Size = UDim2.new(1, -150, 0, 18)
+		sub.BackgroundTransparency = 1
+		sub.Font = Enum.Font.Gotham
+		sub.TextScaled = true
+		sub.TextXAlignment = Enum.TextXAlignment.Left
+		sub.TextColor3 = Color3.fromRGB(180, 180, 200)
+		sub.Text = a.description
+		sub.Parent = row
+
+		local prog = Instance.new("TextLabel")
+		prog.Position = UDim2.fromOffset(12, 46)
+		prog.Size = UDim2.new(1, -150, 0, 16)
+		prog.BackgroundTransparency = 1
+		prog.Font = Enum.Font.GothamBold
+		prog.TextScaled = true
+		prog.TextXAlignment = Enum.TextXAlignment.Left
+		prog.TextColor3 = Color3.fromRGB(140, 200, 255)
+		prog.Text = string.format("%s / %s · reward: %d %s",
+			Util.FormatShortNumber(a.progress),
+			Util.FormatShortNumber(a.target),
+			a.rewardAmount or 1,
+			a.rewardKind)
+		prog.Parent = row
+
+		local btn = Instance.new("TextButton")
+		btn.AnchorPoint = Vector2.new(1, 0.5)
+		btn.Position = UDim2.new(1, -10, 0.5, 0)
+		btn.Size = UDim2.fromOffset(120, 48)
+		btn.Font = Enum.Font.GothamBlack
+		btn.TextScaled = true
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BorderSizePixel = 0
+		btn.Parent = row
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
+
+		if a.claimed then
+			btn.Text = "✓ DONE"
+			btn.BackgroundColor3 = Color3.fromRGB(60, 100, 60)
+			btn.AutoButtonColor = false
+		elseif a.complete then
+			btn.Text = "CLAIM"
+			btn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+			btn.MouseButton1Click:Connect(function()
+				Remotes.Event(Remotes.Names.RequestClaimAchievement):FireServer(a.id)
+			end)
+		else
+			btn.Text = "LOCKED"
+			btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+			btn.AutoButtonColor = false
+		end
+	end
+end
+
+function AchievementUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Achievements"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(600, 560)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 2; s.Parent = frame
+
+	local header = Instance.new("TextLabel")
+	header.Position = UDim2.fromOffset(12, 8)
+	header.Size = UDim2.new(1, -24, 0, 32)
+	header.BackgroundTransparency = 1
+	header.Font = Enum.Font.GothamBlack
+	header.TextColor3 = Color3.fromRGB(255, 215, 80)
+	header.TextXAlignment = Enum.TextXAlignment.Left
+	header.TextScaled = true
+	header.Text = "🏅 Achievements"
+	header.Parent = frame
+
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(12, 48)
+	list.Size = UDim2.new(1, -24, 1, -60)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = frame
+
+	Remotes.Event(Remotes.Names.AchievementUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("Achievements", frame, "🏅 Goals", Color3.fromRGB(255, 215, 80))
+end
+
+return AchievementUI
+]])
+	ensurePath(root, "AdminPanelUI", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+
+local Shared  = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local AdminPanelUI = {}
+
+local UPDATE_REMOTE = "AdminUpdate"
+local RUN_REMOTE    = "AdminRunCommand"
+
+local localPlayer = Players.LocalPlayer
+
+local panel:        Frame?
+local resultLabel:  TextLabel?
+local playersList:  ScrollingFrame?
+local input:        TextBox?
+local toggleButton: TextButton?
+local isOwner = false
+
+local function applyStyle(b: TextButton, color: Color3)
+	b.Font = Enum.Font.GothamBold
+	b.TextScaled = true
+	b.BackgroundColor3 = color
+	b.TextColor3 = Color3.fromRGB(255,255,255)
+	b.BorderSizePixel = 0
+	b.AutoButtonColor = true
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = b
+end
+
+local function mkButton(parent: Instance, text: string, color: Color3, onClick: () -> ()): TextButton
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.fromOffset(120, 30)
+	b.Text = text
+	b.Parent = parent
+	applyStyle(b, color)
+	b.MouseButton1Click:Connect(onClick)
+	return b
+end
+
+local function renderPlayers(list: { any })
+	if not playersList then return end
+	playersList:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = playersList
+
+	for _, p in ipairs(list) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 56)
+		row.BackgroundColor3 = if p.isOwner then Color3.fromRGB(70, 60, 30)
+			elseif p.isAdmin then Color3.fromRGB(40, 60, 40)
+			elseif p.violations > 0 then Color3.fromRGB(70, 30, 30)
+			else Color3.fromRGB(35, 35, 50)
+		row.BorderSizePixel = 0
+		row.Parent = playersList
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = row
+
+		local name = Instance.new("TextLabel")
+		name.Position = UDim2.fromOffset(10, 4)
+		name.Size = UDim2.new(1, -260, 0, 22)
+		name.BackgroundTransparency = 1
+		name.Font = Enum.Font.GothamBold
+		name.TextScaled = true
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.TextColor3 = Color3.fromRGB(255,255,255)
+		local badge = p.isOwner and " 👑" or (p.isAdmin and " 🛡️" or "")
+		name.Text = `{p.displayName}{badge}  ({p.name})`
+		name.Parent = row
+
+		local stats = Instance.new("TextLabel")
+		stats.Position = UDim2.fromOffset(10, 28)
+		stats.Size = UDim2.new(1, -260, 0, 22)
+		stats.BackgroundTransparency = 1
+		stats.Font = Enum.Font.Gotham
+		stats.TextScaled = true
+		stats.TextXAlignment = Enum.TextXAlignment.Left
+		stats.TextColor3 = Color3.fromRGB(200, 200, 220)
+		stats.Text = string.format("%d cash · R%d · %d brainrots · vio %d",
+			p.cash, p.rebirths, p.brainrots, p.violations)
+		stats.Parent = row
+
+		local function quick(name: string, color: Color3, line: string, dx: number)
+			local b = mkButton(row, name, color, function()
+				Remotes.Event(RUN_REMOTE):FireServer(line)
+			end)
+			b.AnchorPoint = Vector2.new(1, 0.5)
+			b.Position = UDim2.new(1, dx, 0.5, 0)
+			b.Size = UDim2.fromOffset(80, 40)
+		end
+
+		quick("Give 10k", Color3.fromRGB(80, 200, 120), `give {p.name} 10000`, -10)
+		quick("Mutate",   Color3.fromRGB(255, 100, 220), `mutate-all {p.name}`, -96)
+		quick("Kick",     Color3.fromRGB(220, 80, 80),  `kick {p.name}`, -182)
+	end
+end
+
+local function showResult(text: string)
+	if resultLabel then
+		resultLabel.Text = text
+	end
+end
+
+local function buildPanel(screen: ScreenGui)
+	panel = Instance.new("Frame")
+	;(panel :: Frame).Name = "AdminPanel"
+	;(panel :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
+	;(panel :: Frame).Position = UDim2.fromScale(0.5, 0.5)
+	;(panel :: Frame).Size = UDim2.fromOffset(760, 580)
+	;(panel :: Frame).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+	;(panel :: Frame).BackgroundTransparency = 0.05
+	;(panel :: Frame).BorderSizePixel = 0
+	;(panel :: Frame).Visible = false
+	;(panel :: Frame).Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = panel
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 80, 80); s.Thickness = 2; s.Parent = panel
+
+	local header = Instance.new("TextLabel")
+	header.Position = UDim2.fromOffset(14, 8)
+	header.Size = UDim2.new(1, -28, 0, 32)
+	header.BackgroundTransparency = 1
+	header.Font = Enum.Font.GothamBlack
+	header.TextScaled = true
+	header.TextColor3 = Color3.fromRGB(255, 80, 80)
+	header.TextXAlignment = Enum.TextXAlignment.Left
+	header.Text = "🛡 ADMIN PANEL — owner only"
+	header.Parent = panel
+
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.AnchorPoint = Vector2.new(1, 0)
+	closeBtn.Position = UDim2.new(1, -10, 0, 8)
+	closeBtn.Size = UDim2.fromOffset(60, 32)
+	closeBtn.Parent = panel
+	applyStyle(closeBtn, Color3.fromRGB(60, 60, 80))
+	closeBtn.Text = "✕"
+	closeBtn.MouseButton1Click:Connect(function()
+		if panel then panel.Visible = false end
+	end)
+
+	playersList = Instance.new("ScrollingFrame")
+	;(playersList :: ScrollingFrame).Position = UDim2.fromOffset(14, 50)
+	;(playersList :: ScrollingFrame).Size = UDim2.new(1, -28, 0, 360)
+	;(playersList :: ScrollingFrame).BackgroundColor3 = Color3.fromRGB(22, 22, 38)
+	;(playersList :: ScrollingFrame).BackgroundTransparency = 0.3
+	;(playersList :: ScrollingFrame).BorderSizePixel = 0
+	;(playersList :: ScrollingFrame).ScrollBarThickness = 6
+	;(playersList :: ScrollingFrame).CanvasSize = UDim2.new(0, 0, 0, 0)
+	;(playersList :: ScrollingFrame).AutomaticCanvasSize = Enum.AutomaticSize.Y
+	;(playersList :: ScrollingFrame).Parent = panel
+	local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 8); pc.Parent = playersList
+
+	-- Quick commands row
+	local quickRow = Instance.new("Frame")
+	quickRow.Position = UDim2.fromOffset(14, 420)
+	quickRow.Size = UDim2.new(1, -28, 0, 40)
+	quickRow.BackgroundTransparency = 1
+	quickRow.Parent = panel
+	local qrLayout = Instance.new("UIListLayout")
+	qrLayout.FillDirection = Enum.FillDirection.Horizontal
+	qrLayout.Padding = UDim.new(0, 6)
+	qrLayout.Parent = quickRow
+
+	mkButton(quickRow, "Outbreak",   Color3.fromRGB(255, 120, 60),  function() Remotes.Event(RUN_REMOTE):FireServer("skip-outbreak") end)
+	mkButton(quickRow, "Spawn Boss", Color3.fromRGB(255, 80, 80),   function() Remotes.Event(RUN_REMOTE):FireServer("spawn-boss") end)
+	mkButton(quickRow, "Flags",      Color3.fromRGB(200, 200, 80),  function() Remotes.Event(RUN_REMOTE):FireServer("flags") end)
+	mkButton(quickRow, "Stats",      Color3.fromRGB(120, 200, 255), function() Remotes.Event(RUN_REMOTE):FireServer("stats") end)
+	mkButton(quickRow, "Help",       Color3.fromRGB(180, 180, 200), function() Remotes.Event(RUN_REMOTE):FireServer("help") end)
+
+	-- Custom command input
+	local inputRow = Instance.new("Frame")
+	inputRow.Position = UDim2.fromOffset(14, 470)
+	inputRow.Size = UDim2.new(1, -28, 0, 36)
+	inputRow.BackgroundTransparency = 1
+	inputRow.Parent = panel
+
+	input = Instance.new("TextBox")
+	;(input :: TextBox).Size = UDim2.new(1, -120, 1, 0)
+	;(input :: TextBox).Position = UDim2.fromOffset(0, 0)
+	;(input :: TextBox).Font = Enum.Font.RobotoMono
+	;(input :: TextBox).TextScaled = true
+	;(input :: TextBox).BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	;(input :: TextBox).TextColor3 = Color3.fromRGB(255, 255, 255)
+	;(input :: TextBox).PlaceholderText = "/give <player> <amount>  (try /help)"
+	;(input :: TextBox).Text = ""
+	;(input :: TextBox).ClearTextOnFocus = false
+	;(input :: TextBox).Parent = inputRow
+	local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(0, 6); ic.Parent = input
+
+	local runBtn = Instance.new("TextButton")
+	runBtn.AnchorPoint = Vector2.new(1, 0)
+	runBtn.Position = UDim2.new(1, 0, 0, 0)
+	runBtn.Size = UDim2.fromOffset(110, 36)
+	runBtn.Parent = inputRow
+	applyStyle(runBtn, Color3.fromRGB(80, 200, 120))
+	runBtn.Text = "RUN"
+	local function runIt()
+		if input and input.Text and #input.Text > 0 then
+			Remotes.Event(RUN_REMOTE):FireServer(input.Text)
+			input.Text = ""
+		end
+	end
+	runBtn.MouseButton1Click:Connect(runIt)
+	;(input :: TextBox).FocusLost:Connect(function(enter) if enter then runIt() end end)
+
+	-- Result label
+	resultLabel = Instance.new("TextLabel")
+	;(resultLabel :: TextLabel).Position = UDim2.fromOffset(14, 516)
+	;(resultLabel :: TextLabel).Size = UDim2.new(1, -28, 0, 56)
+	;(resultLabel :: TextLabel).BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	;(resultLabel :: TextLabel).BackgroundTransparency = 0.6
+	;(resultLabel :: TextLabel).BorderSizePixel = 0
+	;(resultLabel :: TextLabel).Font = Enum.Font.RobotoMono
+	;(resultLabel :: TextLabel).TextScaled = true
+	;(resultLabel :: TextLabel).TextWrapped = true
+	;(resultLabel :: TextLabel).TextXAlignment = Enum.TextXAlignment.Left
+	;(resultLabel :: TextLabel).TextYAlignment = Enum.TextYAlignment.Top
+	;(resultLabel :: TextLabel).TextColor3 = Color3.fromRGB(180, 220, 180)
+	;(resultLabel :: TextLabel).Text = "Output appears here. Try the buttons above or type a command."
+	;(resultLabel :: TextLabel).Parent = panel
+	local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = resultLabel
+end
+
+local function buildToggleButton(screen: ScreenGui)
+	toggleButton = Instance.new("TextButton")
+	;(toggleButton :: TextButton).AnchorPoint = Vector2.new(1, 1)
+	;(toggleButton :: TextButton).Position = UDim2.new(1, -16, 1, -100)
+	;(toggleButton :: TextButton).Size = UDim2.fromOffset(48, 48)
+	;(toggleButton :: TextButton).Text = "🛡"
+	;(toggleButton :: TextButton).Parent = screen
+	applyStyle(toggleButton :: TextButton, Color3.fromRGB(255, 80, 80))
+	;(toggleButton :: TextButton).MouseButton1Click:Connect(function()
+		if panel then panel.Visible = not panel.Visible end
+	end)
+end
+
+function AdminPanelUI.Init(screen: ScreenGui)
+	-- Wait for the server to confirm admin status before constructing anything.
+	-- Non-admins never see UI, never see remotes registered as accessible.
+	Remotes.Event(UPDATE_REMOTE).OnClientEvent:Connect(function(payload)
+		if payload.kind == "init" then
+			if not panel then
+				buildPanel(screen)
+				buildToggleButton(screen)
+				isOwner = payload.isOwner == true
+			end
+			renderPlayers(payload.players or {})
+		elseif payload.kind == "tick" then
+			renderPlayers(payload.players or {})
+		elseif payload.kind == "result" then
+			showResult(payload.text or "")
+		end
+	end)
+
+	-- Keybind: Right Shift opens/closes the panel (only does anything if admin).
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.KeyCode == Enum.KeyCode.RightShift and panel then
+			panel.Visible = not panel.Visible
+		end
+	end)
+end
+
+return AdminPanelUI
+]])
+	ensurePath(root, "AnnouncementUI", "ModuleScript", [[
+--!strict
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local AnnouncementUI = {}
+
+local label: TextLabel
+local frame: Frame
+
+function AnnouncementUI.Init(screen: ScreenGui)
+	frame = Instance.new("Frame")
+	frame.Name = "AnnouncementTicker"
+	frame.AnchorPoint = Vector2.new(0.5, 0)
+	frame.Position = UDim2.new(0.5, 0, 0, 144)
+	frame.Size = UDim2.fromOffset(700, 36)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.2
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 1; s.Parent = frame
+
+	label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 215, 80)
+	label.Text = ""
+	label.Parent = frame
+	local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 12); pad.PaddingRight = UDim.new(0, 12); pad.Parent = label
+
+	Remotes.Event(Remotes.Names.AnnouncementShow).OnClientEvent:Connect(function(payload)
+		if not payload then return end
+		label.Text = payload.text
+		if payload.color then
+			label.TextColor3 = Color3.fromRGB(payload.color[1], payload.color[2], payload.color[3])
+		end
+		frame.BackgroundTransparency = 1
+		TweenService:Create(frame, TweenInfo.new(0.3), { BackgroundTransparency = 0.2 }):Play()
+	end)
+end
+
+return AnnouncementUI
+]])
+	ensurePath(root, "AutoSellUI", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local AutoSellUI = {}
+
+local RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Legendary" }
+
+local function pushSet(enabled: boolean, threshold: string, excludeMutated: boolean)
+	Remotes.Event(Remotes.Names.RequestSetAutoSell):FireServer(enabled, threshold, excludeMutated)
+end
+
+function AutoSellUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "AutoSell"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(440, 360)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.05
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 160, 80); s.Thickness = 2; s.Parent = frame
+
+	local hd = Instance.new("TextLabel")
+	hd.Position = UDim2.fromOffset(12, 8)
+	hd.Size = UDim2.new(1, -24, 0, 30)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextColor3 = Color3.fromRGB(255, 160, 80)
+	hd.TextXAlignment = Enum.TextXAlignment.Left
+	hd.Text = "♻ Auto-Sell"
+	hd.Parent = frame
+
+	local explain = Instance.new("TextLabel")
+	explain.Position = UDim2.fromOffset(12, 48)
+	explain.Size = UDim2.new(1, -24, 0, 36)
+	explain.BackgroundTransparency = 1
+	explain.Font = Enum.Font.Gotham
+	explain.TextScaled = true
+	explain.TextWrapped = true
+	explain.TextXAlignment = Enum.TextXAlignment.Left
+	explain.TextColor3 = Color3.fromRGB(220, 220, 230)
+	explain.Text = "Newly-captured brainrots at or below this rarity are automatically sold for cash. Mutated brainrots are kept by default."
+	explain.Parent = frame
+
+	local enabled = false
+	local threshold = "Common"
+	local excludeMutated = true
+
+	local toggle = Instance.new("TextButton")
+	toggle.Position = UDim2.fromOffset(12, 100)
+	toggle.Size = UDim2.fromOffset(180, 40)
+	toggle.Font = Enum.Font.GothamBlack
+	toggle.TextScaled = true
+	toggle.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	toggle.BorderSizePixel = 0
+	toggle.Text = "OFF"
+	toggle.Parent = frame
+	local tc = Instance.new("UICorner"); tc.CornerRadius = UDim.new(0, 8); tc.Parent = toggle
+
+	local mutToggle = Instance.new("TextButton")
+	mutToggle.Position = UDim2.fromOffset(200, 100)
+	mutToggle.Size = UDim2.fromOffset(228, 40)
+	mutToggle.Font = Enum.Font.GothamBold
+	mutToggle.TextScaled = true
+	mutToggle.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+	mutToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	mutToggle.BorderSizePixel = 0
+	mutToggle.Text = "Keep mutated: ON"
+	mutToggle.Parent = frame
+	local mtc = Instance.new("UICorner"); mtc.CornerRadius = UDim.new(0, 8); mtc.Parent = mutToggle
+
+	local label = Instance.new("TextLabel")
+	label.Position = UDim2.fromOffset(12, 152)
+	label.Size = UDim2.new(1, -24, 0, 22)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(200, 200, 220)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Text = "Sell at or below:"
+	label.Parent = frame
+
+	local rarityRow = Instance.new("Frame")
+	rarityRow.Position = UDim2.fromOffset(12, 182)
+	rarityRow.Size = UDim2.new(1, -24, 0, 44)
+	rarityRow.BackgroundTransparency = 1
+	rarityRow.Parent = frame
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = rarityRow
+
+	local rarityButtons: { TextButton } = {}
+	local function refreshButtons()
+		toggle.Text = enabled and "ON" or "OFF"
+		toggle.BackgroundColor3 = if enabled then Color3.fromRGB(80, 200, 120) else Color3.fromRGB(60, 60, 80)
+		mutToggle.Text = excludeMutated and "Keep mutated: ON" or "Keep mutated: OFF"
+		mutToggle.BackgroundColor3 = if excludeMutated then Color3.fromRGB(80, 200, 120) else Color3.fromRGB(200, 80, 80)
+		for _, b in ipairs(rarityButtons) do
+			local selected = b:GetAttribute("Rarity") == threshold
+			b.BackgroundColor3 = if selected then Color3.fromRGB(255, 160, 80) else Color3.fromRGB(50, 50, 70)
+		end
+	end
+
+	for _, r in ipairs(RARITIES) do
+		local b = Instance.new("TextButton")
+		b:SetAttribute("Rarity", r)
+		b.Size = UDim2.fromOffset(80, 44)
+		b.Font = Enum.Font.GothamBold
+		b.TextScaled = true
+		b.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+		b.TextColor3 = Color3.fromRGB(255, 255, 255)
+		b.BorderSizePixel = 0
+		b.Text = r
+		b.Parent = rarityRow
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = b
+		table.insert(rarityButtons, b)
+		b.MouseButton1Click:Connect(function()
+			threshold = r
+			refreshButtons()
+			pushSet(enabled, threshold, excludeMutated)
+		end)
+	end
+
+	toggle.MouseButton1Click:Connect(function()
+		enabled = not enabled
+		refreshButtons()
+		pushSet(enabled, threshold, excludeMutated)
+	end)
+	mutToggle.MouseButton1Click:Connect(function()
+		excludeMutated = not excludeMutated
+		refreshButtons()
+		pushSet(enabled, threshold, excludeMutated)
+	end)
+
+	Remotes.Event(Remotes.Names.AutoSellUpdate).OnClientEvent:Connect(function(payload)
+		if not payload then return end
+		enabled = payload.enabled == true
+		threshold = payload.threshold or "Common"
+		excludeMutated = payload.excludeMutated ~= false
+		refreshButtons()
+	end)
+
+	refreshButtons()
+	UIController.Register("AutoSell", frame, "♻ Auto", Color3.fromRGB(255, 160, 80))
+end
+
+return AutoSellUI
+]])
+	ensurePath(root, "BattlePassUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local BattlePassUI = {}
+
+local headerLabel: TextLabel
+local list: ScrollingFrame
+local premiumBtn: TextButton
+
+local function rebuild(payload: any)
+	headerLabel.Text = string.format(
+		"Season %s · Tier %d/%d · XP %d (next: %d)",
+		payload.seasonId, payload.tier, payload.maxTier,
+		payload.xp, math.max(0, (payload.tier + 1) * payload.xpPerTier - payload.xp)
+	)
+	premiumBtn.Visible = not payload.premium
+
+	list:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = list
+
+	for tier = 1, payload.maxTier do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 38)
+		row.BackgroundColor3 = if tier <= payload.tier then Color3.fromRGB(50, 70, 50) else Color3.fromRGB(40, 40, 55)
+		row.BorderSizePixel = 0
+		row.Parent = list
+		local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = row
+
+		local lbl = Instance.new("TextLabel")
+		lbl.AnchorPoint = Vector2.new(0, 0.5)
+		lbl.Position = UDim2.new(0, 12, 0.5, 0)
+		lbl.Size = UDim2.new(1, -120, 1, -10)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = Enum.Font.GothamBold
+		lbl.TextScaled = true
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+		local claimedFree = payload.claimed[`f:{tier}`] and "✓" or "·"
+		local claimedPrem = payload.claimed[`p:{tier}`] and "✓" or "·"
+		lbl.Text = `Tier {tier} [free {claimedFree}] [prem {claimedPrem}]`
+		lbl.Parent = row
+
+		local btn = Instance.new("TextButton")
+		btn.AnchorPoint = Vector2.new(1, 0.5)
+		btn.Position = UDim2.new(1, -10, 0.5, 0)
+		btn.Size = UDim2.fromOffset(96, 28)
+		btn.Font = Enum.Font.GothamBlack
+		btn.TextScaled = true
+		btn.Text = if tier <= payload.tier then "CLAIM" else "LOCKED"
+		btn.AutoButtonColor = tier <= payload.tier
+		btn.BackgroundColor3 = if tier <= payload.tier then Color3.fromRGB(80, 200, 120) else Color3.fromRGB(80, 80, 100)
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BorderSizePixel = 0
+		btn.Parent = row
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
+		if tier <= payload.tier then
+			btn.MouseButton1Click:Connect(function()
+				Remotes.Event(Remotes.Names.RequestClaimBattlePassTier):FireServer(tier)
+			end)
+		end
+	end
+end
+
+function BattlePassUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "BattlePass"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(560, 540)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 80, 200); s.Thickness = 2; s.Parent = frame
+
+	headerLabel = Instance.new("TextLabel")
+	headerLabel.Position = UDim2.fromOffset(12, 8)
+	headerLabel.Size = UDim2.new(1, -24, 0, 32)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Font = Enum.Font.GothamBold
+	headerLabel.TextColor3 = Color3.fromRGB(255, 100, 220)
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.TextScaled = true
+	headerLabel.Text = "Battle Pass"
+	headerLabel.Parent = frame
+
+	premiumBtn = Instance.new("TextButton")
+	premiumBtn.AnchorPoint = Vector2.new(1, 0)
+	premiumBtn.Position = UDim2.new(1, -12, 0, 8)
+	premiumBtn.Size = UDim2.fromOffset(180, 32)
+	premiumBtn.Font = Enum.Font.GothamBlack
+	premiumBtn.TextScaled = true
+	premiumBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+	premiumBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	premiumBtn.BorderSizePixel = 0
+	premiumBtn.Text = "Buy Premium Pass"
+	premiumBtn.Parent = frame
+	local pbc = Instance.new("UICorner"); pbc.CornerRadius = UDim.new(0, 6); pbc.Parent = premiumBtn
+	premiumBtn.MouseButton1Click:Connect(function()
+		Remotes.Event(Remotes.Names.RequestPromptPurchase):FireServer("product", "BattlePassPremium")
+	end)
+
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(12, 48)
+	list.Size = UDim2.new(1, -24, 1, -60)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = frame
+
+	Remotes.Event(Remotes.Names.BattlePassUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("BattlePass", frame, "🎖 Pass", Color3.fromRGB(255, 80, 200))
+
+	-- avoid unused-local lint
+	local _ = Util
+end
+
+return BattlePassUI
+]])
+	ensurePath(root, "BossUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local BossUI = {}
+
+function BossUI.Init(screen: ScreenGui)
+	local frame = Instance.new("Frame")
+	frame.Name = "BossBanner"
+	frame.AnchorPoint = Vector2.new(0.5, 0)
+	frame.Position = UDim2.new(0.5, 0, 0, 76)
+	frame.Size = UDim2.fromOffset(440, 44)
+	frame.BackgroundColor3 = Color3.fromRGB(50, 0, 0)
+	frame.BackgroundTransparency = 0.2
+	frame.BorderSizePixel = 0
+	frame.Visible = false
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 60, 60); s.Thickness = 2; s.Parent = frame
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 80, 80)
+	label.Parent = frame
+	local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 8); pad.PaddingRight = UDim.new(0, 8); pad.Parent = label
+
+	Remotes.Event(Remotes.Names.BossUpdate).OnClientEvent:Connect(function(payload)
+		if payload.active then
+			frame.Visible = true
+			local pct = math.floor((payload.hp / math.max(1, payload.maxHp)) * 100)
+			label.Text = `🔥 MEGA BOSS · {pct}% HP · {Util.SecondsToClock(payload.secondsLeft)} · {payload.contributors} fighters`
+		else
+			if payload.secondsToStart and payload.secondsToStart < 600 then
+				frame.Visible = true
+				label.Text = `Next Mega Boss in {Util.SecondsToClock(payload.secondsToStart)}`
+				label.TextColor3 = Color3.fromRGB(255, 160, 80)
+			else
+				frame.Visible = false
+			end
+		end
+	end)
+end
+
+return BossUI
+]])
+	ensurePath(root, "CinematicUI", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local CinematicUI = {}
+
+function CinematicUI.Init(screen: ScreenGui)
+	Remotes.Event(Remotes.Names.Cinematic).OnClientEvent:Connect(function(cine)
+		if not cine or not cine.title then return end
+
+		local color = if cine.color then Color3.fromRGB(cine.color[1], cine.color[2], cine.color[3])
+			else Color3.fromRGB(255, 215, 80)
+		local duration = cine.durationSeconds or 3
+
+		-- Full-screen vignette + centerpiece title.
+		local overlay = Instance.new("Frame")
+		overlay.Name = "Cinematic"
+		overlay.Size = UDim2.fromScale(1, 1)
+		overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		overlay.BackgroundTransparency = 1
+		overlay.BorderSizePixel = 0
+		overlay.ZIndex = 50
+		overlay.Parent = screen
+
+		local title = Instance.new("TextLabel")
+		title.AnchorPoint = Vector2.new(0.5, 0.5)
+		title.Position = UDim2.fromScale(0.5, 0.45)
+		title.Size = UDim2.fromOffset(900, 120)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextColor3 = color
+		title.TextStrokeTransparency = 0
+		title.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		title.Text = cine.title
+		title.TextTransparency = 1
+		title.ZIndex = 51
+		title.Parent = overlay
+
+		local subtitle = Instance.new("TextLabel")
+		subtitle.AnchorPoint = Vector2.new(0.5, 0.5)
+		subtitle.Position = UDim2.fromScale(0.5, 0.58)
+		subtitle.Size = UDim2.fromOffset(700, 48)
+		subtitle.BackgroundTransparency = 1
+		subtitle.Font = Enum.Font.GothamBold
+		subtitle.TextScaled = true
+		subtitle.TextColor3 = Color3.fromRGB(240, 240, 250)
+		subtitle.TextStrokeTransparency = 0.2
+		subtitle.Text = cine.subtitle or ""
+		subtitle.TextTransparency = 1
+		subtitle.ZIndex = 51
+		subtitle.Parent = overlay
+
+		-- Fade in
+		TweenService:Create(overlay, TweenInfo.new(0.25), { BackgroundTransparency = 0.55 }):Play()
+		TweenService:Create(title,   TweenInfo.new(0.35), { TextTransparency = 0 }):Play()
+		TweenService:Create(subtitle,TweenInfo.new(0.45), { TextTransparency = 0 }):Play()
+
+		task.delay(duration, function()
+			local fade = TweenService:Create(overlay, TweenInfo.new(0.4), { BackgroundTransparency = 1 })
+			TweenService:Create(title,    TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+			TweenService:Create(subtitle, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+			fade:Play()
+			fade.Completed:Wait()
+			overlay:Destroy()
+		end)
+	end)
+end
+
+return CinematicUI
+]])
+	ensurePath(root, "CodeRedeemUI", "ModuleScript", [=[
+--!strict
+--[[
+	CodeRedeemUI — small input + redeem button. Toggled from the bottom bar.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local CodeRedeemUI = {}
+
+function CodeRedeemUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "CodeRedeem"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(420, 200)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(120, 220, 120); s.Thickness = 2; s.Parent = frame
+
+	local header = Instance.new("TextLabel")
+	header.Position = UDim2.fromOffset(12, 8)
+	header.Size = UDim2.new(1, -24, 0, 36)
+	header.BackgroundTransparency = 1
+	header.Font = Enum.Font.GothamBlack
+	header.TextColor3 = Color3.fromRGB(120, 220, 120)
+	header.TextXAlignment = Enum.TextXAlignment.Left
+	header.TextScaled = true
+	header.Text = "🎟 Redeem Code"
+	header.Parent = frame
+
+	local hint = Instance.new("TextLabel")
+	hint.Position = UDim2.fromOffset(12, 50)
+	hint.Size = UDim2.new(1, -24, 0, 24)
+	hint.BackgroundTransparency = 1
+	hint.Font = Enum.Font.Gotham
+	hint.TextColor3 = Color3.fromRGB(200, 200, 200)
+	hint.TextXAlignment = Enum.TextXAlignment.Left
+	hint.TextScaled = true
+	hint.Text = "Try: LAUNCH · BRAINROT · SIGMA · MUTATE"
+	hint.Parent = frame
+
+	local input = Instance.new("TextBox")
+	input.Position = UDim2.fromOffset(12, 82)
+	input.Size = UDim2.new(1, -160, 0, 56)
+	input.Font = Enum.Font.GothamBold
+	input.TextScaled = true
+	input.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	input.TextColor3 = Color3.fromRGB(255, 255, 255)
+	input.PlaceholderText = "Enter code…"
+	input.PlaceholderColor3 = Color3.fromRGB(150, 150, 170)
+	input.Text = ""
+	input.ClearTextOnFocus = false
+	input.Parent = frame
+	local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(0, 8); ic.Parent = input
+
+	local btn = Instance.new("TextButton")
+	btn.AnchorPoint = Vector2.new(1, 0)
+	btn.Position = UDim2.new(1, -12, 0, 82)
+	btn.Size = UDim2.fromOffset(140, 56)
+	btn.Font = Enum.Font.GothamBlack
+	btn.TextScaled = true
+	btn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.BorderSizePixel = 0
+	btn.Text = "REDEEM"
+	btn.Parent = frame
+	local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = btn
+
+	local function fire()
+		local code = input.Text
+		if code and #code > 0 then
+			Remotes.Event(Remotes.Names.RequestRedeemCode):FireServer(code)
+			input.Text = ""
+		end
+	end
+	btn.MouseButton1Click:Connect(fire)
+	input.FocusLost:Connect(function(enter) if enter then fire() end end)
+
+	UIController.Register("Codes", frame, "🎟 Codes", Color3.fromRGB(120, 220, 120))
+end
+
+return CodeRedeemUI
+]=])
+	ensurePath(root, "DailyRewardUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local DailyRewardUI = {}
+
+local container: Frame
+local headerLabel: TextLabel
+local claimBtn: TextButton
+
+local function rebuild(payload: any)
+	for _, c in ipairs(container:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	headerLabel.Text = `Daily Reward · Streak {payload.streak}` .. (payload.isPremium and " · ⭐ Premium" or "")
+	claimBtn.Visible = payload.canClaim
+	claimBtn.Text = payload.canClaim and "CLAIM TODAY" or "Already claimed"
+	claimBtn.AutoButtonColor = payload.canClaim
+
+	local grid = Instance.new("Frame")
+	grid.Size = UDim2.new(1, -24, 0, 140)
+	grid.Position = UDim2.fromOffset(12, 80)
+	grid.BackgroundTransparency = 1
+	grid.Parent = container
+
+	local list = Instance.new("UIListLayout")
+	list.FillDirection = Enum.FillDirection.Horizontal
+	list.Padding = UDim.new(0, 6)
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	list.Parent = grid
+
+	for i, r in ipairs(payload.rewards) do
+		local cell = Instance.new("Frame")
+		cell.Size = UDim2.fromOffset(70, 120)
+		cell.BackgroundColor3 = if i == payload.streak then Color3.fromRGB(80, 60, 100) else Color3.fromRGB(40, 40, 55)
+		cell.BorderSizePixel = 0
+		cell.Parent = grid
+		local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 6); cc.Parent = cell
+
+		local day = Instance.new("TextLabel")
+		day.Size = UDim2.new(1, 0, 0, 22)
+		day.BackgroundTransparency = 1
+		day.Font = Enum.Font.GothamBold
+		day.TextScaled = true
+		day.TextColor3 = Color3.fromRGB(255, 215, 80)
+		day.Text = `Day {i}`
+		day.Parent = cell
+
+		local what = Instance.new("TextLabel")
+		what.Position = UDim2.fromOffset(0, 24)
+		what.Size = UDim2.new(1, 0, 1, -24)
+		what.BackgroundTransparency = 1
+		what.Font = Enum.Font.Gotham
+		what.TextScaled = true
+		what.TextWrapped = true
+		what.TextColor3 = Color3.fromRGB(255, 255, 255)
+		if r.kind == "cash" then
+			what.Text = `{r.amount}\ncash`
+		elseif r.kind == "infection_bomb" then
+			what.Text = `{r.amount}x\n💣`
+		elseif r.kind == "rare_egg" then
+			what.Text = `{r.amount}x\nRare 🥚`
+		end
+		what.Parent = cell
+	end
+end
+
+function DailyRewardUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Daily"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(600, 260)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 200, 100); s.Thickness = 2; s.Parent = frame
+
+	container = frame
+	headerLabel = Instance.new("TextLabel")
+	headerLabel.Position = UDim2.fromOffset(12, 8)
+	headerLabel.Size = UDim2.new(1, -24, 0, 32)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Font = Enum.Font.GothamBold
+	headerLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.TextScaled = true
+	headerLabel.Text = "Daily Reward"
+	headerLabel.Parent = frame
+
+	claimBtn = Instance.new("TextButton")
+	claimBtn.AnchorPoint = Vector2.new(1, 0)
+	claimBtn.Position = UDim2.new(1, -12, 0, 8)
+	claimBtn.Size = UDim2.fromOffset(180, 36)
+	claimBtn.Font = Enum.Font.GothamBlack
+	claimBtn.TextScaled = true
+	claimBtn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+	claimBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	claimBtn.BorderSizePixel = 0
+	claimBtn.Text = "CLAIM"
+	claimBtn.Parent = frame
+	local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 6); cc.Parent = claimBtn
+	claimBtn.MouseButton1Click:Connect(function()
+		Remotes.Event(Remotes.Names.RequestClaimDaily):FireServer()
+	end)
+
+	Remotes.Event(Remotes.Names.DailyRewardUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("Daily", frame, "🎁 Daily", Color3.fromRGB(255, 200, 100))
+end
+
+return DailyRewardUI
+]])
+	ensurePath(root, "DecorationUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local DecorationUI = {}
+
+local list: ScrollingFrame
+local headerLabel: TextLabel
+local hasPremium = false
+
+local function rebuild(payload: any)
+	hasPremium = payload.hasPremium == true
+	local placed = #payload.owned
+	headerLabel.Text = `🪴 Decorations · {placed}/{payload.capacity} placed`
+
+	list:ClearAllChildren()
+	local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.Parent = list
+
+	-- Catalog (buy entries)
+	for _, def in ipairs(payload.catalog) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 56)
+		row.BackgroundColor3 = if def.premium and not hasPremium then Color3.fromRGB(60, 40, 40) else Color3.fromRGB(40, 40, 55)
+		row.BorderSizePixel = 0
+		row.Parent = list
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+
+		local lbl = Instance.new("TextLabel")
+		lbl.Position = UDim2.fromOffset(12, 4)
+		lbl.Size = UDim2.new(1, -120, 1, -8)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = Enum.Font.GothamBold
+		lbl.TextScaled = true
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.TextColor3 = if def.premium then Color3.fromRGB(255, 215, 80) else Color3.fromRGB(220, 220, 230)
+		lbl.Text = `{def.name}{def.premium and " ⭐" or ""}\n{Util.FormatShortNumber(def.cost)} cash`
+		lbl.Parent = row
+
+		local btn = Instance.new("TextButton")
+		btn.AnchorPoint = Vector2.new(1, 0.5)
+		btn.Position = UDim2.new(1, -10, 0.5, 0)
+		btn.Size = UDim2.fromOffset(96, 44)
+		btn.Font = Enum.Font.GothamBlack
+		btn.TextScaled = true
+		btn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BorderSizePixel = 0
+		btn.Text = "BUY"
+		btn.Parent = row
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
+		btn.MouseButton1Click:Connect(function()
+			Remotes.Event(Remotes.Names.RequestBuyDecoration):FireServer(def.id)
+		end)
+	end
+
+	-- Owned (sell entries)
+	if #payload.owned > 0 then
+		local hd = Instance.new("TextLabel")
+		hd.Size = UDim2.new(1, -10, 0, 24)
+		hd.BackgroundTransparency = 1
+		hd.Font = Enum.Font.GothamBold
+		hd.TextColor3 = Color3.fromRGB(200, 200, 220)
+		hd.TextScaled = true
+		hd.TextXAlignment = Enum.TextXAlignment.Left
+		hd.Text = "Placed (tap to sell — 50% refund)"
+		hd.Parent = list
+	end
+	for _, entry in ipairs(payload.owned) do
+		local row = Instance.new("TextButton")
+		row.Size = UDim2.new(1, -10, 0, 32)
+		row.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
+		row.BorderSizePixel = 0
+		row.Font = Enum.Font.GothamBold
+		row.TextScaled = true
+		row.TextXAlignment = Enum.TextXAlignment.Left
+		row.TextColor3 = Color3.fromRGB(220, 220, 230)
+		row.Text = `· {entry.id} (slot {entry.slot}) · tap to sell`
+		row.Parent = list
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = row
+		local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 12); pad.Parent = row
+		row.MouseButton1Click:Connect(function()
+			Remotes.Event(Remotes.Names.RequestSellDecoration):FireServer(entry.uid)
+		end)
+	end
+end
+
+function DecorationUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Decor"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(540, 520)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(120, 220, 200); s.Thickness = 2; s.Parent = frame
+
+	headerLabel = Instance.new("TextLabel")
+	headerLabel.Position = UDim2.fromOffset(12, 8)
+	headerLabel.Size = UDim2.new(1, -24, 0, 32)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Font = Enum.Font.GothamBlack
+	headerLabel.TextScaled = true
+	headerLabel.TextColor3 = Color3.fromRGB(120, 220, 200)
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.Text = "🪴 Decorations"
+	headerLabel.Parent = frame
+
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(12, 48)
+	list.Size = UDim2.new(1, -24, 1, -60)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = frame
+
+	Remotes.Event(Remotes.Names.DecorationUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("Decor", frame, "🪴 Decor", Color3.fromRGB(120, 220, 200))
+end
+
+return DecorationUI
+]])
+	ensurePath(root, "GlobalLeaderboardUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local GlobalLeaderboardUI = {}
+
+local headerLabel: TextLabel
+local cashCol: Frame
+local mutCol: Frame
+local stealCol: Frame
+
+local function fill(col: Frame, title: string, entries: any, valueLabel: string)
+	col:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 3)
+	layout.Parent = col
+
+	local hd = Instance.new("TextLabel")
+	hd.Size = UDim2.new(1, 0, 0, 26)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextColor3 = Color3.fromRGB(255, 215, 80)
+	hd.Text = title
+	hd.Parent = col
+
+	for i, e in ipairs(entries) do
+		local row = Instance.new("TextLabel")
+		row.Size = UDim2.new(1, 0, 0, 18)
+		row.BackgroundTransparency = 1
+		row.Font = Enum.Font.Gotham
+		row.TextScaled = true
+		row.TextXAlignment = Enum.TextXAlignment.Left
+		row.TextColor3 = if i == 1 then Color3.fromRGB(255, 215, 80)
+			elseif i == 2 then Color3.fromRGB(200, 200, 200)
+			elseif i == 3 then Color3.fromRGB(200, 140, 80)
+			else Color3.fromRGB(220, 220, 220)
+		row.Text = `{i}. {e.name} — {Util.FormatShortNumber(e.value)} {valueLabel}`
+		row.Parent = col
+	end
+
+	if #entries == 0 then
+		local empty = Instance.new("TextLabel")
+		empty.Size = UDim2.new(1, 0, 0, 32)
+		empty.BackgroundTransparency = 1
+		empty.Font = Enum.Font.GothamItalic
+		empty.TextScaled = true
+		empty.TextColor3 = Color3.fromRGB(140, 140, 160)
+		empty.Text = "No entries yet — be first!"
+		empty.Parent = col
+	end
+end
+
+function GlobalLeaderboardUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "GlobalLeaderboard"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(820, 460)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 100, 100); s.Thickness = 2; s.Parent = frame
+
+	headerLabel = Instance.new("TextLabel")
+	headerLabel.Position = UDim2.fromOffset(12, 8)
+	headerLabel.Size = UDim2.new(1, -24, 0, 28)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Font = Enum.Font.GothamBlack
+	headerLabel.TextScaled = true
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	headerLabel.Text = "🌍 GLOBAL — weekly board (resets Sun 00:00 UTC)"
+	headerLabel.Parent = frame
+
+	local function mkCol(x: number): Frame
+		local col = Instance.new("ScrollingFrame")
+		col.Position = UDim2.new(x, 8, 0, 44)
+		col.Size = UDim2.new(1/3, -16, 1, -56)
+		col.BackgroundTransparency = 1
+		col.BorderSizePixel = 0
+		col.ScrollBarThickness = 4
+		col.CanvasSize = UDim2.new(0, 0, 0, 0)
+		col.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		col.Parent = frame
+		return col
+	end
+	cashCol = mkCol(0)
+	mutCol = mkCol(1/3)
+	stealCol = mkCol(2/3)
+
+	Remotes.Event(Remotes.Names.GlobalLeaderboardUpdate).OnClientEvent:Connect(function(payload)
+		local hrs = math.floor(payload.nextResetIn / 3600)
+		headerLabel.Text = `🌍 GLOBAL · Week {payload.weekId} · resets in {hrs}h`
+		fill(cashCol, "💰 TOP CASH", payload.cash, "cash")
+		fill(mutCol, "🧬 TOP MUTATIONS", payload.mutations, "mut")
+		fill(stealCol, "🥷 TOP THIEVES", payload.steals, "steals")
+	end)
+
+	UIController.Register("Global", frame, "🌍 Global", Color3.fromRGB(255, 100, 100))
+end
+
+return GlobalLeaderboardUI
+]])
+	ensurePath(root, "GroupBannerUI", "ModuleScript", [=[
+--!strict
+--[[
+	GroupBannerUI — small top-right banner that prompts the player to join
+	the Roblox group for a permanent +25% cash boost. Hides itself once the
+	player is detected as a group member.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+
+local GroupBannerUI = {}
+
+local localPlayer = Players.LocalPlayer
+local frame: Frame
+local statusLabel: TextLabel
+
+local function refresh()
+	if Config.GROUP_ID <= 0 then
+		frame.Visible = false
+		return
+	end
+	local ok, inGroup = pcall(function() return localPlayer:IsInGroup(Config.GROUP_ID) end)
+	if ok and inGroup then
+		statusLabel.Text = `✅ Group member · +{math.floor((Config.GROUP_REWARD_MULT - 1)*100)}% cash`
+		statusLabel.TextColor3 = Color3.fromRGB(120, 220, 120)
+	else
+		local pct = math.floor((Config.GROUP_REWARD_MULT - 1) * 100)
+		statusLabel.Text = `Join the group for +{pct}% cash`
+		statusLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
+	end
+end
+
+function GroupBannerUI.Init(screen: ScreenGui)
+	frame = Instance.new("Frame")
+	frame.Name = "GroupBanner"
+	frame.AnchorPoint = Vector2.new(1, 0)
+	frame.Position = UDim2.new(1, -16, 0, 16)
+	frame.Size = UDim2.fromOffset(360, 64)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.15
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 12); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 2; s.Parent = frame
+
+	statusLabel = Instance.new("TextLabel")
+	statusLabel.Position = UDim2.fromOffset(10, 6)
+	statusLabel.Size = UDim2.new(1, -20, 0, 22)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Font = Enum.Font.GothamBold
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+	statusLabel.TextScaled = true
+	statusLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
+	statusLabel.Text = ""
+	statusLabel.Parent = frame
+
+	local btn = Instance.new("TextButton")
+	btn.Position = UDim2.fromOffset(10, 30)
+	btn.Size = UDim2.new(1, -20, 0, 28)
+	btn.Font = Enum.Font.GothamBlack
+	btn.TextScaled = true
+	btn.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.BorderSizePixel = 0
+	btn.Text = "VIEW GROUP & RECHECK"
+	btn.Parent = frame
+	local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
+	btn.MouseButton1Click:Connect(function()
+		if Config.GROUP_ID > 0 then
+			-- Opens the in-experience group page if available; otherwise just notifies.
+			local SocialService = game:GetService("SocialService")
+			pcall(function() SocialService:PromptGameInvite(localPlayer) end)
+		end
+		Remotes.Event(Remotes.Names.RequestRecheckGroup):FireServer()
+		task.wait(1.2)
+		refresh()
+	end)
+
+	task.delay(2, refresh)
+	-- re-poll occasionally so banner updates if they join via the website
+	task.spawn(function()
+		while true do
+			task.wait(15)
+			refresh()
+		end
+	end)
+end
+
+return GroupBannerUI
+]=])
+	ensurePath(root, "HUD", "ModuleScript", [=[
+--!strict
+--[[
+	HUD — top-left cash + rebirth panel. Driven by HudUpdate remote.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local HUD = {}
+
+local cashLabel: TextLabel
+local rebirthLabel: TextLabel
+local multLabel: TextLabel
+local statusLabel: TextLabel
+local rebirthBtn: TextButton
+
+function HUD.Init(screen: ScreenGui)
+	local frame = Instance.new("Frame")
+	frame.Name = "HUD"
+	frame.Position = UDim2.fromOffset(16, 16)
+	frame.Size = UDim2.fromOffset(280, 150)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.2
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = frame
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 215, 80)
+	stroke.Thickness = 2
+	stroke.Parent = frame
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 10); pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingLeft = UDim.new(0, 12); pad.PaddingRight = UDim.new(0, 12)
+	pad.Parent = frame
+
+	local function mkLabel(name: string, y: number, color: Color3, font: Enum.Font): TextLabel
+		local l = Instance.new("TextLabel")
+		l.Name = name
+		l.BackgroundTransparency = 1
+		l.Position = UDim2.new(0, 0, 0, y)
+		l.Size = UDim2.new(1, 0, 0, 26)
+		l.Font = font
+		l.TextColor3 = color
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.TextScaled = true
+		l.Parent = frame
+		return l
+	end
+
+	cashLabel = mkLabel("Cash", 0, Color3.fromRGB(255, 215, 80), Enum.Font.GothamBlack)
+	cashLabel.Text = "0 cash"
+	rebirthLabel = mkLabel("Rebirth", 30, Color3.fromRGB(180, 220, 255), Enum.Font.GothamBold)
+	rebirthLabel.Text = "Rebirth 0"
+	multLabel = mkLabel("Mult", 56, Color3.fromRGB(180, 255, 180), Enum.Font.Gotham)
+	multLabel.Text = ""
+	statusLabel = mkLabel("Status", 82, Color3.fromRGB(255, 120, 120), Enum.Font.GothamBold)
+	statusLabel.Text = ""
+
+	rebirthBtn = Instance.new("TextButton")
+	rebirthBtn.Size = UDim2.new(1, 0, 0, 30)
+	rebirthBtn.Position = UDim2.new(0, 0, 1, -30)
+	rebirthBtn.Text = "REBIRTH"
+	rebirthBtn.Font = Enum.Font.GothamBlack
+	rebirthBtn.TextScaled = true
+	rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+	rebirthBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	rebirthBtn.BorderSizePixel = 0
+	rebirthBtn.Parent = frame
+	local rbc = Instance.new("UICorner"); rbc.CornerRadius = UDim.new(0, 8); rbc.Parent = rebirthBtn
+	local confirming = false
+	local confirmExpiresAt = 0
+	local function originalText() return "REBIRTH" end
+	rebirthBtn.MouseButton1Click:Connect(function()
+		if confirming and os.clock() < confirmExpiresAt then
+			confirming = false
+			rebirthBtn.Text = originalText()
+			rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+			Remotes.Event(Remotes.Names.RequestRebirth):FireServer()
+			return
+		end
+		-- First click: arm the confirmation. Auto-revert after 4s.
+		confirming = true
+		confirmExpiresAt = os.clock() + 4
+		rebirthBtn.Text = "TAP AGAIN TO CONFIRM"
+		rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 160, 80)
+		task.delay(4, function()
+			if confirming and os.clock() >= confirmExpiresAt then
+				confirming = false
+				rebirthBtn.Text = originalText()
+				rebirthBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+			end
+		end)
+	end)
+
+	-- Cash tween — animates the displayed number toward the authoritative
+	-- server value over ~500ms so increments feel earned instead of stamped.
+	-- Floor each frame to avoid decimal flicker.
+	local displayedCash = 0
+	local targetCash = 0
+	local RunService = game:GetService("RunService")
+	RunService.Heartbeat:Connect(function(dt)
+		if displayedCash == targetCash then return end
+		local delta = targetCash - displayedCash
+		local step = math.sign(delta) * math.max(math.abs(delta) * dt * 8, 1)
+		if math.abs(delta) <= math.abs(step) then
+			displayedCash = targetCash
+		else
+			displayedCash += step
+		end
+		cashLabel.Text = `{Util.FormatShortNumber(math.floor(displayedCash))} cash`
+	end)
+
+	Remotes.Event(Remotes.Names.HudUpdate).OnClientEvent:Connect(function(payload)
+		targetCash = payload.cash
+		-- Big jumps (e.g. login bonus, rebirth) snap immediately; small ticks tween.
+		if math.abs(targetCash - displayedCash) > targetCash * 0.5 + 1000 then
+			displayedCash = targetCash
+			cashLabel.Text = `{Util.FormatShortNumber(payload.cash)} cash`
+		end
+		rebirthLabel.Text = `Rebirth {payload.rebirths}  (need {Util.FormatShortNumber(payload.nextRebirthCost)})`
+		local parts = {}
+		if payload.cashMult and payload.cashMult > 1 then table.insert(parts, `{payload.cashMult}x cash`) end
+		if payload.rebirthMult and payload.rebirthMult > 1 then table.insert(parts, string.format("%.2fx rebirth", payload.rebirthMult)) end
+		multLabel.Text = table.concat(parts, "  ·  ")
+		if payload.infected then
+			statusLabel.Text = `INFECTED · {math.ceil(payload.infectedSecondsLeft)}s · 🦠`
+			statusLabel.TextColor3 = Color3.fromRGB(120, 255, 120)
+		else
+			statusLabel.Text = `💣 {payload.infectionBombs or 0} bombs`
+			statusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+		end
+	end)
+end
+
+return HUD
+]=])
+	ensurePath(root, "InventoryUI", "ModuleScript", [=[
+--!strict
+--[[
+	InventoryUI — list of owned brainrots with Place / Unplace / Sell controls.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local BrainrotData = require(Shared.BrainrotData)
+local MutationData = require(Shared.MutationData)
+
+local InventoryUI = {}
+
+local list: ScrollingFrame
+local headerLabel: TextLabel
+
+local function rebuild(payload: any)
+	list:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 6)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = list
+
+	local placedCount = 0
+	for _, b in ipairs(payload.inventory) do
+		if b.placed then placedCount += 1 end
+	end
+	headerLabel.Text = `INVENTORY · {#payload.inventory}/{payload.max} · placed {placedCount}/{payload.capacity}`
+
+	for i, b in ipairs(payload.inventory) do
+		local def = BrainrotData.Get(b.speciesId)
+		local row = Instance.new("Frame")
+		row.LayoutOrder = i
+		row.Size = UDim2.new(1, -10, 0, 64)
+		row.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+		row.BorderSizePixel = 0
+		row.Parent = list
+		local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = row
+
+		local display = def and def.displayName or "?"
+		for _, mutId in ipairs(b.mutations) do
+			local m = MutationData.Get(mutId)
+			if m then display = `{m.suffix} {display}` end
+		end
+		display = `{display}  [T{b.mutationTier}]  · {def and def.rarity or "?"}`
+
+		local label = Instance.new("TextLabel")
+		label.AnchorPoint = Vector2.new(0, 0.5)
+		label.Position = UDim2.new(0, 12, 0.5, 0)
+		label.Size = UDim2.new(1, -260, 1, -10)
+		label.BackgroundTransparency = 1
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBold
+		label.TextColor3 = Color3.fromRGB(255,255,255)
+		label.Text = display
+		label.Parent = row
+
+		local function mkBtn(text: string, color: Color3, rightOffset: number, cb: () -> ()): TextButton
+			local btn = Instance.new("TextButton")
+			btn.AnchorPoint = Vector2.new(1, 0.5)
+			btn.Position = UDim2.new(1, rightOffset, 0.5, 0)
+			btn.Size = UDim2.fromOffset(72, 44)
+			btn.Font = Enum.Font.GothamBlack
+			btn.TextScaled = true
+			btn.BackgroundColor3 = color
+			btn.TextColor3 = Color3.fromRGB(255,255,255)
+			btn.BorderSizePixel = 0
+			btn.Text = text
+			btn.Parent = row
+			local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
+			btn.MouseButton1Click:Connect(cb)
+			return btn
+		end
+
+		mkBtn("Sell", Color3.fromRGB(200, 80, 80), -10, function()
+			Remotes.Event(Remotes.Names.RequestSellBrainrot):FireServer(b.uid)
+		end)
+		if b.placed then
+			mkBtn("Pull", Color3.fromRGB(200, 200, 80), -92, function()
+				Remotes.Event(Remotes.Names.RequestUnplaceBrainrot):FireServer(b.uid)
+			end)
+		else
+			mkBtn("Place", Color3.fromRGB(80, 200, 120), -92, function()
+				Remotes.Event(Remotes.Names.RequestPlaceBrainrot):FireServer(b.uid)
+			end)
+		end
+		mkBtn("?", Color3.fromRGB(80, 120, 200), -174, function() end)
+	end
+end
+
+function InventoryUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Inventory"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(560, 540)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(100, 200, 255); s.Thickness = 2; s.Parent = frame
+
+	headerLabel = Instance.new("TextLabel")
+	headerLabel.Position = UDim2.fromOffset(12, 8)
+	headerLabel.Size = UDim2.new(1, -24, 0, 32)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Font = Enum.Font.GothamBlack
+	headerLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.TextScaled = true
+	headerLabel.Text = "INVENTORY"
+	headerLabel.Parent = frame
+
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(12, 48)
+	list.Size = UDim2.new(1, -24, 1, -60)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = frame
+
+	Remotes.Event(Remotes.Names.InventoryUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("Inventory", frame, "🧠 Lab", Color3.fromRGB(100, 200, 255))
+end
+
+return InventoryUI
+]=])
+	ensurePath(root, "InviteUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local InviteUI = {}
+
+local codeLabel: TextLabel
+local statusLabel: TextLabel
+local input: TextBox
+local redeemBtn: TextButton
+
+function InviteUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Invite"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(460, 300)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 100, 200); s.Thickness = 2; s.Parent = frame
+
+	local hd = Instance.new("TextLabel")
+	hd.Position = UDim2.fromOffset(12, 8)
+	hd.Size = UDim2.new(1, -24, 0, 30)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextColor3 = Color3.fromRGB(255, 100, 200)
+	hd.TextXAlignment = Enum.TextXAlignment.Left
+	hd.Text = "👥 Invite Friends"
+	hd.Parent = frame
+
+	local subtext = Instance.new("TextLabel")
+	subtext.Position = UDim2.fromOffset(12, 42)
+	subtext.Size = UDim2.new(1, -24, 0, 26)
+	subtext.BackgroundTransparency = 1
+	subtext.Font = Enum.Font.Gotham
+	subtext.TextScaled = true
+	subtext.TextWrapped = true
+	subtext.TextXAlignment = Enum.TextXAlignment.Left
+	subtext.TextColor3 = Color3.fromRGB(220, 220, 230)
+	subtext.Text = "Share your code. Friend redeems → both get rewards."
+	subtext.Parent = frame
+
+	codeLabel = Instance.new("TextLabel")
+	codeLabel.Position = UDim2.fromOffset(12, 76)
+	codeLabel.Size = UDim2.new(1, -24, 0, 56)
+	codeLabel.BackgroundColor3 = Color3.fromRGB(40, 30, 50)
+	codeLabel.BorderSizePixel = 0
+	codeLabel.Font = Enum.Font.RobotoMono
+	codeLabel.TextScaled = true
+	codeLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
+	codeLabel.Text = "REF-…"
+	codeLabel.Parent = frame
+	local clc = Instance.new("UICorner"); clc.CornerRadius = UDim.new(0, 8); clc.Parent = codeLabel
+
+	statusLabel = Instance.new("TextLabel")
+	statusLabel.Position = UDim2.fromOffset(12, 138)
+	statusLabel.Size = UDim2.new(1, -24, 0, 22)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Font = Enum.Font.GothamBold
+	statusLabel.TextScaled = true
+	statusLabel.TextColor3 = Color3.fromRGB(180, 220, 180)
+	statusLabel.Text = ""
+	statusLabel.Parent = frame
+
+	input = Instance.new("TextBox")
+	input.Position = UDim2.fromOffset(12, 174)
+	input.Size = UDim2.fromOffset(280, 48)
+	input.Font = Enum.Font.RobotoMono
+	input.TextScaled = true
+	input.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	input.TextColor3 = Color3.fromRGB(255, 255, 255)
+	input.PlaceholderText = "Enter a friend's code…"
+	input.ClearTextOnFocus = false
+	input.Text = ""
+	input.Parent = frame
+	local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(0, 6); ic.Parent = input
+
+	redeemBtn = Instance.new("TextButton")
+	redeemBtn.Position = UDim2.fromOffset(300, 174)
+	redeemBtn.Size = UDim2.fromOffset(148, 48)
+	redeemBtn.Font = Enum.Font.GothamBlack
+	redeemBtn.TextScaled = true
+	redeemBtn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+	redeemBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	redeemBtn.BorderSizePixel = 0
+	redeemBtn.Text = "REDEEM"
+	redeemBtn.Parent = frame
+	local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = redeemBtn
+
+	local function fire()
+		local code = input.Text
+		if code and #code > 0 then
+			Remotes.Event(Remotes.Names.RequestRedeemInvite):FireServer(code)
+			input.Text = ""
+		end
+	end
+	redeemBtn.MouseButton1Click:Connect(fire)
+	input.FocusLost:Connect(function(enter) if enter then fire() end end)
+
+	Remotes.Event(Remotes.Names.InviteUpdate).OnClientEvent:Connect(function(payload)
+		codeLabel.Text = payload.code or "REF-…"
+		statusLabel.Text = `Recruited {payload.recruitsCount or 0} friends` .. (payload.redeemed and " · You redeemed a code already" or "")
+	end)
+
+	UIController.Register("Invite", frame, "👥 Invite", Color3.fromRGB(255, 100, 200))
+end
+
+return InviteUI
+]])
+	ensurePath(root, "LeaderboardUI", "ModuleScript", [=[
+--!strict
+--[[
+	LeaderboardUI — three columns: top cash, top mutations, top thieves.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local LeaderboardUI = {}
+
+local cashCol: Frame
+local mutCol: Frame
+local thiefCol: Frame
+
+local function fill(col: Frame, title: string, entries: { any }, valueKey: string, formatter: ((number) -> string)?)
+	col:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = col
+
+	local hd = Instance.new("TextLabel")
+	hd.Size = UDim2.new(1, 0, 0, 28)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextColor3 = Color3.fromRGB(255, 215, 80)
+	hd.Text = title
+	hd.Parent = col
+
+	for i, e in ipairs(entries) do
+		local row = Instance.new("TextLabel")
+		row.Size = UDim2.new(1, 0, 0, 22)
+		row.BackgroundTransparency = 1
+		row.Font = Enum.Font.Gotham
+		row.TextScaled = true
+		row.TextXAlignment = Enum.TextXAlignment.Left
+		row.TextColor3 = if i == 1 then Color3.fromRGB(255,215,80)
+			elseif i == 2 then Color3.fromRGB(200,200,200)
+			elseif i == 3 then Color3.fromRGB(200,140,80)
+			else Color3.fromRGB(220,220,220)
+		local v = (e :: any)[valueKey] or 0
+		local vs = if formatter then formatter(v) else Util.FormatShortNumber(v)
+		row.Text = `{i}. {e.name} — {vs}`
+		row.Parent = col
+	end
+end
+
+function LeaderboardUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Leaderboard"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(720, 380)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 100, 200); s.Thickness = 2; s.Parent = frame
+
+	local function mkCol(x: number): Frame
+		local col = Instance.new("Frame")
+		col.Position = UDim2.new(x, 8, 0, 8)
+		col.Size = UDim2.new(1/3, -16, 1, -16)
+		col.BackgroundTransparency = 1
+		col.Parent = frame
+		return col
+	end
+	cashCol = mkCol(0)
+	mutCol = mkCol(1/3)
+	thiefCol = mkCol(2/3)
+
+	Remotes.Event(Remotes.Names.LeaderboardUpdate).OnClientEvent:Connect(function(payload)
+		fill(cashCol, "💰 TOP CASH", payload.cash, "cash")
+		fill(mutCol, "🧬 TOP MUTATIONS", payload.mutations, "mutations", function(n) return tostring(n) end)
+		fill(thiefCol, "🥷 TOP THIEVES", payload.thieves, "steals", function(n) return tostring(n) end)
+	end)
+
+	UIController.Register("Leaderboard", frame, "🏆 Top", Color3.fromRGB(255, 100, 200))
+end
+
+return LeaderboardUI
+]=])
+	ensurePath(root, "LevelUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local LevelUI = {}
+
+local headerLabel: TextLabel
+local barFill: Frame
+local barLabel: TextLabel
+local list: ScrollingFrame
+
+local function rebuild(payload: any)
+	headerLabel.Text = `⭐ Level {payload.level}`
+	local pct = math.clamp(payload.xpInLevel / payload.xpPerLevel, 0, 1)
+	barFill.Size = UDim2.fromScale(pct, 1)
+	barLabel.Text = `{Util.FormatShortNumber(payload.xpInLevel)} / {Util.FormatShortNumber(payload.xpPerLevel)} XP to level {payload.level + 1}`
+
+	list:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = list
+
+	for lvl = 1, math.max(20, payload.level + 5) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 32)
+		row.BackgroundColor3 = if lvl <= payload.level then Color3.fromRGB(40, 60, 40) else Color3.fromRGB(40, 40, 55)
+		row.BorderSizePixel = 0
+		row.Parent = list
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = row
+
+		local lbl = Instance.new("TextLabel")
+		lbl.AnchorPoint = Vector2.new(0, 0.5)
+		lbl.Position = UDim2.new(0, 12, 0.5, 0)
+		lbl.Size = UDim2.new(1, -120, 1, -8)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = Enum.Font.GothamBold
+		lbl.TextScaled = true
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.TextColor3 = Color3.fromRGB(220, 220, 230)
+		lbl.Text = `Level {lvl} · reward: {lvl * 500} cash`
+		lbl.Parent = row
+
+		local btn = Instance.new("TextButton")
+		btn.AnchorPoint = Vector2.new(1, 0.5)
+		btn.Position = UDim2.new(1, -10, 0.5, 0)
+		btn.Size = UDim2.fromOffset(96, 26)
+		btn.Font = Enum.Font.GothamBlack
+		btn.TextScaled = true
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BorderSizePixel = 0
+		btn.Parent = row
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
+		if payload.claimed[tostring(lvl)] then
+			btn.Text = "✓"; btn.BackgroundColor3 = Color3.fromRGB(60, 100, 60); btn.AutoButtonColor = false
+		elseif lvl <= payload.level then
+			btn.Text = "CLAIM"; btn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+			btn.MouseButton1Click:Connect(function()
+				Remotes.Event(Remotes.Names.RequestClaimLevelReward):FireServer(lvl)
+			end)
+		else
+			btn.Text = "LOCKED"; btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80); btn.AutoButtonColor = false
+		end
+	end
+end
+
+function LevelUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Levels"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(540, 540)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(120, 200, 255); s.Thickness = 2; s.Parent = frame
+
+	headerLabel = Instance.new("TextLabel")
+	headerLabel.Position = UDim2.fromOffset(12, 8)
+	headerLabel.Size = UDim2.new(1, -24, 0, 30)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Font = Enum.Font.GothamBlack
+	headerLabel.TextScaled = true
+	headerLabel.TextColor3 = Color3.fromRGB(120, 200, 255)
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.Text = "⭐ Level"
+	headerLabel.Parent = frame
+
+	local barBg = Instance.new("Frame")
+	barBg.Position = UDim2.fromOffset(12, 44)
+	barBg.Size = UDim2.new(1, -24, 0, 14)
+	barBg.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	barBg.BorderSizePixel = 0
+	barBg.Parent = frame
+	local bgc = Instance.new("UICorner"); bgc.CornerRadius = UDim.new(0, 6); bgc.Parent = barBg
+	barFill = Instance.new("Frame")
+	barFill.Size = UDim2.fromScale(0, 1)
+	barFill.BackgroundColor3 = Color3.fromRGB(120, 200, 255)
+	barFill.BorderSizePixel = 0
+	barFill.Parent = barBg
+	local bfc = Instance.new("UICorner"); bfc.CornerRadius = UDim.new(0, 6); bfc.Parent = barFill
+
+	barLabel = Instance.new("TextLabel")
+	barLabel.Position = UDim2.fromOffset(12, 62)
+	barLabel.Size = UDim2.new(1, -24, 0, 18)
+	barLabel.BackgroundTransparency = 1
+	barLabel.Font = Enum.Font.Gotham
+	barLabel.TextScaled = true
+	barLabel.TextXAlignment = Enum.TextXAlignment.Left
+	barLabel.TextColor3 = Color3.fromRGB(180, 200, 220)
+	barLabel.Text = ""
+	barLabel.Parent = frame
+
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(12, 88)
+	list.Size = UDim2.new(1, -24, 1, -100)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = frame
+
+	Remotes.Event(Remotes.Names.LevelUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("Levels", frame, "⭐ Lvl", Color3.fromRGB(120, 200, 255))
+end
+
+return LevelUI
+]])
+	ensurePath(root, "LoadingScreen", "ModuleScript", [=[
+--!strict
+--[[
+	LoadingScreen — covers the screen during initial asset/replication load.
+	Shows the game name, a fake loading bar (real load time on Roblox is
+	usually <2s anyway), and most importantly the active redemption codes
+	+ Discord/Group CTAs. First impression frame = highest-attention frame.
+]]
+
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local LoadingScreen = {}
+
+function LoadingScreen.Init()
+	-- Hide Roblox's default loading screen
+	pcall(function() ReplicatedFirst:RemoveDefaultLoadingScreen() end)
+
+	local player = Players.LocalPlayer
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "LoadingScreen"
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 100
+	gui.ResetOnSpawn = false
+	gui.Parent = player:WaitForChild("PlayerGui")
+
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.fromScale(1, 1)
+	bg.BackgroundColor3 = Color3.fromRGB(15, 10, 30)
+	bg.BorderSizePixel = 0
+	bg.Parent = gui
+
+	local title = Instance.new("TextLabel")
+	title.AnchorPoint = Vector2.new(0.5, 0)
+	title.Position = UDim2.new(0.5, 0, 0, 80)
+	title.Size = UDim2.fromOffset(900, 120)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBlack
+	title.TextScaled = true
+	title.TextColor3 = Color3.fromRGB(255, 215, 80)
+	title.Text = "🧠 BRAINROT LAB"
+	title.Parent = bg
+
+	local sub = Instance.new("TextLabel")
+	sub.AnchorPoint = Vector2.new(0.5, 0)
+	sub.Position = UDim2.new(0.5, 0, 0, 200)
+	sub.Size = UDim2.fromOffset(700, 40)
+	sub.BackgroundTransparency = 1
+	sub.Font = Enum.Font.GothamBold
+	sub.TextScaled = true
+	sub.TextColor3 = Color3.fromRGB(255, 100, 200)
+	sub.Text = "Mutation & Infection Tycoon"
+	sub.Parent = bg
+
+	-- Codes panel
+	local codesPanel = Instance.new("Frame")
+	codesPanel.AnchorPoint = Vector2.new(0.5, 0.5)
+	codesPanel.Position = UDim2.fromScale(0.5, 0.5)
+	codesPanel.Size = UDim2.fromOffset(520, 240)
+	codesPanel.BackgroundColor3 = Color3.fromRGB(25, 20, 45)
+	codesPanel.BorderSizePixel = 0
+	codesPanel.Parent = bg
+	local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 12); cc.Parent = codesPanel
+	local cs = Instance.new("UIStroke"); cs.Color = Color3.fromRGB(120, 220, 120); cs.Thickness = 2; cs.Parent = codesPanel
+
+	local codesTitle = Instance.new("TextLabel")
+	codesTitle.Position = UDim2.fromOffset(12, 8)
+	codesTitle.Size = UDim2.new(1, -24, 0, 30)
+	codesTitle.BackgroundTransparency = 1
+	codesTitle.Font = Enum.Font.GothamBlack
+	codesTitle.TextScaled = true
+	codesTitle.TextColor3 = Color3.fromRGB(120, 220, 120)
+	codesTitle.Text = "🎟 ACTIVE CODES (free cash!)"
+	codesTitle.TextXAlignment = Enum.TextXAlignment.Left
+	codesTitle.Parent = codesPanel
+
+	local codeBody = Instance.new("TextLabel")
+	codeBody.Position = UDim2.fromOffset(12, 44)
+	codeBody.Size = UDim2.new(1, -24, 1, -56)
+	codeBody.BackgroundTransparency = 1
+	codeBody.Font = Enum.Font.Gotham
+	codeBody.TextScaled = true
+	codeBody.TextColor3 = Color3.fromRGB(255, 255, 255)
+	codeBody.TextXAlignment = Enum.TextXAlignment.Left
+	codeBody.TextYAlignment = Enum.TextYAlignment.Top
+	codeBody.TextWrapped = true
+	codeBody.Text = "• LAUNCH — 2,500 cash\n• BRAINROT — 1,500 cash\n• SIGMA — rare brainrot egg\n• OUTBREAK — 3 infection bombs\n• MUTATE — free instant mutation"
+	codeBody.Parent = codesPanel
+
+	-- Bottom: bar + CTA
+	local barBg = Instance.new("Frame")
+	barBg.AnchorPoint = Vector2.new(0.5, 1)
+	barBg.Position = UDim2.new(0.5, 0, 1, -80)
+	barBg.Size = UDim2.fromOffset(420, 14)
+	barBg.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+	barBg.BorderSizePixel = 0
+	barBg.Parent = bg
+	local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = barBg
+
+	local barFill = Instance.new("Frame")
+	barFill.Size = UDim2.fromScale(0, 1)
+	barFill.BackgroundColor3 = Color3.fromRGB(255, 100, 200)
+	barFill.BorderSizePixel = 0
+	barFill.Parent = barBg
+	local bfc = Instance.new("UICorner"); bfc.CornerRadius = UDim.new(0, 6); bfc.Parent = barFill
+
+	local cta = Instance.new("TextLabel")
+	cta.AnchorPoint = Vector2.new(0.5, 1)
+	cta.Position = UDim2.new(0.5, 0, 1, -32)
+	cta.Size = UDim2.fromOffset(700, 28)
+	cta.BackgroundTransparency = 1
+	cta.Font = Enum.Font.Gotham
+	cta.TextScaled = true
+	cta.TextColor3 = Color3.fromRGB(200, 200, 220)
+	cta.Text = "Tip: join the group for permanent +25% cash · check 🎟 Codes after spawn"
+	cta.Parent = bg
+
+	local function fade(targetT)
+		local tw = TweenService:Create(bg, TweenInfo.new(0.4), { BackgroundTransparency = targetT })
+		tw:Play()
+		return tw
+	end
+
+	-- Animate bar
+	task.spawn(function()
+		local start = os.clock()
+		while gui.Parent do
+			local elapsed = os.clock() - start
+			barFill.Size = UDim2.fromScale(math.min(1, elapsed / 3), 1)
+			task.wait(0.05)
+			if elapsed > 3 then break end
+		end
+	end)
+
+	-- Wait for game to load, then fade out
+	game.Loaded:Wait()
+	task.wait(1) -- let players read the codes
+	for _, child in ipairs(bg:GetChildren()) do
+		if child:IsA("GuiObject") then
+			TweenService:Create(child, TweenInfo.new(0.4), { BackgroundTransparency = 1, TextTransparency = 1 }):Play()
+		end
+	end
+	fade(1).Completed:Wait()
+	gui:Destroy()
+end
+
+return LoadingScreen
+]=])
+	ensurePath(root, "LuckyWheelUI", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+
+local LuckyWheelUI = {}
+
+local frame: Frame?
+local wheel: Frame?
+local needle: Frame?
+local statusLabel: TextLabel?
+local freeBtn: TextButton?
+local storedBtn: TextButton?
+local buyBtn: TextButton?
+local cachedSegments: { any } = {}
+local cachedPayload: any = nil
+local spinning = false
+
+local function rebuildWheel(segments: { any })
+	if not wheel then return end
+	wheel:ClearAllChildren()
+	cachedSegments = segments
+	local count = #segments
+	if count == 0 then return end
+	local angleStep = 360 / count
+	for i, seg in ipairs(segments) do
+		local sliceContainer = Instance.new("Frame")
+		sliceContainer.AnchorPoint = Vector2.new(0.5, 1)
+		sliceContainer.Position = UDim2.fromScale(0.5, 0.5)
+		sliceContainer.Size = UDim2.fromScale(1, 0.5)
+		sliceContainer.BackgroundTransparency = 1
+		sliceContainer.Rotation = (i - 1) * angleStep - 90
+		sliceContainer.Parent = wheel
+		-- Simulate a pie slice with a colored rectangle clipped by rotation;
+		-- looks reasonable enough for non-image fallback rendering.
+		local block = Instance.new("Frame")
+		block.AnchorPoint = Vector2.new(0.5, 1)
+		block.Position = UDim2.fromScale(0.5, 1)
+		block.Size = UDim2.fromOffset(60, 140)
+		block.BackgroundColor3 = Color3.fromRGB(seg.color[1], seg.color[2], seg.color[3])
+		block.BorderSizePixel = 0
+		block.Parent = sliceContainer
+		local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = block
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromOffset(56, 24)
+		label.Position = UDim2.fromOffset(2, 4)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.TextColor3 = Color3.fromRGB(20, 20, 35)
+		label.TextStrokeTransparency = 0.5
+		label.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+		label.Text = seg.label
+		label.Parent = block
+	end
+end
+
+local function updateStatus(payload: any)
+	cachedPayload = payload
+	if not statusLabel or not freeBtn or not storedBtn then return end
+	if payload.freeReady then
+		statusLabel.Text = "Free spin ready"
+		freeBtn.Text = "FREE SPIN"
+		freeBtn.AutoButtonColor = true
+		freeBtn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+	else
+		statusLabel.Text = string.format("Free spin in %s", Util.SecondsToClock(payload.secondsToFree))
+		freeBtn.Text = "WAIT"
+		freeBtn.AutoButtonColor = false
+		freeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	end
+	storedBtn.Text = string.format("USE SPIN (%d)", payload.spinsAvailable)
+	storedBtn.AutoButtonColor = payload.spinsAvailable > 0
+	storedBtn.BackgroundColor3 = if payload.spinsAvailable > 0 then Color3.fromRGB(120, 80, 200) else Color3.fromRGB(60, 60, 80)
+end
+
+local function spinTo(segmentIndex: number)
+	if not wheel then return end
+	local count = #cachedSegments
+	if count == 0 then return end
+	spinning = true
+	local angleStep = 360 / count
+	local landAngle = (segmentIndex - 1) * angleStep
+	local fullSpins = 4
+	local target = -(fullSpins * 360 + landAngle)
+	local tw = TweenService:Create(wheel, TweenInfo.new(3.0, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		Rotation = wheel.Rotation + target,
+	})
+	tw:Play()
+	tw.Completed:Wait()
+	spinning = false
+end
+
+function LuckyWheelUI.Init(screen: ScreenGui, UIController)
+	frame = Instance.new("Frame")
+	;(frame :: Frame).Name = "Wheel"
+	;(frame :: Frame).AnchorPoint = Vector2.new(0.5, 0.5)
+	;(frame :: Frame).Position = UDim2.fromScale(0.5, 0.5)
+	;(frame :: Frame).Size = UDim2.fromOffset(440, 540)
+	;(frame :: Frame).BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	;(frame :: Frame).BackgroundTransparency = 0.05
+	;(frame :: Frame).BorderSizePixel = 0
+	;(frame :: Frame).Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 2; s.Parent = frame
+
+	local hd = Instance.new("TextLabel")
+	hd.Position = UDim2.fromOffset(12, 8)
+	hd.Size = UDim2.new(1, -24, 0, 32)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextColor3 = Color3.fromRGB(255, 215, 80)
+	hd.TextXAlignment = Enum.TextXAlignment.Left
+	hd.Text = "🎰 Lucky Wheel"
+	hd.Parent = frame
+
+	local wheelContainer = Instance.new("Frame")
+	wheelContainer.AnchorPoint = Vector2.new(0.5, 0)
+	wheelContainer.Position = UDim2.new(0.5, 0, 0, 48)
+	wheelContainer.Size = UDim2.fromOffset(320, 320)
+	wheelContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+	wheelContainer.BorderSizePixel = 0
+	wheelContainer.Parent = frame
+	local wcc = Instance.new("UICorner"); wcc.CornerRadius = UDim.new(1, 0); wcc.Parent = wheelContainer
+
+	wheel = Instance.new("Frame")
+	;(wheel :: Frame).Size = UDim2.fromScale(1, 1)
+	;(wheel :: Frame).BackgroundTransparency = 1
+	;(wheel :: Frame).Parent = wheelContainer
+
+	needle = Instance.new("Frame")
+	;(needle :: Frame).AnchorPoint = Vector2.new(0.5, 0)
+	;(needle :: Frame).Position = UDim2.new(0.5, 0, 0, -10)
+	;(needle :: Frame).Size = UDim2.fromOffset(16, 32)
+	;(needle :: Frame).BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+	;(needle :: Frame).BorderSizePixel = 0
+	;(needle :: Frame).Parent = wheelContainer
+	local nc = Instance.new("UICorner"); nc.CornerRadius = UDim.new(0, 4); nc.Parent = needle
+
+	statusLabel = Instance.new("TextLabel")
+	;(statusLabel :: TextLabel).Position = UDim2.fromOffset(12, 376)
+	;(statusLabel :: TextLabel).Size = UDim2.new(1, -24, 0, 24)
+	;(statusLabel :: TextLabel).BackgroundTransparency = 1
+	;(statusLabel :: TextLabel).Font = Enum.Font.GothamBold
+	;(statusLabel :: TextLabel).TextScaled = true
+	;(statusLabel :: TextLabel).TextColor3 = Color3.fromRGB(220, 220, 230)
+	;(statusLabel :: TextLabel).Text = "Loading..."
+	;(statusLabel :: TextLabel).Parent = frame
+
+	local function mkBtn(x: number, w: number, text: string): TextButton
+		local b = Instance.new("TextButton")
+		b.Position = UDim2.fromOffset(x, 408)
+		b.Size = UDim2.fromOffset(w, 48)
+		b.Font = Enum.Font.GothamBlack
+		b.TextScaled = true
+		b.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+		b.TextColor3 = Color3.fromRGB(255, 255, 255)
+		b.BorderSizePixel = 0
+		b.Text = text
+		b.Parent = frame
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = b
+		return b
+	end
+
+	freeBtn   = mkBtn(12,  200, "FREE SPIN")
+	storedBtn = mkBtn(220, 200, "USE SPIN (0)")
+
+	buyBtn = Instance.new("TextButton")
+	;(buyBtn :: TextButton).Position = UDim2.fromOffset(12, 468)
+	;(buyBtn :: TextButton).Size = UDim2.new(1, -24, 0, 48)
+	;(buyBtn :: TextButton).Font = Enum.Font.GothamBlack
+	;(buyBtn :: TextButton).TextScaled = true
+	;(buyBtn :: TextButton).BackgroundColor3 = Color3.fromRGB(255, 100, 200)
+	;(buyBtn :: TextButton).TextColor3 = Color3.fromRGB(255, 255, 255)
+	;(buyBtn :: TextButton).BorderSizePixel = 0
+	;(buyBtn :: TextButton).Text = "BUY 5 SPINS · 79 R$"
+	;(buyBtn :: TextButton).Parent = frame
+	local pbc = Instance.new("UICorner"); pbc.CornerRadius = UDim.new(0, 8); pbc.Parent = buyBtn
+
+	;(freeBtn :: TextButton).MouseButton1Click:Connect(function()
+		if spinning then return end
+		Remotes.Event(Remotes.Names.RequestWheelSpin):FireServer("free")
+	end)
+	;(storedBtn :: TextButton).MouseButton1Click:Connect(function()
+		if spinning then return end
+		Remotes.Event(Remotes.Names.RequestWheelSpin):FireServer("stored")
+	end)
+	;(buyBtn :: TextButton).MouseButton1Click:Connect(function()
+		Remotes.Event(Remotes.Names.RequestPromptPurchase):FireServer("product", "WheelSpinPack5")
+	end)
+
+	Remotes.Event(Remotes.Names.WheelUpdate).OnClientEvent:Connect(function(payload)
+		rebuildWheel(payload.segments)
+		updateStatus(payload)
+	end)
+
+	Remotes.Event(Remotes.Names.WheelSpinResult).OnClientEvent:Connect(function(result)
+		spinTo(result.segmentIndex)
+	end)
+
+	UIController.Register("Wheel", frame :: Frame, "🎰 Wheel", Color3.fromRGB(255, 215, 80))
+end
+
+return LuckyWheelUI
+]])
+	ensurePath(root, "NextEventUI", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+
+local NextEventUI = {}
+
+-- A small always-visible widget pinned under the HUD showing the next
+-- couple of major engagement moments. Drives anticipation: a player
+-- staring at the screen sees "Wheel free spin in 11:32" and stays.
+-- Updates are driven by remote payloads from server services we
+-- already have (OutbreakUpdate, WheelUpdate, DailyRewardUpdate);
+-- TopOfHour falls out from a math.floor on os.time().
+
+local labels: { [string]: TextLabel } = {}
+
+local state = {
+	outbreakSeconds   = 0,
+	wheelSeconds      = 0,
+	dailyRecovered    = false,
+	dailySecondsLeft  = 0,
+}
+
+local function refresh()
+	if labels.outbreak then
+		labels.outbreak.Text = `🚨 Outbreak: {Util.SecondsToClock(math.max(0, state.outbreakSeconds))}`
+	end
+	if labels.wheel then
+		labels.wheel.Text = `🎰 Wheel: {Util.SecondsToClock(math.max(0, state.wheelSeconds))}`
+	end
+	if labels.hour then
+		local now = os.time()
+		local secondsToHour = 3600 - (now % 3600)
+		labels.hour.Text = `⏰ Top of hour: {Util.SecondsToClock(secondsToHour)}`
+	end
+	if labels.daily then
+		labels.daily.Text = state.dailyRecovered
+			and "🎁 Daily reward: ready!"
+			or `🎁 Daily reward: {Util.SecondsToClock(math.max(0, state.dailySecondsLeft))}`
+	end
+end
+
+function NextEventUI.Init(screen: ScreenGui)
+	local frame = Instance.new("Frame")
+	frame.Name = "NextEvent"
+	frame.AnchorPoint = Vector2.new(0, 0)
+	frame.Position = UDim2.fromOffset(16, 180)  -- below HUD
+	frame.Size = UDim2.fromOffset(280, 108)
+	frame.BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+	frame.BackgroundTransparency = 0.2
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 10); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(120, 200, 255); s.Thickness = 1; s.Parent = frame
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 6); pad.PaddingBottom = UDim.new(0, 6)
+	pad.PaddingLeft = UDim.new(0, 10); pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = frame
+	local list = Instance.new("UIListLayout")
+	list.Padding = UDim.new(0, 2)
+	list.Parent = frame
+
+	local function mkLabel(key: string, color: Color3): TextLabel
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, 0, 0, 22)
+		l.BackgroundTransparency = 1
+		l.Font = Enum.Font.GothamBold
+		l.TextScaled = true
+		l.TextColor3 = color
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.TextStrokeTransparency = 0.7
+		l.Text = ""
+		l.Parent = frame
+		labels[key] = l
+		return l
+	end
+
+	mkLabel("outbreak", Color3.fromRGB(255, 160, 120))
+	mkLabel("wheel",    Color3.fromRGB(255, 215, 100))
+	mkLabel("hour",     Color3.fromRGB(180, 220, 255))
+	mkLabel("daily",    Color3.fromRGB(200, 255, 180))
+
+	Remotes.Event(Remotes.Names.OutbreakUpdate).OnClientEvent:Connect(function(payload)
+		if not payload then return end
+		state.outbreakSeconds = payload.secondsToStart or 0
+		if payload.active then state.outbreakSeconds = -1 * (payload.secondsLeft or 0) end
+		refresh()
+	end)
+
+	Remotes.Event(Remotes.Names.WheelUpdate).OnClientEvent:Connect(function(payload)
+		if not payload then return end
+		state.wheelSeconds = payload.secondsToFree or 0
+		refresh()
+	end)
+
+	Remotes.Event(Remotes.Names.DailyRewardUpdate).OnClientEvent:Connect(function(payload)
+		if not payload then return end
+		state.dailyRecovered = payload.canClaim == true
+		-- canClaim payload doesn't include nextAvailable seconds; fall back to
+		-- "tomorrow at UTC midnight" approximation.
+		if not state.dailyRecovered then
+			local now = os.time()
+			state.dailySecondsLeft = 86400 - (now % 86400)
+		end
+		refresh()
+	end)
+
+	-- Local tick — decrement displayed timers between server pushes so the
+	-- numbers actually move every second.
+	local lastTick = os.clock()
+	RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastTick < 1 then return end
+		local dt = math.floor(now - lastTick)
+		lastTick = now
+		if state.outbreakSeconds > 0 then state.outbreakSeconds -= dt end
+		if state.wheelSeconds > 0 then state.wheelSeconds -= dt end
+		if state.dailySecondsLeft > 0 then state.dailySecondsLeft -= dt end
+		refresh()
+	end)
+
+	refresh()
+end
+
+return NextEventUI
+]])
+	ensurePath(root, "NotificationUI", "ModuleScript", [=[
+--!strict
+--[[
+	NotificationUI — bottom-right toast queue. Drives re-engagement when
+	stolen from / infected (FOMO + revenge mechanic).
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local NotificationUI = {}
+
+local container: Frame
+
+local KIND_COLOR: { [string]: Color3 } = {
+	cash = Color3.fromRGB(255, 215, 80),
+	capture = Color3.fromRGB(120, 220, 120),
+	mutation = Color3.fromRGB(255, 100, 220),
+	error = Color3.fromRGB(255, 100, 100),
+	info = Color3.fromRGB(120, 200, 255),
+	rebirth = Color3.fromRGB(255, 160, 80),
+}
+
+local function toast(payload: any)
+	local color = KIND_COLOR[payload.kind] or Color3.fromRGB(255, 255, 255)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.fromOffset(360, 48)
+	row.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	row.BackgroundTransparency = 0.1
+	row.BorderSizePixel = 0
+	row.Parent = container
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = row
+	local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = 2; s.Parent = row
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.BackgroundTransparency = 1
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextScaled = true
+	lbl.TextColor3 = color
+	lbl.Text = tostring(payload.text)
+	lbl.Parent = row
+	local p = Instance.new("UIPadding")
+	p.PaddingLeft = UDim.new(0, 8); p.PaddingRight = UDim.new(0, 8)
+	p.Parent = lbl
+
+	task.delay(4, function()
+		local tw = TweenService:Create(row, TweenInfo.new(0.4), { BackgroundTransparency = 1 })
+		tw:Play()
+		tw.Completed:Wait()
+		row:Destroy()
+	end)
+end
+
+function NotificationUI.Init(screen: ScreenGui)
+	container = Instance.new("Frame")
+	container.Name = "Toasts"
+	container.AnchorPoint = Vector2.new(1, 1)
+	container.Position = UDim2.new(1, -16, 1, -100)
+	container.Size = UDim2.fromOffset(380, 320)
+	container.BackgroundTransparency = 1
+	container.Parent = screen
+	local list = Instance.new("UIListLayout")
+	list.Padding = UDim.new(0, 6)
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	list.Parent = container
+
+	-- Rate-limit identical toasts: if the same text fires within 750ms of
+	-- the previous identical toast, suppress it. Prevents toast spam from
+	-- burst events (rapid mutations, capture loops).
+	local lastByText: { [string]: number } = {}
+	Remotes.Event(Remotes.Names.Notify).OnClientEvent:Connect(function(payload)
+		if not payload or typeof(payload) ~= "table" then return end
+		local key = tostring(payload.text or "")
+		local now = os.clock()
+		if lastByText[key] and now - lastByText[key] < 0.75 then return end
+		lastByText[key] = now
+		toast(payload)
+	end)
+end
+
+return NotificationUI
+]=])
+	ensurePath(root, "OutbreakUI", "ModuleScript", [=[
+--!strict
+--[[
+	OutbreakUI — top-center banner showing next outbreak countdown or
+	active outbreak alert. Drives FOMO.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local OutbreakUI = {}
+
+function OutbreakUI.Init(screen: ScreenGui)
+	local frame = Instance.new("Frame")
+	frame.Name = "Outbreak"
+	frame.AnchorPoint = Vector2.new(0.5, 0)
+	frame.Position = UDim2.new(0.5, 0, 0, 12)
+	frame.Size = UDim2.fromOffset(440, 56)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.2
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 10); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 120, 80); s.Thickness = 2; s.Parent = frame
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 200, 120)
+	label.Text = "OUTBREAK: -- --"
+	label.Parent = frame
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 10); pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = label
+
+	Remotes.Event(Remotes.Names.OutbreakUpdate).OnClientEvent:Connect(function(payload)
+		if payload.active then
+			label.Text = `🚨 OUTBREAK LIVE @ PLAZA · {Util.SecondsToClock(payload.secondsLeft)} left · {payload.spawnsRemaining} brainrots`
+			label.TextColor3 = Color3.fromRGB(120, 255, 120)
+		else
+			label.Text = `Next Outbreak in {Util.SecondsToClock(payload.secondsToStart)}`
+			label.TextColor3 = Color3.fromRGB(255, 200, 120)
+		end
+	end)
+end
+
+return OutbreakUI
+]=])
+	ensurePath(root, "PatchNotesUI", "ModuleScript", [[
+--!strict
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local PatchNotes = require(Shared.PatchNotes)
+local Config = require(Shared.Config)
+
+local PatchNotesUI = {}
+
+local SEEN_KEY = "BrainrotLab.SeenVersion"
+
+function PatchNotesUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "PatchNotes"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(560, 480)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(200, 200, 255); s.Thickness = 2; s.Parent = frame
+
+	local hd = Instance.new("TextLabel")
+	hd.Position = UDim2.fromOffset(12, 8)
+	hd.Size = UDim2.new(1, -24, 0, 30)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextColor3 = Color3.fromRGB(200, 200, 255)
+	hd.TextXAlignment = Enum.TextXAlignment.Left
+	hd.Text = `📝 What's New · v{Config.GAME_VERSION}`
+	hd.Parent = frame
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Position = UDim2.fromOffset(12, 48)
+	scroll.Size = UDim2.new(1, -24, 1, -60)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 6
+	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.Parent = frame
+	local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 12); layout.Parent = scroll
+
+	for i = #PatchNotes.GetAll(), 1, -1 do
+		local entry = PatchNotes.GetAll()[i]
+		local block = Instance.new("Frame")
+		block.Size = UDim2.new(1, -10, 0, 0)
+		block.AutomaticSize = Enum.AutomaticSize.Y
+		block.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+		block.BorderSizePixel = 0
+		block.Parent = scroll
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = block
+		local bp = Instance.new("UIPadding"); bp.PaddingTop = UDim.new(0, 8); bp.PaddingBottom = UDim.new(0, 8); bp.PaddingLeft = UDim.new(0, 10); bp.PaddingRight = UDim.new(0, 10); bp.Parent = block
+		local bl = Instance.new("UIListLayout"); bl.Padding = UDim.new(0, 4); bl.Parent = block
+
+		local title = Instance.new("TextLabel")
+		title.Size = UDim2.new(1, 0, 0, 24)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextColor3 = Color3.fromRGB(255, 215, 80)
+		title.TextScaled = true
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.Text = `v{entry.version} · {entry.date} — {entry.title}`
+		title.Parent = block
+
+		for _, line in ipairs(entry.highlights) do
+			local l = Instance.new("TextLabel")
+			l.Size = UDim2.new(1, 0, 0, 20)
+			l.BackgroundTransparency = 1
+			l.Font = Enum.Font.Gotham
+			l.TextColor3 = Color3.fromRGB(220, 220, 230)
+			l.TextScaled = true
+			l.TextXAlignment = Enum.TextXAlignment.Left
+			l.Text = "• " .. line
+			l.Parent = block
+		end
+	end
+
+	UIController.Register("PatchNotes", frame, "📝 News", Color3.fromRGB(200, 200, 255))
+
+	-- New-update glow: if local player hasn't seen the current version, flash
+	local lp = Players.LocalPlayer
+	if lp:GetAttribute(SEEN_KEY) ~= Config.GAME_VERSION then
+		task.spawn(function()
+			while lp:GetAttribute(SEEN_KEY) ~= Config.GAME_VERSION do
+				s.Color = Color3.fromRGB(255, 215, 80)
+				task.wait(0.4)
+				s.Color = Color3.fromRGB(200, 200, 255)
+				task.wait(0.4)
+			end
+		end)
+		-- Mark seen when they open it (visible toggle)
+		frame:GetPropertyChangedSignal("Visible"):Connect(function()
+			if frame.Visible then
+				lp:SetAttribute(SEEN_KEY, Config.GAME_VERSION)
+			end
+		end)
+	end
+end
+
+return PatchNotesUI
+]])
+	ensurePath(root, "PetUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local PetUI = {}
+
+local RARITY_COLOR = {
+	Basic = Color3.fromRGB(180, 180, 180),
+	Premium = Color3.fromRGB(120, 200, 255),
+	Legendary = Color3.fromRGB(255, 180, 60),
+	Mythical = Color3.fromRGB(255, 80, 220),
+}
+
+local list: ScrollingFrame
+
+local function rebuild(payload: any)
+	list:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = list
+
+	for _, pet in ipairs(payload) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 56)
+		row.BackgroundColor3 = if pet.equipped then Color3.fromRGB(40, 60, 40) else Color3.fromRGB(40, 40, 55)
+		row.BorderSizePixel = 0
+		row.Parent = list
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+
+		local color = RARITY_COLOR[pet.rarity] or Color3.fromRGB(220, 220, 220)
+		local stroke = Instance.new("UIStroke"); stroke.Color = color; stroke.Thickness = 2; stroke.Parent = row
+
+		local title = Instance.new("TextLabel")
+		title.Position = UDim2.fromOffset(12, 4)
+		title.Size = UDim2.new(1, -120, 0, 26)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.TextColor3 = color
+		title.Text = `{pet.name} [{pet.rarity}]`
+		title.Parent = row
+
+		local sub = Instance.new("TextLabel")
+		sub.Position = UDim2.fromOffset(12, 30)
+		sub.Size = UDim2.new(1, -120, 0, 22)
+		sub.BackgroundTransparency = 1
+		sub.Font = Enum.Font.Gotham
+		sub.TextScaled = true
+		sub.TextXAlignment = Enum.TextXAlignment.Left
+		sub.TextColor3 = Color3.fromRGB(220, 220, 220)
+		sub.Text = pet.tagline
+		sub.Parent = row
+
+		local btn = Instance.new("TextButton")
+		btn.AnchorPoint = Vector2.new(1, 0.5)
+		btn.Position = UDim2.new(1, -10, 0.5, 0)
+		btn.Size = UDim2.fromOffset(96, 40)
+		btn.Font = Enum.Font.GothamBlack
+		btn.TextScaled = true
+		btn.BackgroundColor3 = if pet.equipped then Color3.fromRGB(200, 80, 80) else Color3.fromRGB(80, 200, 120)
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BorderSizePixel = 0
+		btn.Text = if pet.equipped then "UNEQUIP" else "EQUIP"
+		btn.Parent = row
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
+		btn.MouseButton1Click:Connect(function()
+			if pet.equipped then
+				Remotes.Event(Remotes.Names.RequestUnequipPet):FireServer()
+			else
+				Remotes.Event(Remotes.Names.RequestEquipPet):FireServer(pet.uid)
+			end
+		end)
+	end
+
+	if #payload == 0 then
+		local empty = Instance.new("TextLabel")
+		empty.Size = UDim2.new(1, -10, 0, 64)
+		empty.BackgroundTransparency = 1
+		empty.Font = Enum.Font.GothamItalic
+		empty.TextScaled = true
+		empty.TextColor3 = Color3.fromRGB(160, 160, 160)
+		empty.TextWrapped = true
+		empty.Text = "No pets yet — buy a Pet Egg in the Shop."
+		empty.Parent = list
+	end
+end
+
+function PetUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Pets"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(540, 480)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 80, 220); s.Thickness = 2; s.Parent = frame
+
+	local hd = Instance.new("TextLabel")
+	hd.Position = UDim2.fromOffset(12, 8)
+	hd.Size = UDim2.new(1, -24, 0, 32)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextColor3 = Color3.fromRGB(255, 80, 220)
+	hd.TextXAlignment = Enum.TextXAlignment.Left
+	hd.Text = "🐾 Pets"
+	hd.Parent = frame
+
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(12, 48)
+	list.Size = UDim2.new(1, -24, 1, -60)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = frame
+
+	Remotes.Event(Remotes.Names.PetUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("Pets", frame, "🐾 Pets", Color3.fromRGB(255, 80, 220))
+end
+
+return PetUI
+]])
+	ensurePath(root, "PlotUI", "ModuleScript", [=[
+--!strict
+--[[
+	PlotUI — wires up clicks on rival brainrots to the Steal action, and a
+	"target nearest player" Infect button. Also pops a small interaction
+	prompt when the local player walks near a non-owned plot.
+]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local PlotUI = {}
+
+local localPlayer = Players.LocalPlayer
+
+local function findNearestForeignBrainrot(): (Model?, number?)
+	local char = localPlayer.Character
+	if not char then return nil, nil end
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return nil, nil end
+	local plots = Workspace:FindFirstChild("Plots")
+	if not plots then return nil, nil end
+	local bestModel
+	local bestDist = math.huge
+	local bestOwner
+	for _, plot in ipairs(plots:GetChildren()) do
+		for _, child in ipairs(plot:GetChildren()) do
+			if child:IsA("Model") and child.Name:match("^Brainrot_") then
+				local ownerId = child:GetAttribute("OwnerUserId") :: number?
+				if ownerId and ownerId ~= 0 and ownerId ~= localPlayer.UserId then
+					local body = child.PrimaryPart
+					if body then
+						local d = (body.Position - hrp.Position).Magnitude
+						if d < bestDist then
+							bestDist = d
+							bestModel = child
+							bestOwner = ownerId
+						end
+					end
+				end
+			end
+		end
+	end
+	return bestModel, bestOwner
+end
+
+local function findNearestPlayerOwner(): number?
+	local char = localPlayer.Character
+	if not char then return nil end
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return nil end
+	local bestId
+	local bestDist = math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= localPlayer and p.Character then
+			local theirHrp = p.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if theirHrp then
+				local d = (theirHrp.Position - hrp.Position).Magnitude
+				if d < bestDist then
+					bestDist = d
+					bestId = p.UserId
+				end
+			end
+		end
+	end
+	return bestId
+end
+
+function PlotUI.Init(screen: ScreenGui)
+	-- Right-side action buttons. Sized larger on touch devices because mouse
+	-- targets that are fine on desktop become miss-prone on a phone screen.
+	local isTouch = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+	local panelWidth = if isTouch then 220 else 180
+	local panelHeight = if isTouch then 260 else 200
+
+	local panel = Instance.new("Frame")
+	panel.Name = "Actions"
+	panel.AnchorPoint = Vector2.new(1, 0.5)
+	panel.Position = UDim2.new(1, -16, 0.5, 0)
+	panel.Size = UDim2.fromOffset(panelWidth, panelHeight)
+	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	panel.BackgroundTransparency = 0.2
+	panel.BorderSizePixel = 0
+	panel.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 12); c.Parent = panel
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(120, 220, 120); s.Thickness = 2; s.Parent = panel
+	local list = Instance.new("UIListLayout")
+	list.Padding = UDim.new(0, 6)
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	list.VerticalAlignment = Enum.VerticalAlignment.Center
+	list.Parent = panel
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8); pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 8); pad.PaddingRight = UDim.new(0, 8)
+	pad.Parent = panel
+
+	local btnHeight = if isTouch then 64 else 44
+	local function mkBtn(text: string, color: Color3, cb: () -> ()): TextButton
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.new(1, 0, 0, btnHeight)
+		b.Font = Enum.Font.GothamBlack
+		b.TextScaled = true
+		b.BackgroundColor3 = color
+		b.TextColor3 = Color3.fromRGB(255, 255, 255)
+		b.BorderSizePixel = 0
+		b.Text = text
+		b.Parent = panel
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = b
+		b.MouseButton1Click:Connect(cb)
+		return b
+	end
+
+	mkBtn("🥷 STEAL\nnearest", Color3.fromRGB(255, 80, 80), function()
+		local model, ownerId = findNearestForeignBrainrot()
+		if not model or not ownerId then
+			-- toast via local-only fire would be nicer; for simplicity fire a request that'll error-toast
+			return
+		end
+		local uid = model:GetAttribute("BrainrotUid") :: string?
+		if uid then
+			Remotes.Event(Remotes.Names.RequestSteal):FireServer(ownerId, uid)
+		end
+	end)
+
+	mkBtn("💣 INFECT\nnearest", Color3.fromRGB(120, 200, 80), function()
+		local victimId = findNearestPlayerOwner()
+		if victimId then
+			Remotes.Event(Remotes.Names.RequestInfect):FireServer(victimId)
+		end
+	end)
+
+	mkBtn("🎲 CAPTURE", Color3.fromRGB(80, 180, 255), function()
+		Remotes.Event(Remotes.Names.RequestCapture):FireServer()
+	end)
+
+	-- Keybinds for desktop: E = steal, Q = infect, R = capture
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.KeyCode == Enum.KeyCode.E then
+			local model, ownerId = findNearestForeignBrainrot()
+			if model and ownerId then
+				local uid = model:GetAttribute("BrainrotUid") :: string?
+				if uid then
+					Remotes.Event(Remotes.Names.RequestSteal):FireServer(ownerId, uid)
+				end
+			end
+		elseif input.KeyCode == Enum.KeyCode.Q then
+			local victimId = findNearestPlayerOwner()
+			if victimId then
+				Remotes.Event(Remotes.Names.RequestInfect):FireServer(victimId)
+			end
+		elseif input.KeyCode == Enum.KeyCode.R then
+			Remotes.Event(Remotes.Names.RequestCapture):FireServer()
+		end
+	end)
+end
+
+return PlotUI
+]=])
+	ensurePath(root, "QuestUI", "ModuleScript", [[
+--!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+
+local QuestUI = {}
+
+local list: ScrollingFrame
+
+local function rebuild(payload: any)
+	list:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = list
+
+	for _, q in ipairs(payload) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 64)
+		row.BackgroundColor3 = if q.claimed then Color3.fromRGB(40, 60, 40)
+			elseif q.complete then Color3.fromRGB(70, 70, 35)
+			else Color3.fromRGB(40, 40, 55)
+		row.BorderSizePixel = 0
+		row.Parent = list
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+
+		local title = Instance.new("TextLabel")
+		title.Position = UDim2.fromOffset(12, 4)
+		title.Size = UDim2.new(1, -140, 0, 24)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.TextColor3 = if q.complete then Color3.fromRGB(255, 215, 80) else Color3.fromRGB(220, 220, 220)
+		title.Text = q.label
+		title.Parent = row
+
+		local prog = Instance.new("TextLabel")
+		prog.Position = UDim2.fromOffset(12, 30)
+		prog.Size = UDim2.new(1, -140, 0, 28)
+		prog.BackgroundTransparency = 1
+		prog.Font = Enum.Font.Gotham
+		prog.TextScaled = true
+		prog.TextXAlignment = Enum.TextXAlignment.Left
+		prog.TextColor3 = Color3.fromRGB(150, 200, 255)
+		prog.Text = string.format("%s / %s · reward: %d %s",
+			Util.FormatShortNumber(q.progress), Util.FormatShortNumber(q.target),
+			q.rewardAmount, q.rewardKind)
+		prog.Parent = row
+
+		local btn = Instance.new("TextButton")
+		btn.AnchorPoint = Vector2.new(1, 0.5)
+		btn.Position = UDim2.new(1, -10, 0.5, 0)
+		btn.Size = UDim2.fromOffset(110, 48)
+		btn.Font = Enum.Font.GothamBlack
+		btn.TextScaled = true
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BorderSizePixel = 0
+		btn.Parent = row
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
+		if q.claimed then
+			btn.Text = "✓ DONE"; btn.BackgroundColor3 = Color3.fromRGB(60, 100, 60); btn.AutoButtonColor = false
+		elseif q.complete then
+			btn.Text = "CLAIM"; btn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+			btn.MouseButton1Click:Connect(function()
+				Remotes.Event(Remotes.Names.RequestClaimQuest):FireServer(q.id)
+			end)
+		else
+			btn.Text = "DO IT"; btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80); btn.AutoButtonColor = false
+		end
+	end
+end
+
+function QuestUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Quests"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(540, 320)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(150, 200, 255); s.Thickness = 2; s.Parent = frame
+
+	local hd = Instance.new("TextLabel")
+	hd.Position = UDim2.fromOffset(12, 8)
+	hd.Size = UDim2.new(1, -24, 0, 32)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextScaled = true
+	hd.TextXAlignment = Enum.TextXAlignment.Left
+	hd.TextColor3 = Color3.fromRGB(150, 200, 255)
+	hd.Text = "📋 Daily Quests (reset at midnight UTC)"
+	hd.Parent = frame
+
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(12, 48)
+	list.Size = UDim2.new(1, -24, 1, -60)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = frame
+
+	Remotes.Event(Remotes.Names.QuestUpdate).OnClientEvent:Connect(rebuild)
+	UIController.Register("Quests", frame, "📋 Quests", Color3.fromRGB(150, 200, 255))
+end
+
+return QuestUI
+]])
+	ensurePath(root, "ShopUI", "ModuleScript", [=[
+--!strict
+--[[
+	ShopUI — gamepass + dev product storefront. Reads Config so it
+	autopopulates whenever you add a new product.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+
+local ShopUI = {}
+
+local function buildPanel(parent: Frame)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 50); pad.PaddingBottom = UDim.new(0, 12)
+	pad.PaddingLeft = UDim.new(0, 12); pad.PaddingRight = UDim.new(0, 12)
+	pad.Parent = parent
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.AnchorPoint = Vector2.new(0.5, 0)
+	title.Position = UDim2.new(0.5, 0, 0, -42)
+	title.Size = UDim2.fromOffset(400, 36)
+	title.BackgroundTransparency = 1
+	title.Text = "SHOP — fund the chaos"
+	title.Font = Enum.Font.GothamBlack
+	title.TextScaled = true
+	title.TextColor3 = Color3.fromRGB(255, 215, 80)
+	title.Parent = parent
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Name = "Scroll"
+	scroll.Size = UDim2.fromScale(1, 1)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 6
+	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.Parent = parent
+
+	local list = Instance.new("UIListLayout")
+	list.Padding = UDim.new(0, 8)
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Parent = scroll
+
+	local function mkRow(kind: string, key: string, name: string, price: number, subtitle: string?)
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -10, 0, 64)
+		row.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+		row.BorderSizePixel = 0
+		row.Parent = scroll
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
+
+		local label = Instance.new("TextLabel")
+		label.AnchorPoint = Vector2.new(0, 0.5)
+		label.Position = UDim2.new(0, 12, 0.5, 0)
+		label.Size = UDim2.new(1, -150, 1, -10)
+		label.BackgroundTransparency = 1
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextYAlignment = Enum.TextYAlignment.Center
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBold
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+		label.Text = subtitle and `{name}\n{subtitle}` or name
+		label.Parent = row
+
+		local btn = Instance.new("TextButton")
+		btn.AnchorPoint = Vector2.new(1, 0.5)
+		btn.Position = UDim2.new(1, -10, 0.5, 0)
+		btn.Size = UDim2.fromOffset(120, 44)
+		btn.Font = Enum.Font.GothamBlack
+		btn.TextScaled = true
+		btn.BackgroundColor3 = if kind == "gamepass" then Color3.fromRGB(255, 80, 200) else Color3.fromRGB(80, 200, 120)
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BorderSizePixel = 0
+		btn.Text = `R$ {price}`
+		btn.Parent = row
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = btn
+		btn.MouseButton1Click:Connect(function()
+			Remotes.Event(Remotes.Names.RequestPromptPurchase):FireServer(kind, key)
+		end)
+	end
+
+	-- Header: gamepasses
+	local hp = Instance.new("TextLabel")
+	hp.Size = UDim2.new(1, -10, 0, 28)
+	hp.BackgroundTransparency = 1
+	hp.Font = Enum.Font.GothamBlack
+	hp.TextColor3 = Color3.fromRGB(255, 100, 220)
+	hp.TextScaled = true
+	hp.TextXAlignment = Enum.TextXAlignment.Left
+	hp.Text = "GAMEPASSES (one-time, permanent)"
+	hp.Parent = scroll
+	hp.LayoutOrder = 1
+
+	local subtitles: { [string]: string } = {
+		MutationSpeed2x = "2x mutation rolls — see results faster",
+		Cash2x = "All cash income doubled",
+		VIPLab = "Golden plot + partial steal/infection protection",
+		InfectionShield = "Big resistance to infection bombs + 50% steal blocks",
+		LuckyMutations = "Mutation rolls biased toward rare suffixes",
+		TripleCapture = "Capture button gives 3 brainrots per click",
+		RainbowTrail = "Equip a rainbow trail (flex flex flex)",
+		GoldenPlot = "Your lab floor turns gold + glowing sign",
+		PetLucky = "Pet eggs biased toward Legendary/Mythical pets",
+		DecorationPack = "Unlocks premium-tier decorations (Cash Fountain, Apex Brazier, Rainbow Orb)",
+	}
+
+	for key, gp in pairs(Config.GAMEPASSES) do
+		mkRow("gamepass", key, gp.name, gp.price, subtitles[key])
+	end
+
+	local hd = Instance.new("TextLabel")
+	hd.Size = UDim2.new(1, -10, 0, 28)
+	hd.BackgroundTransparency = 1
+	hd.Font = Enum.Font.GothamBlack
+	hd.TextColor3 = Color3.fromRGB(120, 220, 100)
+	hd.TextScaled = true
+	hd.TextXAlignment = Enum.TextXAlignment.Left
+	hd.Text = "DEV PRODUCTS (instant)"
+	hd.LayoutOrder = 99
+	hd.Parent = scroll
+
+	for key, dp in pairs(Config.DEV_PRODUCTS) do
+		mkRow("product", key, dp.name, dp.price, nil)
+	end
+end
+
+function ShopUI.Init(screen: ScreenGui, UIController)
+	local frame = Instance.new("Frame")
+	frame.Name = "Shop"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(520, 520)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 2; s.Parent = frame
+	buildPanel(frame)
+	UIController.Register("Shop", frame, "🛒 Shop", Color3.fromRGB(255, 215, 80))
+end
+
+return ShopUI
+]=])
+	ensurePath(root, "SoundController", "ModuleScript", [=[
+--!strict
+--[[
+	SoundController — registers the SFX library. Asset IDs are placeholders;
+	swap them in Studio (or upload your own audio) for full meme effect.
+	The README lists known meme audio asset IDs that play well here.
+]]
+
+local SoundService = game:GetService("SoundService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local SoundController = {}
+
+local function mkSound(name: string, assetId: string?, volume: number)
+	local s = Instance.new("Sound")
+	s.Name = name
+	s.SoundId = assetId or ""
+	s.Volume = volume
+	s.Parent = SoundService
+end
+
+local function play(name: string)
+	local s = SoundService:FindFirstChild(name) :: Sound?
+	if s then s:Play() end
+end
+
+function SoundController.Init()
+	mkSound("MutationPop", "rbxassetid://6895079853", 0.6) -- generic pop, replaceable
+	mkSound("Capture",     "rbxassetid://5153734667", 0.8)
+	mkSound("Steal",       "rbxassetid://5273593909", 0.9)
+	mkSound("Infect",      "rbxassetid://3120909354", 0.7)
+	mkSound("Outbreak",    "rbxassetid://9120420410", 0.9)
+
+	-- Map server-fired Notify toasts to sound effects.
+	Remotes.Event(Remotes.Names.Notify).OnClientEvent:Connect(function(payload)
+		if not payload or typeof(payload) ~= "table" then return end
+		local kind = payload.kind
+		local text = tostring(payload.text or "")
+		if kind == "mutation" then play("MutationPop")
+		elseif kind == "capture" then
+			if string.find(text, "STOLE") or string.find(text, "Stole") then play("Steal")
+			elseif string.find(text, "Infected") or string.find(text, "infected") then play("Infect")
+			elseif string.find(text, "OUTBREAK") then play("Outbreak")
+			else play("Capture") end
+		elseif kind == "rebirth" then play("MutationPop")
+		end
+	end)
+
+	-- Outbreak start fanfare
+	Remotes.Event(Remotes.Names.OutbreakUpdate).OnClientEvent:Connect(function(payload)
+		if payload and payload.active and payload.secondsLeft and payload.secondsLeft > 175 then
+			play("Outbreak")
+		end
+	end)
+end
+
+return SoundController
+]=])
+	ensurePath(root, "SpectateController", "ModuleScript", [[
+--!strict
+
+local Players           = game:GetService("Players")
+local Workspace         = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local SpectateController = {}
+
+local localPlayer = Players.LocalPlayer
+
+local indicator: TextLabel?
+
+local function release()
+	local cam = Workspace.CurrentCamera
+	if cam and localPlayer.Character then
+		cam.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+	end
+	if indicator then indicator.Visible = false end
+end
+
+local function attach(payload: any)
+	if not payload or not payload.targetUserId then return end
+	local target = Players:GetPlayerByUserId(payload.targetUserId)
+	if not target or not target.Character then return end
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	cam.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid")
+	if indicator then
+		indicator.Text = `👁 Spectating {payload.targetName or target.Name}`
+		indicator.Visible = true
+	end
+end
+
+function SpectateController.Init(screen: ScreenGui)
+	indicator = Instance.new("TextLabel")
+	;(indicator :: TextLabel).AnchorPoint = Vector2.new(0.5, 0)
+	;(indicator :: TextLabel).Position = UDim2.new(0.5, 0, 0, 78)
+	;(indicator :: TextLabel).Size = UDim2.fromOffset(280, 28)
+	;(indicator :: TextLabel).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+	;(indicator :: TextLabel).BackgroundTransparency = 0.2
+	;(indicator :: TextLabel).BorderSizePixel = 0
+	;(indicator :: TextLabel).Font = Enum.Font.GothamBold
+	;(indicator :: TextLabel).TextScaled = true
+	;(indicator :: TextLabel).TextColor3 = Color3.fromRGB(255, 215, 80)
+	;(indicator :: TextLabel).Visible = false
+	;(indicator :: TextLabel).Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = indicator
+
+	Remotes.Event(Remotes.Names.Spectate).OnClientEvent:Connect(function(payload)
+		if payload and payload.kind == "attach" then attach(payload) end
+		if payload and payload.kind == "release" then release() end
+	end)
+end
+
+return SpectateController
+]])
+	ensurePath(root, "TradeUI", "ModuleScript", [=[
+--!strict
+--[[
+	TradeUI — minimal but functional trade window. Two columns (you / them),
+	each showing offered brainrots + cash. Click an inventory entry to add
+	from your side, click an offer entry to remove. Confirm button changes
+	color on commit; either-side edit un-confirms both.
+
+	Also handles incoming invite prompts and provides a "Send invite to
+	nearest player" button on the trade button row.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util = require(Shared.Util)
+local BrainrotData = require(Shared.BrainrotData)
+local MutationData = require(Shared.MutationData)
+
+local TradeUI = {}
+
+local localPlayer = Players.LocalPlayer
+
+local frame: Frame
+local headerLabel: TextLabel
+local sideAFrame: Frame
+local sideBFrame: Frame
+local cashInputA: TextBox
+local confirmABtn: TextButton
+local sideALabel: TextLabel
+local sideBLabel: TextLabel
+local inventoryList: ScrollingFrame
+
+local latestInventory: any = { inventory = {}, capacity = 0, max = 200 }
+local latestTrade: any = nil
+
+local function brainrotDisplay(b: any): string
+	local def = BrainrotData.Get(b.speciesId)
+	local display = def and def.displayName or "?"
+	for _, mutId in ipairs(b.mutations) do
+		local m = MutationData.Get(mutId)
+		if m then display = `{m.suffix} {display}` end
+	end
+	return display .. ` [T{b.mutationTier}]`
+end
+
+local function renderOfferList(parent: Frame, uids: { string }, sourcePlayer: Player?)
+	for _, c in ipairs(parent:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	local layout = parent:FindFirstChildOfClass("UIListLayout")
+	if not layout then
+		layout = Instance.new("UIListLayout")
+		layout.Padding = UDim.new(0, 4)
+		layout.Parent = parent
+	end
+
+	for _, uid in ipairs(uids) do
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, -6, 0, 28)
+		row.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+		row.BorderSizePixel = 0
+		row.Parent = parent
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 4); rc.Parent = row
+
+		-- We don't have rich data on the other side's offer, so just show uid as a placeholder.
+		-- For our own side, look up from latestInventory.
+		local text = `· {string.sub(uid, 1, 8)}`
+		if sourcePlayer == localPlayer then
+			for _, b in ipairs(latestInventory.inventory) do
+				if b.uid == uid then text = "· " .. brainrotDisplay(b); break end
+			end
+		end
+
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.fromScale(1, 1)
+		lbl.BackgroundTransparency = 1
+		lbl.Font = Enum.Font.Gotham
+		lbl.TextScaled = true
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+		lbl.Text = text
+		lbl.Parent = row
+		local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 6); pad.Parent = lbl
+
+		if sourcePlayer == localPlayer then
+			row.MouseEnter:Connect(function() row.BackgroundColor3 = Color3.fromRGB(80, 50, 70) end)
+			row.MouseLeave:Connect(function() row.BackgroundColor3 = Color3.fromRGB(50, 50, 70) end)
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.fromScale(1, 1)
+			btn.BackgroundTransparency = 1
+			btn.Text = ""
+			btn.Parent = row
+			btn.MouseButton1Click:Connect(function()
+				Remotes.Event(Remotes.Names.RequestTradeRemoveBrainrot):FireServer(uid)
+			end)
+		end
+	end
+end
+
+local function rebuildTrade(payload: any)
+	if payload.cancelled then
+		latestTrade = nil
+		headerLabel.Text = "No active trade · click an inventory entry below after pressing TRADE (T)"
+		renderOfferList(sideAFrame, {}, localPlayer)
+		renderOfferList(sideBFrame, {}, nil)
+		sideALabel.Text = "You"
+		sideBLabel.Text = "Them"
+		confirmABtn.Text = "Send trade invite (T near player)"
+		confirmABtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+		confirmABtn.AutoButtonColor = false
+		return
+	end
+	latestTrade = payload
+	local mySide, theirSide
+	local theirUserId
+	if payload.a.userId == localPlayer.UserId then
+		mySide, theirSide = payload.a, payload.b
+		theirUserId = payload.b.userId
+	else
+		mySide, theirSide = payload.b, payload.a
+		theirUserId = payload.a.userId
+	end
+	local theirPlayer = Players:GetPlayerByUserId(theirUserId)
+	headerLabel.Text = `Trading with {(theirPlayer and theirPlayer.DisplayName) or "?"} · confirm twice to commit`
+	sideALabel.Text = `You · {Util.FormatShortNumber(mySide.cash)} cash` .. (mySide.confirmed and " ✓" or "")
+	sideBLabel.Text = `{(theirPlayer and theirPlayer.DisplayName) or "?"} · {Util.FormatShortNumber(theirSide.cash)} cash` .. (theirSide.confirmed and " ✓" or "")
+	renderOfferList(sideAFrame, mySide.brainrotUids, localPlayer)
+	renderOfferList(sideBFrame, theirSide.brainrotUids, nil)
+	confirmABtn.Text = mySide.confirmed and "✓ CONFIRMED" or "CONFIRM"
+	confirmABtn.BackgroundColor3 = mySide.confirmed and Color3.fromRGB(60, 140, 60) or Color3.fromRGB(80, 200, 120)
+	confirmABtn.AutoButtonColor = true
+end
+
+local function rebuildInventory(payload: any)
+	latestInventory = payload
+	inventoryList:ClearAllChildren()
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = inventoryList
+	for _, b in ipairs(payload.inventory) do
+		local row = Instance.new("TextButton")
+		row.Size = UDim2.new(1, -6, 0, 28)
+		row.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+		row.BorderSizePixel = 0
+		row.Text = "+ " .. brainrotDisplay(b)
+		row.Font = Enum.Font.Gotham
+		row.TextScaled = true
+		row.TextXAlignment = Enum.TextXAlignment.Left
+		row.TextColor3 = Color3.fromRGB(240, 240, 240)
+		row.AutoButtonColor = true
+		row.Parent = inventoryList
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 4); rc.Parent = row
+		local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 6); pad.Parent = row
+		row.MouseButton1Click:Connect(function()
+			if latestTrade then
+				Remotes.Event(Remotes.Names.RequestTradeAddBrainrot):FireServer(b.uid)
+			end
+		end)
+	end
+end
+
+function TradeUI.Init(screen: ScreenGui, UIController)
+	frame = Instance.new("Frame")
+	frame.Name = "Trade"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(720, 460)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 180, 80); s.Thickness = 2; s.Parent = frame
+
+	headerLabel = Instance.new("TextLabel")
+	headerLabel.Position = UDim2.fromOffset(12, 8)
+	headerLabel.Size = UDim2.new(1, -24, 0, 28)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Font = Enum.Font.GothamBold
+	headerLabel.TextScaled = true
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
+	headerLabel.Text = "Trade"
+	headerLabel.Parent = frame
+
+	sideALabel = Instance.new("TextLabel")
+	sideALabel.Position = UDim2.fromOffset(12, 44)
+	sideALabel.Size = UDim2.fromOffset(330, 24)
+	sideALabel.BackgroundTransparency = 1
+	sideALabel.Font = Enum.Font.GothamBlack
+	sideALabel.TextScaled = true
+	sideALabel.TextXAlignment = Enum.TextXAlignment.Left
+	sideALabel.TextColor3 = Color3.fromRGB(120, 220, 120)
+	sideALabel.Text = "You"
+	sideALabel.Parent = frame
+
+	sideAFrame = Instance.new("Frame")
+	sideAFrame.Position = UDim2.fromOffset(12, 72)
+	sideAFrame.Size = UDim2.fromOffset(330, 160)
+	sideAFrame.BackgroundColor3 = Color3.fromRGB(30, 40, 30)
+	sideAFrame.BorderSizePixel = 0
+	sideAFrame.Parent = frame
+	local sac = Instance.new("UICorner"); sac.CornerRadius = UDim.new(0, 8); sac.Parent = sideAFrame
+	local sap = Instance.new("UIPadding"); sap.PaddingTop = UDim.new(0, 4); sap.PaddingLeft = UDim.new(0, 4); sap.Parent = sideAFrame
+
+	sideBLabel = Instance.new("TextLabel")
+	sideBLabel.Position = UDim2.fromOffset(360, 44)
+	sideBLabel.Size = UDim2.fromOffset(330, 24)
+	sideBLabel.BackgroundTransparency = 1
+	sideBLabel.Font = Enum.Font.GothamBlack
+	sideBLabel.TextScaled = true
+	sideBLabel.TextXAlignment = Enum.TextXAlignment.Left
+	sideBLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	sideBLabel.Text = "Them"
+	sideBLabel.Parent = frame
+
+	sideBFrame = Instance.new("Frame")
+	sideBFrame.Position = UDim2.fromOffset(360, 72)
+	sideBFrame.Size = UDim2.fromOffset(330, 160)
+	sideBFrame.BackgroundColor3 = Color3.fromRGB(40, 30, 30)
+	sideBFrame.BorderSizePixel = 0
+	sideBFrame.Parent = frame
+	local sbc = Instance.new("UICorner"); sbc.CornerRadius = UDim.new(0, 8); sbc.Parent = sideBFrame
+	local sbp = Instance.new("UIPadding"); sbp.PaddingTop = UDim.new(0, 4); sbp.PaddingLeft = UDim.new(0, 4); sbp.Parent = sideBFrame
+
+	cashInputA = Instance.new("TextBox")
+	cashInputA.Position = UDim2.fromOffset(12, 240)
+	cashInputA.Size = UDim2.fromOffset(220, 32)
+	cashInputA.Font = Enum.Font.GothamBold
+	cashInputA.TextScaled = true
+	cashInputA.PlaceholderText = "Your cash offer…"
+	cashInputA.Text = ""
+	cashInputA.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	cashInputA.TextColor3 = Color3.fromRGB(255, 215, 80)
+	cashInputA.ClearTextOnFocus = false
+	cashInputA.Parent = frame
+	local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(0, 6); ic.Parent = cashInputA
+	cashInputA.FocusLost:Connect(function()
+		local n = tonumber(cashInputA.Text) or 0
+		Remotes.Event(Remotes.Names.RequestTradeSetCash):FireServer(n)
+	end)
+
+	confirmABtn = Instance.new("TextButton")
+	confirmABtn.Position = UDim2.fromOffset(240, 240)
+	confirmABtn.Size = UDim2.fromOffset(220, 32)
+	confirmABtn.Font = Enum.Font.GothamBlack
+	confirmABtn.TextScaled = true
+	confirmABtn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+	confirmABtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	confirmABtn.BorderSizePixel = 0
+	confirmABtn.Text = "CONFIRM"
+	confirmABtn.Parent = frame
+	local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 6); cc.Parent = confirmABtn
+	confirmABtn.MouseButton1Click:Connect(function()
+		if latestTrade then
+			Remotes.Event(Remotes.Names.RequestTradeConfirm):FireServer()
+		else
+			-- send invite to nearest player
+			local nearest
+			local char = localPlayer.Character
+			if not char then return end
+			local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not hrp then return end
+			local bestDist = math.huge
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= localPlayer and p.Character then
+					local ohrp = p.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+					if ohrp then
+						local d = (ohrp.Position - hrp.Position).Magnitude
+						if d < bestDist then bestDist = d; nearest = p end
+					end
+				end
+			end
+			if nearest then
+				Remotes.Event(Remotes.Names.RequestTradeInvite):FireServer(nearest.UserId)
+			end
+		end
+	end)
+
+	local cancelBtn = Instance.new("TextButton")
+	cancelBtn.Position = UDim2.fromOffset(470, 240)
+	cancelBtn.Size = UDim2.fromOffset(220, 32)
+	cancelBtn.Font = Enum.Font.GothamBold
+	cancelBtn.TextScaled = true
+	cancelBtn.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
+	cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	cancelBtn.BorderSizePixel = 0
+	cancelBtn.Text = "CANCEL TRADE"
+	cancelBtn.Parent = frame
+	local cbc = Instance.new("UICorner"); cbc.CornerRadius = UDim.new(0, 6); cbc.Parent = cancelBtn
+	cancelBtn.MouseButton1Click:Connect(function()
+		Remotes.Event(Remotes.Names.RequestTradeCancel):FireServer()
+	end)
+
+	local invHd = Instance.new("TextLabel")
+	invHd.Position = UDim2.fromOffset(12, 284)
+	invHd.Size = UDim2.new(1, -24, 0, 22)
+	invHd.BackgroundTransparency = 1
+	invHd.Font = Enum.Font.GothamBold
+	invHd.TextScaled = true
+	invHd.TextXAlignment = Enum.TextXAlignment.Left
+	invHd.TextColor3 = Color3.fromRGB(180, 180, 200)
+	invHd.Text = "Your inventory — click to add to offer"
+	invHd.Parent = frame
+
+	inventoryList = Instance.new("ScrollingFrame")
+	inventoryList.Position = UDim2.fromOffset(12, 308)
+	inventoryList.Size = UDim2.new(1, -24, 0, 140)
+	inventoryList.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+	inventoryList.BackgroundTransparency = 0.3
+	inventoryList.BorderSizePixel = 0
+	inventoryList.ScrollBarThickness = 6
+	inventoryList.CanvasSize = UDim2.new(0, 0, 0, 0)
+	inventoryList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	inventoryList.Parent = frame
+	local invc = Instance.new("UICorner"); invc.CornerRadius = UDim.new(0, 8); invc.Parent = inventoryList
+
+	Remotes.Event(Remotes.Names.TradeUpdate).OnClientEvent:Connect(rebuildTrade)
+	Remotes.Event(Remotes.Names.InventoryUpdate).OnClientEvent:Connect(rebuildInventory)
+
+	-- Invite popup
+	Remotes.Event(Remotes.Names.TradeInvite).OnClientEvent:Connect(function(invite)
+		local popup = Instance.new("Frame")
+		popup.AnchorPoint = Vector2.new(0.5, 0)
+		popup.Position = UDim2.new(0.5, 0, 0, 80)
+		popup.Size = UDim2.fromOffset(420, 80)
+		popup.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+		popup.BackgroundTransparency = 0.1
+		popup.Parent = screen
+		local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 10); pc.Parent = popup
+		local ps = Instance.new("UIStroke"); ps.Color = Color3.fromRGB(255, 180, 80); ps.Thickness = 2; ps.Parent = popup
+		local label = Instance.new("TextLabel")
+		label.Position = UDim2.fromOffset(10, 6)
+		label.Size = UDim2.new(1, -20, 0, 24)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.TextColor3 = Color3.fromRGB(255, 215, 80)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Text = `{invite.fromName} wants to trade`
+		label.Parent = popup
+		local acc = Instance.new("TextButton")
+		acc.Position = UDim2.fromOffset(10, 36)
+		acc.Size = UDim2.fromOffset(190, 36)
+		acc.Font = Enum.Font.GothamBlack
+		acc.TextScaled = true
+		acc.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+		acc.TextColor3 = Color3.fromRGB(255, 255, 255)
+		acc.BorderSizePixel = 0
+		acc.Text = "ACCEPT"
+		acc.Parent = popup
+		local acc_c = Instance.new("UICorner"); acc_c.CornerRadius = UDim.new(0, 6); acc_c.Parent = acc
+		local dec = Instance.new("TextButton")
+		dec.Position = UDim2.fromOffset(210, 36)
+		dec.Size = UDim2.fromOffset(190, 36)
+		dec.Font = Enum.Font.GothamBlack
+		dec.TextScaled = true
+		dec.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
+		dec.TextColor3 = Color3.fromRGB(255, 255, 255)
+		dec.BorderSizePixel = 0
+		dec.Text = "DECLINE"
+		dec.Parent = popup
+		local dec_c = Instance.new("UICorner"); dec_c.CornerRadius = UDim.new(0, 6); dec_c.Parent = dec
+		acc.MouseButton1Click:Connect(function()
+			Remotes.Event(Remotes.Names.RequestTradeAccept):FireServer()
+			popup:Destroy()
+			UIController.ToggleScreen("Trade")
+		end)
+		dec.MouseButton1Click:Connect(function()
+			Remotes.Event(Remotes.Names.RequestTradeDecline):FireServer()
+			popup:Destroy()
+		end)
+		task.delay(invite.ttl or 30, function() if popup.Parent then popup:Destroy() end end)
+	end)
+
+	UIController.Register("Trade", frame, "🤝 Trade", Color3.fromRGB(255, 180, 80))
+
+	rebuildTrade({ cancelled = true })
+end
+
+return TradeUI
+]=])
+	ensurePath(root, "TutorialUI", "ModuleScript", [=[
+--!strict
+--[[
+	TutorialUI — a 6-step floating overlay shown only on first session.
+	Critical for D1 conversion: tells the player exactly which buttons to
+	press in the first 90 seconds so they reach the "mutation moment"
+	before they bounce. This is the single biggest delta on lifetime
+	revenue for free-to-play games.
+
+	State (whether the tutorial completed) is per-device via the
+	per-player attribute "TutorialDone" we set on first finish — preserved
+	via a tiny in-script saved key on the local player so it doesn't run
+	every join. Server-side persistence isn't needed for this UX.
+]]
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local TutorialUI = {}
+
+type Step = {
+	title: string,
+	body: string,
+}
+
+local STEPS: { Step } = {
+	{ title="Welcome to BRAINROT LAB",   body="Your lab is the dark plot. A starter brainrot is already on it, generating cash." },
+	{ title="Capture more",              body="Step on the green capture pad on your plot (or press R) — costs cash, gives a random brainrot." },
+	{ title="Watch them mutate",         body="Every ~90s a brainrot rolls a mutation: new color, scale, suffix, and FX. Higher tier = more cash." },
+	{ title="Raid rivals",               body="Walk to another player's plot and press E near one of their brainrots — STEAL it." },
+	{ title="Sabotage them",             body="Press Q near a rival to throw an INFECTION BOMB — slashes their income for 3 minutes." },
+	{ title="Rebirth + Shop",            body="Click REBIRTH on the HUD for permanent multipliers. Open the Shop for gamepasses. Drop codes in 🎟 Codes." },
+}
+
+local localPlayer = Players.LocalPlayer
+local DONE_KEY = "BrainrotLab.TutorialDone.v1"
+
+local function alreadyDone(): boolean
+	local attr = localPlayer:GetAttribute(DONE_KEY)
+	return attr == true
+end
+
+local function markDone()
+	localPlayer:SetAttribute(DONE_KEY, true)
+end
+
+function TutorialUI.Init(screen: ScreenGui)
+	if alreadyDone() then return end
+
+	local frame = Instance.new("Frame")
+	frame.Name = "Tutorial"
+	frame.AnchorPoint = Vector2.new(0.5, 1)
+	frame.Position = UDim2.new(0.5, 0, 1, -84)
+	frame.Size = UDim2.fromOffset(560, 140)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	frame.BackgroundTransparency = 0.1
+	frame.BorderSizePixel = 0
+	frame.Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 14); c.Parent = frame
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255, 215, 80); s.Thickness = 2; s.Parent = frame
+
+	local title = Instance.new("TextLabel")
+	title.Position = UDim2.fromOffset(16, 8)
+	title.Size = UDim2.new(1, -32, 0, 30)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBlack
+	title.TextScaled = true
+	title.TextColor3 = Color3.fromRGB(255, 215, 80)
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Text = ""
+	title.Parent = frame
+
+	local body = Instance.new("TextLabel")
+	body.Position = UDim2.fromOffset(16, 42)
+	body.Size = UDim2.new(1, -32, 0, 56)
+	body.BackgroundTransparency = 1
+	body.Font = Enum.Font.Gotham
+	body.TextScaled = true
+	body.TextWrapped = true
+	body.TextColor3 = Color3.fromRGB(220, 220, 230)
+	body.TextXAlignment = Enum.TextXAlignment.Left
+	body.TextYAlignment = Enum.TextYAlignment.Top
+	body.Text = ""
+	body.Parent = frame
+
+	local stepLabel = Instance.new("TextLabel")
+	stepLabel.AnchorPoint = Vector2.new(0, 1)
+	stepLabel.Position = UDim2.new(0, 16, 1, -8)
+	stepLabel.Size = UDim2.fromOffset(120, 24)
+	stepLabel.BackgroundTransparency = 1
+	stepLabel.Font = Enum.Font.GothamBold
+	stepLabel.TextScaled = true
+	stepLabel.TextColor3 = Color3.fromRGB(160, 160, 180)
+	stepLabel.TextXAlignment = Enum.TextXAlignment.Left
+	stepLabel.Parent = frame
+
+	local nextBtn = Instance.new("TextButton")
+	nextBtn.AnchorPoint = Vector2.new(1, 1)
+	nextBtn.Position = UDim2.new(1, -16, 1, -8)
+	nextBtn.Size = UDim2.fromOffset(120, 32)
+	nextBtn.Font = Enum.Font.GothamBlack
+	nextBtn.TextScaled = true
+	nextBtn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+	nextBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	nextBtn.BorderSizePixel = 0
+	nextBtn.Text = "NEXT ▶"
+	nextBtn.Parent = frame
+	local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = nextBtn
+
+	local skipBtn = Instance.new("TextButton")
+	skipBtn.AnchorPoint = Vector2.new(1, 1)
+	skipBtn.Position = UDim2.new(1, -144, 1, -8)
+	skipBtn.Size = UDim2.fromOffset(70, 32)
+	skipBtn.Font = Enum.Font.Gotham
+	skipBtn.TextScaled = true
+	skipBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	skipBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+	skipBtn.BorderSizePixel = 0
+	skipBtn.Text = "Skip"
+	skipBtn.Parent = frame
+	local sbc = Instance.new("UICorner"); sbc.CornerRadius = UDim.new(0, 6); sbc.Parent = skipBtn
+
+	local idx = 1
+	local function show(i: number)
+		local step = STEPS[i]
+		title.Text = step.title
+		body.Text = step.body
+		stepLabel.Text = `{i}/{#STEPS}`
+		nextBtn.Text = if i == #STEPS then "DONE ✓" else "NEXT ▶"
+	end
+	show(idx)
+
+	local closed = false
+	local function close()
+		if closed then return end
+		closed = true
+		markDone()
+		local tw = TweenService:Create(frame, TweenInfo.new(0.25), {
+			BackgroundTransparency = 1,
+			Position = frame.Position + UDim2.fromOffset(0, 20),
+		})
+		tw:Play()
+		tw.Completed:Wait()
+		frame:Destroy()
+	end
+
+	nextBtn.MouseButton1Click:Connect(function()
+		if idx >= #STEPS then close() else idx += 1; show(idx) end
+	end)
+	skipBtn.MouseButton1Click:Connect(close)
+end
+
+return TutorialUI
+]=])
+	ensurePath(root, "UIController", "ModuleScript", [=[
+--!strict
+--[[
+	UIController — shared toggle bar + screen registration. Each panel
+	registers via Register(name, frame) and is opened by ToggleScreen(name).
+]]
+
+local UIController = {}
+
+local screens: { [string]: Frame } = {}
+local screenButtons: { [string]: TextButton } = {}
+local activeScreen: string? = nil
+local toggleBar: Frame? = nil
+
+local function applyButtonStyle(btn: TextButton, active: boolean)
+	btn.BackgroundColor3 = if active then Color3.fromRGB(255, 80, 200) else Color3.fromRGB(40, 40, 60)
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+end
+
+-- Mobile-aware: keep panels inside the viewport. Adds a UISizeConstraint
+-- + UIScale so a 720×460 trade window on a phone shrinks instead of clipping.
+local function applyResponsiveSizing(frame: Frame)
+	-- Cap max size to 90% of viewport
+	local sizeConstraint = Instance.new("UISizeConstraint")
+	sizeConstraint.MaxSize = Vector2.new(1200, 800)
+	sizeConstraint.MinSize = Vector2.new(200, 120)
+	sizeConstraint.Parent = frame
+
+	-- Auto-shrink on small screens via UIScale
+	local scale = Instance.new("UIScale")
+	scale.Scale = 1
+	scale.Parent = frame
+
+	local Players = game:GetService("Players")
+	local cam = workspace.CurrentCamera
+	local function update()
+		if not cam then return end
+		local vs = cam.ViewportSize
+		-- Shrink if either dimension exceeds 85% of the viewport
+		local sx = (vs.X * 0.92) / frame.AbsoluteSize.X
+		local sy = (vs.Y * 0.78) / frame.AbsoluteSize.Y
+		scale.Scale = math.clamp(math.min(sx, sy, 1), 0.55, 1)
+	end
+	frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(update)
+	if cam then cam:GetPropertyChangedSignal("ViewportSize"):Connect(update) end
+	task.defer(update)
+	local _ = Players
+end
+
+function UIController.Register(name: string, frame: Frame, label: string, color: Color3?)
+	screens[name] = frame
+	frame.Visible = false
+	applyResponsiveSizing(frame)
+
+	if toggleBar then
+		local btn = Instance.new("TextButton")
+		btn.Name = name .. "Btn"
+		btn.Size = UDim2.fromOffset(120, 48)
+		btn.Text = label
+		btn.Font = Enum.Font.GothamBold
+		btn.TextScaled = true
+		btn.BorderSizePixel = 0
+		btn.AutoButtonColor = true
+		applyButtonStyle(btn, false)
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = color or Color3.fromRGB(255, 80, 200)
+		stroke.Thickness = 2
+		stroke.Parent = btn
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = btn
+		btn.Parent = toggleBar
+		btn.MouseButton1Click:Connect(function()
+			UIController.ToggleScreen(name)
+		end)
+		screenButtons[name] = btn
+	end
+end
+
+function UIController.ToggleScreen(name: string)
+	if activeScreen == name then
+		screens[name].Visible = false
+		applyButtonStyle(screenButtons[name], false)
+		activeScreen = nil
+		return
+	end
+	if activeScreen and screens[activeScreen] then
+		screens[activeScreen].Visible = false
+		applyButtonStyle(screenButtons[activeScreen], false)
+	end
+	if screens[name] then
+		screens[name].Visible = true
+		applyButtonStyle(screenButtons[name], true)
+		activeScreen = name
+	end
+end
+
+function UIController.CloseAll()
+	if activeScreen and screens[activeScreen] then
+		screens[activeScreen].Visible = false
+		applyButtonStyle(screenButtons[activeScreen], false)
+		activeScreen = nil
+	end
+end
+
+function UIController.Init(screen: ScreenGui)
+	local bar = Instance.new("Frame")
+	bar.Name = "ToggleBar"
+	bar.AnchorPoint = Vector2.new(0.5, 1)
+	bar.Position = UDim2.new(0.5, 0, 1, -16)
+	bar.Size = UDim2.fromOffset(820, 60)
+	bar.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+	bar.BackgroundTransparency = 0.25
+	bar.BorderSizePixel = 0
+	bar.Parent = screen
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 14)
+	corner.Parent = bar
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 8)
+	pad.PaddingRight = UDim.new(0, 8)
+	pad.PaddingTop = UDim.new(0, 6)
+	pad.PaddingBottom = UDim.new(0, 6)
+	pad.Parent = bar
+	local list = Instance.new("UIListLayout")
+	list.FillDirection = Enum.FillDirection.Horizontal
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	list.VerticalAlignment = Enum.VerticalAlignment.Center
+	list.Padding = UDim.new(0, 6)
+	list.Parent = bar
+	toggleBar = bar
+end
+
+return UIController
+]=])
+	ensurePath(root, "WelcomeOfferUI", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+
+local WelcomeOfferUI = {}
+
+function WelcomeOfferUI.Init(screen: ScreenGui)
+	Remotes.Event(Remotes.Names.WelcomeOffer).OnClientEvent:Connect(function(payload)
+		if not payload or payload.kind ~= "show" then return end
+
+		local existing = screen:FindFirstChild("WelcomeOffer")
+		if existing then existing:Destroy() end
+
+		local backdrop = Instance.new("Frame")
+		backdrop.Name = "WelcomeOffer"
+		backdrop.Size = UDim2.fromScale(1, 1)
+		backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		backdrop.BackgroundTransparency = 0.4
+		backdrop.BorderSizePixel = 0
+		backdrop.Parent = screen
+
+		local frame = Instance.new("Frame")
+		frame.AnchorPoint = Vector2.new(0.5, 0.5)
+		frame.Position = UDim2.fromScale(0.5, 0.5)
+		frame.Size = UDim2.fromOffset(420, 320)
+		frame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+		frame.BorderSizePixel = 0
+		frame.Parent = backdrop
+		local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(0, 16); fc.Parent = frame
+		local fs = Instance.new("UIStroke"); fs.Color = Color3.fromRGB(255, 215, 80); fs.Thickness = 3; fs.Parent = frame
+
+		local ribbon = Instance.new("TextLabel")
+		ribbon.AnchorPoint = Vector2.new(0.5, 0)
+		ribbon.Position = UDim2.new(0.5, 0, 0, -16)
+		ribbon.Size = UDim2.fromOffset(180, 32)
+		ribbon.BackgroundColor3 = Color3.fromRGB(255, 80, 200)
+		ribbon.Font = Enum.Font.GothamBlack
+		ribbon.TextScaled = true
+		ribbon.TextColor3 = Color3.fromRGB(255, 255, 255)
+		ribbon.Text = "STARTER OFFER"
+		ribbon.Parent = frame
+		local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = ribbon
+
+		local title = Instance.new("TextLabel")
+		title.Position = UDim2.fromOffset(20, 30)
+		title.Size = UDim2.new(1, -40, 0, 48)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextWrapped = true
+		title.TextColor3 = Color3.fromRGB(255, 215, 80)
+		title.Text = payload.title or "Welcome Offer"
+		title.Parent = frame
+
+		local body = Instance.new("TextLabel")
+		body.Position = UDim2.fromOffset(20, 86)
+		body.Size = UDim2.new(1, -40, 0, 112)
+		body.BackgroundTransparency = 1
+		body.Font = Enum.Font.Gotham
+		body.TextScaled = true
+		body.TextWrapped = true
+		body.TextYAlignment = Enum.TextYAlignment.Top
+		body.TextColor3 = Color3.fromRGB(220, 220, 230)
+		body.Text = payload.body or ""
+		body.Parent = frame
+
+		local timer = Instance.new("TextLabel")
+		timer.Position = UDim2.fromOffset(20, 200)
+		timer.Size = UDim2.new(1, -40, 0, 22)
+		timer.BackgroundTransparency = 1
+		timer.Font = Enum.Font.GothamBold
+		timer.TextScaled = true
+		timer.TextColor3 = Color3.fromRGB(255, 120, 120)
+		timer.Text = ""
+		timer.Parent = frame
+
+		local buy = Instance.new("TextButton")
+		buy.Position = UDim2.fromOffset(20, 232)
+		buy.Size = UDim2.new(1, -40, 0, 48)
+		buy.Font = Enum.Font.GothamBlack
+		buy.TextScaled = true
+		buy.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+		buy.TextColor3 = Color3.fromRGB(255, 255, 255)
+		buy.BorderSizePixel = 0
+		buy.Text = string.format("BUY · R$ %d", payload.productPrice or 0)
+		buy.Parent = frame
+		local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 10); bc.Parent = buy
+
+		local close = Instance.new("TextButton")
+		close.AnchorPoint = Vector2.new(1, 0)
+		close.Position = UDim2.new(1, -8, 0, 8)
+		close.Size = UDim2.fromOffset(32, 32)
+		close.Font = Enum.Font.GothamBold
+		close.TextScaled = true
+		close.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+		close.TextColor3 = Color3.fromRGB(220, 220, 220)
+		close.BorderSizePixel = 0
+		close.Text = "✕"
+		close.Parent = frame
+		local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 6); cc.Parent = close
+
+		local closed = false
+		local function dismiss()
+			if closed then return end
+			closed = true
+			local tw = TweenService:Create(backdrop, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
+			tw:Play()
+			tw.Completed:Wait()
+			backdrop:Destroy()
+		end
+
+		close.MouseButton1Click:Connect(dismiss)
+		buy.MouseButton1Click:Connect(function()
+			if payload.productKey then
+				Remotes.Event(Remotes.Names.RequestPromptPurchase):FireServer("product", payload.productKey)
+			end
+			task.delay(0.5, dismiss)
+		end)
+
+		-- Auto-dismiss countdown
+		task.spawn(function()
+			local expires = os.time() + (payload.expiresIn or 600)
+			while not closed do
+				local left = expires - os.time()
+				if left <= 0 then dismiss(); break end
+				timer.Text = `Expires in {Util.SecondsToClock(left)}`
+				task.wait(1)
+			end
+		end)
+	end)
+end
+
+return WelcomeOfferUI
+]])
+end
+
+print("[BrainrotLab Installer] Install complete. Save the place or press Play to test.")
