@@ -2595,6 +2595,7 @@ table.insert(commands, {
 		local hum = target.Character:FindFirstChildOfClass("Humanoid")
 		if not hum then return "no humanoid" end
 		local clamped = math.clamp(math.floor(n), 0, 60)
+		AntiCheat.SetCharacterClampExempt(target, clamped > 30)
 		hum.WalkSpeed = clamped
 		return string.format("set %s walkspeed to %d", target.Name, clamped)
 	end,
@@ -3360,14 +3361,28 @@ local function checkPositionFor(player: Player)
 	end
 end
 
-local function hardenCharacter(char: Model)
+-- Players in this set are exempt from WalkSpeed/JumpPower clamps. Set by
+-- AdminService /speed so an owner-issued override sticks. Cleared on
+-- character removing so an exploit can't lean on a stale exemption.
+local hardenExempt: { [number]: boolean } = {}
+
+function AntiCheat.SetCharacterClampExempt(player: Player, exempt: boolean)
+	hardenExempt[player.UserId] = exempt or nil
+end
+
+local function hardenCharacter(player: Player, char: Model)
 	local humanoid = char:WaitForChild("Humanoid", 5) :: Humanoid?
 	if not humanoid then return end
 	humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+		if hardenExempt[player.UserId] then return end
 		if humanoid.WalkSpeed > 30 then humanoid.WalkSpeed = 16 end
 	end)
 	humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
+		if hardenExempt[player.UserId] then return end
 		if humanoid.JumpPower > 80 then humanoid.JumpPower = 50 end
+	end)
+	char.AncestryChanged:Connect(function()
+		if not char:IsDescendantOf(game) then hardenExempt[player.UserId] = nil end
 	end)
 end
 
@@ -3376,9 +3391,9 @@ function AntiCheat.OnPlayerAdded(player: Player)
 	player.CharacterAdded:Connect(function(char)
 		local r = records[player]
 		if r then r.lastPosition = nil end
-		hardenCharacter(char)
+		hardenCharacter(player, char)
 	end)
-	if player.Character then hardenCharacter(player.Character) end
+	if player.Character then hardenCharacter(player, player.Character) end
 end
 
 function AntiCheat.OnPlayerRemoving(player: Player)

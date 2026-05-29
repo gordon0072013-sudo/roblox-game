@@ -815,6 +815,7 @@ table.insert(commands, {
 		local hum = target.Character:FindFirstChildOfClass("Humanoid")
 		if not hum then return "no humanoid" end
 		local clamped = math.clamp(math.floor(n), 0, 60)
+		AntiCheat.SetCharacterClampExempt(target, clamped > 30)
 		hum.WalkSpeed = clamped
 		return string.format("set %s walkspeed to %d", target.Name, clamped)
 	end,
