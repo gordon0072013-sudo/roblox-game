@@ -781,6 +781,27 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "unmute",
+	usage = "/unmute <player>",
+	help = "Restore a muted player's chat immediately.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /unmute <player>" end
+		local TextChatService = game:GetService("TextChatService")
+		if TextChatService.ChatVersion ~= Enum.ChatVersion.TextChatService then
+			return "TextChatService not active"
+		end
+		local restored = false
+		for _, channel in ipairs(TextChatService:WaitForChild("TextChannels"):GetChildren()) do
+			local source = (channel :: any):FindFirstChild("TextSource_" .. target.UserId)
+			if source then source.CanSend = true; restored = true end
+		end
+		return restored and ("unmuted " .. target.Name) or "no chat source found"
+	end,
+})
+
+table.insert(commands, {
 	name = "mute",
 	usage = "/mute <player> <seconds>",
 	help = "Mute a player's chat for N seconds.",
