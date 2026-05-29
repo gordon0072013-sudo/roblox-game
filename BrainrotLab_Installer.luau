@@ -1354,6 +1354,7 @@ local HealthCheckService      = require(script.HealthCheckService)
 local GraceShutdownService    = require(script.GraceShutdownService)
 local FirstSessionService     = require(script.FirstSessionService)
 local MutationRerollService   = require(script.MutationRerollService)
+local BuffService             = require(script.BuffService)
 local MythicCelebrationService = require(script.MythicCelebrationService)
 
 -- Boot order is significant: persistence first, content domain next,
@@ -1413,6 +1414,7 @@ local bootOrder = {
 	{ "FirstSessionService",  FirstSessionService.Init   },
 	{ "MutationRerollService", MutationRerollService.Init },
 	{ "MythicCelebrationService", MythicCelebrationService.Init },
+	{ "BuffService",          BuffService.Init           },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -1479,6 +1481,7 @@ local function onPlayerRemoving(player: Player)
 	HotStreakService.OnPlayerRemoving(player)
 	MilestoneAnnounceService.OnPlayerRemoving(player)
 	FirstSessionService.OnPlayerRemoving(player)
+	BuffService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 
@@ -2554,6 +2557,28 @@ table.insert(commands, {
 			end
 		end
 		return #lines > 0 and table.concat(lines, "\n") or "no flags"
+	end,
+})
+
+table.insert(commands, {
+	name = "buff",
+	usage = "/buff <player> <income|mutation> <mult> <seconds>",
+	help = "Apply a temporary personal buff.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local kind = args[2]
+		local mult = asNumber(args[3])
+		local seconds = asNumber(args[4])
+		if not target or not kind or not mult or not seconds then
+			return "usage: /buff <player> <income|mutation> <mult> <seconds>"
+		end
+		local ok, BuffService = pcall(require, script.Parent.BuffService)
+		if not ok then return "BuffService unavailable" end
+		local applied = BuffService.Apply(target, kind, mult, math.floor(seconds))
+		if not applied then return "kind must be income|mutation" end
+		EconomyService.PushHud(target)
+		return string.format("buffed %s %s x%.2f for %ds", target.Name, kind, mult, math.floor(seconds))
 	end,
 })
 
@@ -3792,6 +3817,74 @@ end
 
 return BossEventService
 ]=])
+	ensurePath(root, "BuffService", "ModuleScript", [[
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+local Util    = require(Shared.Util)
+local Log     = require(Shared.Log)
+
+local BuffService = {}
+
+-- Per-player temporary multipliers, applied on top of the existing
+-- EconomyService stack. Used by AdminService /buff for compensation
+-- ('sorry your brainrot got eaten by the bug, here's 2x income for 5
+-- minutes') and live-ops bursts.
+
+type Buff = {
+	kind: string,     -- "income" | "mutation"
+	mult: number,
+	expiresAt: number,
+}
+
+local buffs: { [number]: { [string]: Buff } } = {}
+
+local function get(userId: number, kind: string): number
+	local set = buffs[userId]
+	if not set then return 1 end
+	local b = set[kind]
+	if not b then return 1 end
+	if os.time() >= b.expiresAt then
+		set[kind] = nil
+		return 1
+	end
+	return b.mult
+end
+
+function BuffService.GetIncomeMult(player: Player): number
+	return get(player.UserId, "income")
+end
+
+function BuffService.GetMutationMult(player: Player): number
+	return get(player.UserId, "mutation")
+end
+
+function BuffService.Apply(player: Player, kind: string, mult: number, seconds: number)
+	if kind ~= "income" and kind ~= "mutation" then return false end
+	buffs[player.UserId] = buffs[player.UserId] or {}
+	buffs[player.UserId][kind] = {
+		kind = kind,
+		mult = mult,
+		expiresAt = os.time() + seconds,
+	}
+	Remotes.Event(Remotes.Names.Notify):FireClient(player, {
+		kind = "info",
+		text = string.format("⚡ %s buff x%.2f for %s", kind, mult, Util.SecondsToClock(seconds)),
+	})
+	Log.Info("Buff", "applied %s x%.2f to %s for %ds", kind, mult, player.Name, seconds)
+	return true
+end
+
+function BuffService.OnPlayerRemoving(player: Player)
+	buffs[player.UserId] = nil
+end
+
+function BuffService.Init() end
+
+return BuffService
+]])
 	ensurePath(root, "CaptureService", "ModuleScript", [=[
 --!strict
 --[[
@@ -4680,6 +4773,9 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 	local firstSessionMult = 1
 	local okFs, FirstSessionService = pcall(require, script.Parent.FirstSessionService)
 	if okFs then firstSessionMult = FirstSessionService.GetCashMult(player) end
+	local buffMult = 1
+	local okBf, BuffService = pcall(require, script.Parent.BuffService)
+	if okBf then buffMult = BuffService.GetIncomeMult(player) end
 	local infectionMult = 1
 	if data.infectedUntil > os.time() then
 		local penalty = Config.INFECTION_INCOME_MULT
@@ -4689,7 +4785,7 @@ function EconomyService.ComputeBrainrotIncome(player: Player, brainrot: Types.Ow
 		end
 		infectionMult = penalty
 	end
-	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * firstSessionMult * infectionMult
+	return base * tierMult * rebirthMult * gamepassMult * groupMult * premiumMult * petMult * hotMult * eventMult * vipServerMult * hourMult * firstSessionMult * buffMult * infectionMult
 end
 
 function EconomyService.AwardCash(player: Player, amount: number, reason: string?)

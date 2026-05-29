@@ -62,6 +62,7 @@ local HealthCheckService      = require(script.HealthCheckService)
 local GraceShutdownService    = require(script.GraceShutdownService)
 local FirstSessionService     = require(script.FirstSessionService)
 local MutationRerollService   = require(script.MutationRerollService)
+local BuffService             = require(script.BuffService)
 local MythicCelebrationService = require(script.MythicCelebrationService)
 
 -- Boot order is significant: persistence first, content domain next,
@@ -121,6 +122,7 @@ local bootOrder = {
 	{ "FirstSessionService",  FirstSessionService.Init   },
 	{ "MutationRerollService", MutationRerollService.Init },
 	{ "MythicCelebrationService", MythicCelebrationService.Init },
+	{ "BuffService",          BuffService.Init           },
 }
 
 for _, entry in ipairs(bootOrder) do
@@ -187,6 +189,7 @@ local function onPlayerRemoving(player: Player)
 	HotStreakService.OnPlayerRemoving(player)
 	MilestoneAnnounceService.OnPlayerRemoving(player)
 	FirstSessionService.OnPlayerRemoving(player)
+	BuffService.OnPlayerRemoving(player)
 	DataService.ReleaseProfile(player)
 end
 

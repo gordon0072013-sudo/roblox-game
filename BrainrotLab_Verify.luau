@@ -195,6 +195,12 @@ end
 do
 	local container = resolveContainer("ServerScriptService")
 	local root = container and container:FindFirstChild("Server")
+	local inst = root and resolveChild(root, "BuffService")
+	check("ServerScriptService/Server/BuffService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("ServerScriptService")
+	local root = container and container:FindFirstChild("Server")
 	local inst = root and resolveChild(root, "CaptureService")
 	check("ServerScriptService/Server/CaptureService :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end

@@ -781,6 +781,28 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "buff",
+	usage = "/buff <player> <income|mutation> <mult> <seconds>",
+	help = "Apply a temporary personal buff.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local kind = args[2]
+		local mult = asNumber(args[3])
+		local seconds = asNumber(args[4])
+		if not target or not kind or not mult or not seconds then
+			return "usage: /buff <player> <income|mutation> <mult> <seconds>"
+		end
+		local ok, BuffService = pcall(require, script.Parent.BuffService)
+		if not ok then return "BuffService unavailable" end
+		local applied = BuffService.Apply(target, kind, mult, math.floor(seconds))
+		if not applied then return "kind must be income|mutation" end
+		EconomyService.PushHud(target)
+		return string.format("buffed %s %s x%.2f for %ds", target.Name, kind, mult, math.floor(seconds))
+	end,
+})
+
+table.insert(commands, {
 	name = "players",
 	usage = "/players",
 	help = "List online players (name, displayName, userId, cash).",
