@@ -1868,9 +1868,20 @@ end
 
 table.insert(commands, {
 	name = "help",
-	usage = "/help",
-	help = "List commands.",
+	usage = "/help [command]",
+	help = "List commands, or detail one.",
 	fn = function(player, args)
+		local filter = args[1] and string.lower(args[1]) or nil
+		if filter then
+			for _, c in ipairs(commands) do
+				if c.name == filter then
+					return string.format("%s — %s%s",
+						c.usage, c.help,
+						c.ownerOnly and "  (owner only)" or "")
+				end
+			end
+			return "no such command: " .. filter
+		end
 		local list = {}
 		for _, c in ipairs(commands) do
 			table.insert(list, string.format("%s — %s", c.usage, c.help))
