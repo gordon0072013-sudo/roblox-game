@@ -147,7 +147,12 @@ local function applyPlotCosmetics(player: Player, plot: Plot)
 	if not data then return end
 	local floor = plot.folder:FindFirstChild("Floor") :: BasePart?
 	if not floor then return end
-	if data.gamepasses["GoldenPlot"] then
+	-- VIPLab includes the golden plot effect per the shop description;
+	-- treat it as if GoldenPlot were also owned. Don't auto-grant
+	-- GoldenPlot in data.gamepasses because that would silently rebate
+	-- the GoldenPlot purchase for non-VIP players if Roblox returns true
+	-- for UserOwnsGamePassAsync later.
+	if data.gamepasses["GoldenPlot"] or data.gamepasses["VIPLab"] then
 		floor.Color = Color3.fromRGB(255, 215, 60)
 		floor.Material = Enum.Material.Neon
 		plot.signPart.Color = Color3.fromRGB(200, 160, 30)

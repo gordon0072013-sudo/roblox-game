@@ -6364,7 +6364,12 @@ local function applyPlotCosmetics(player: Player, plot: Plot)
 	if not data then return end
 	local floor = plot.folder:FindFirstChild("Floor") :: BasePart?
 	if not floor then return end
-	if data.gamepasses["GoldenPlot"] then
+	-- VIPLab includes the golden plot effect per the shop description;
+	-- treat it as if GoldenPlot were also owned. Don't auto-grant
+	-- GoldenPlot in data.gamepasses because that would silently rebate
+	-- the GoldenPlot purchase for non-VIP players if Roblox returns true
+	-- for UserOwnsGamePassAsync later.
+	if data.gamepasses["GoldenPlot"] or data.gamepasses["VIPLab"] then
 		floor.Color = Color3.fromRGB(255, 215, 60)
 		floor.Material = Enum.Material.Neon
 		plot.signPart.Color = Color3.fromRGB(200, 160, 30)
@@ -13065,7 +13070,7 @@ local function buildPanel(parent: Frame)
 	local subtitles: { [string]: string } = {
 		MutationSpeed2x = "2x mutation rolls — see results faster",
 		Cash2x = "All cash income doubled",
-		VIPLab = "Golden plot, VIP brainrots, partial steal protection",
+		VIPLab = "Golden plot + partial steal/infection protection",
 		InfectionShield = "Big resistance to infection bombs + 50% steal blocks",
 		LuckyMutations = "Mutation rolls biased toward rare suffixes",
 		TripleCapture = "Capture button gives 3 brainrots per click",

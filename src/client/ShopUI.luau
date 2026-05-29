@@ -97,7 +97,7 @@ local function buildPanel(parent: Frame)
 	local subtitles: { [string]: string } = {
 		MutationSpeed2x = "2x mutation rolls — see results faster",
 		Cash2x = "All cash income doubled",
-		VIPLab = "Golden plot, VIP brainrots, partial steal protection",
+		VIPLab = "Golden plot + partial steal/infection protection",
 		InfectionShield = "Big resistance to infection bombs + 50% steal blocks",
 		LuckyMutations = "Mutation rolls biased toward rare suffixes",
 		TripleCapture = "Capture button gives 3 brainrots per click",
