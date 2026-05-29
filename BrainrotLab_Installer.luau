@@ -2558,6 +2558,23 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "players",
+	usage = "/players",
+	help = "List online players (name, displayName, userId, cash).",
+	fn = function()
+		local pool = Players:GetPlayers()
+		if #pool == 0 then return "no online players" end
+		local lines = {}
+		for _, p in ipairs(pool) do
+			local data = DataService.Get(p)
+			table.insert(lines, string.format("%s [%s] uid=%d cash=%d",
+				p.DisplayName, p.Name, p.UserId, data and data.cash or 0))
+		end
+		return table.concat(lines, "\n")
+	end,
+})
+
+table.insert(commands, {
 	name = "stats",
 	usage = "/stats",
 	help = "Show server stats summary.",
