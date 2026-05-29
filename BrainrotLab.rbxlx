@@ -3619,10 +3619,16 @@ local function tryAward(player: Player, key: string)
 		log[key] = true
 		return
 	end
-	local awardOk = pcall(function()
-		BadgeService_Roblox:AwardBadge(player.UserId, b.id)
+	-- AwardBadge returns a boolean. pcall protects against network errors;
+	-- the returned bool tells us whether Roblox actually granted the badge
+	-- (false typically means the badge is private or unowned). Treating a
+	-- silent false as success would mark the local log so this player never
+	-- retries — leading to permanently un-awarded badges after fixing
+	-- visibility on the dashboard. Capture both.
+	local callOk, awardSuccess = pcall(function()
+		return BadgeService_Roblox:AwardBadge(player.UserId, b.id)
 	end)
-	if awardOk then
+	if callOk and awardSuccess then
 		log[key] = true
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, {
 			kind = "capture",
