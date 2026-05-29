@@ -2000,6 +2000,23 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "restart",
+	usage = "/restart",
+	help = "Shut down this server (BindToClose runs; players get the grace bonus).",
+	ownerOnly = true,
+	fn = function()
+		task.delay(2, function()
+			-- BindToClose handlers (GraceShutdownService + DataService) get
+			-- the 30s window Roblox provides before hard-kill.
+			for _, p in ipairs(Players:GetPlayers()) do
+				p:Kick("Server restart — rejoin to continue. (Cash bonus delivered.)")
+			end
+		end)
+		return "restart in 2s (clients get kick + grace bonus)"
+	end,
+})
+
+table.insert(commands, {
 	name = "cleanup",
 	usage = "/cleanup",
 	help = "Sweep orphaned debris (firework leftovers, lost parts).",
