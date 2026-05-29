@@ -223,6 +223,19 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "codes",
+	usage = "/codes",
+	help = "List all active redemption codes.",
+	fn = function()
+		local ok, CodeService = pcall(require, script.Parent.CodeService)
+		if not ok then return "CodeService unavailable" end
+		local list = (CodeService :: any).List and (CodeService :: any).List()
+		if not list or #list == 0 then return "no active codes" end
+		return "active codes: " .. table.concat(list, ", ")
+	end,
+})
+
+table.insert(commands, {
 	name = "global",
 	usage = "/global <text...>",
 	help = "Push a banner to every server in this experience.",

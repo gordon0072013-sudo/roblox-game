@@ -77,4 +77,13 @@ function CodeService.Init()
 	MutationService = require(script.Parent.MutationService)
 end
 
+function CodeService.List(): { string }
+	local out: { string } = {}
+	for code, _ in pairs((Config.REDEMPTION_CODES or {}) :: any) do
+		table.insert(out, code)
+	end
+	table.sort(out)
+	return out
+end
+
 return CodeService
