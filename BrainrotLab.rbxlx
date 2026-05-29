@@ -1972,6 +1972,34 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "reset",
+	usage = "/reset <player>",
+	help = "Wipe a player's profile back to defaults. Irreversible.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /reset <player>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		data.cash = 500
+		data.rebirths = 0
+		data.inventory = {}
+		data.infectionBombs = 1
+		data.infectedUntil = 0
+		data.gamepasses = {}
+		data.stats = {
+			totalCaptured = 0, totalMutations = 0, totalSteals = 0,
+			totalInfections = 0, totalCashEarned = 0,
+		}
+		EconomyService.PushHud(target)
+		Remotes.Event(Remotes.Names.Notify):FireClient(target, {
+			kind = "error",
+			text = "Your progress was reset by an admin.",
+		})
+		return string.format("reset %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
 	name = "playerinfo",
 	usage = "/playerinfo <player>",
 	help = "Detailed profile snapshot for one player.",
