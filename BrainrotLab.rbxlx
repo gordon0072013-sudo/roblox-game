@@ -3667,9 +3667,13 @@ local BADGES: { [string]: { id: number, name: string, trigger: string } } = {
 local function shouldAwardFounder(): boolean
 	-- Awards "Founder" badge to anyone joining within the launch window.
 	-- Set Config.LAUNCH_TS = os.time() when you publish to enable it.
-	if Config.LAUNCH_TS == 0 then return false end
+	-- Treat 0 / nil / negative as 'disabled' so a typo doesn't accidentally
+	-- award the badge to anyone who joins.
+	local ts = Config.LAUNCH_TS
+	if not ts or ts <= 0 then return false end
 	local windowDays = Config.LAUNCH_FOUNDER_WINDOW_DAYS or 14
-	return os.time() - Config.LAUNCH_TS < windowDays * 24 * 3600
+	if windowDays <= 0 then return false end
+	return os.time() - ts < windowDays * 24 * 3600
 end
 
 local function tryAward(player: Player, key: string)
