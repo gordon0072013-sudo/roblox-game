@@ -2000,6 +2000,26 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "idreport",
+	usage = "/idreport",
+	help = "List gamepass / dev product entries with id=0 (unconfigured).",
+	fn = function()
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local missing: { string } = {}
+		for key, gp in pairs(Config.GAMEPASSES) do
+			if not gp.id or gp.id == 0 then table.insert(missing, "gamepass:" .. key) end
+		end
+		for key, dp in pairs(Config.DEV_PRODUCTS) do
+			if not dp.id or dp.id == 0 then table.insert(missing, "product:" .. key) end
+		end
+		table.sort(missing)
+		if #missing == 0 then return "all monetization IDs configured ✅" end
+		return string.format("%d unconfigured IDs (set on Creator Dashboard):\n  %s",
+			#missing, table.concat(missing, "\n  "))
+	end,
+})
+
+table.insert(commands, {
 	name = "pricecheck",
 	usage = "/pricecheck <key>",
 	help = "Show price + delivery for a gamepass or dev product key.",
