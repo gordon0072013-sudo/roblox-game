@@ -1972,6 +1972,32 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "wheelgift",
+	usage = "/wheelgift <count>",
+	help = "Grant N free wheel spins to every online player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local n = asNumber(args[1])
+		if not n or n <= 0 then return "usage: /wheelgift <count>" end
+		local ok, LuckyWheelService = pcall(require, script.Parent.LuckyWheelService)
+		if not ok then return "LuckyWheelService unavailable" end
+		local count = math.floor(n)
+		local affected = 0
+		for _, p in ipairs(Players:GetPlayers()) do
+			LuckyWheelService.GrantSpins(p, count)
+			affected += 1
+		end
+		local okA, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if okA then
+			AnnouncementService.Push(
+				string.format("🎰 EVERYONE just got %d free wheel spins!", count),
+				{ 255, 215, 80 }, 20)
+		end
+		return string.format("gave %d spins to %d players", count, affected)
+	end,
+})
+
+table.insert(commands, {
 	name = "event",
 	usage = "/event [golden|mutation|spin|random]",
 	help = "Fire a Top-of-Hour-style event immediately.",
