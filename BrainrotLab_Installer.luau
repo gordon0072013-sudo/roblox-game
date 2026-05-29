@@ -2000,6 +2000,28 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "grantpass",
+	usage = "/grantpass <player> <gamepass-key>",
+	help = "Manually grant a gamepass effect for free (whale gift / test).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		local key = args[2]
+		if not target or not key then return "usage: /grantpass <player> <gamepass-key>" end
+		local data = DataService.Get(target); if not data then return "no profile" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		if not Config.GAMEPASSES[key] then return "unknown gamepass key: " .. key end
+		data.gamepasses[key] = true
+		EconomyService.PushHud(target)
+		Remotes.Event(Remotes.Names.Notify):FireClient(target, {
+			kind = "info",
+			text = string.format("Gifted: %s", Config.GAMEPASSES[key].name),
+		})
+		return string.format("granted %s to %s", key, target.Name)
+	end,
+})
+
+table.insert(commands, {
 	name = "clearflags",
 	usage = "/clearflags <player>",
 	help = "Wipe a player's AntiCheat violation history.",
