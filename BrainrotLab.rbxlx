@@ -1825,6 +1825,7 @@ local function find(commands_: { Command }, name: string): Command?
 end
 
 local function findPlayer(query: string): Player?
+	if query == nil or query == "" then return nil end
 	query = string.lower(query)
 	for _, p in ipairs(Players:GetPlayers()) do
 		if string.lower(p.Name) == query or string.lower(p.DisplayName) == query
