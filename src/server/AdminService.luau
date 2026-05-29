@@ -223,6 +223,24 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "notify",
+	usage = "/notify <player> <text...>",
+	help = "Send a personal toast to a specific player.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /notify <player> <text>" end
+		local text = table.concat(args, " ", 2)
+		if text == "" then return "missing text" end
+		Remotes.Event(Remotes.Names.Notify):FireClient(target, {
+			kind = "info",
+			text = text,
+		})
+		return string.format("toasted %s: %s", target.Name, text)
+	end,
+})
+
+table.insert(commands, {
 	name = "jackpot",
 	usage = "/jackpot <amount>",
 	help = "Pick a random online player and grant them cash. Live-event hook.",
