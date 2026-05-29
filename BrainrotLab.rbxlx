@@ -1971,6 +1971,21 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "heal",
+	usage = "/heal <player>",
+	help = "Refill a player's character health.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /heal <player>" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		hum.Health = hum.MaxHealth
+		return string.format("healed %s (%.0f/%.0f hp)", target.Name, hum.Health, hum.MaxHealth)
+	end,
+})
+
+table.insert(commands, {
 	name = "health",
 	usage = "/health",
 	help = "Run HealthCheckService probes now and report.",
