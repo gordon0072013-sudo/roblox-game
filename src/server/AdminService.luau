@@ -968,6 +968,36 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "top",
+	usage = "/top [cash|rebirths|captures|mutations|steals|infections]",
+	help = "Top 5 players by metric (default: cash).",
+	fn = function(player, args)
+		local metric = string.lower(args[1] or "cash")
+		local extractors: { [string]: (any) -> number } = {
+			cash        = function(d) return d.cash end,
+			rebirths    = function(d) return d.rebirths end,
+			captures    = function(d) return d.stats.totalCaptured end,
+			mutations   = function(d) return d.stats.totalMutations end,
+			steals      = function(d) return d.stats.totalSteals end,
+			infections  = function(d) return d.stats.totalInfections end,
+		}
+		local getter = extractors[metric]
+		if not getter then return "metric must be one of: cash|rebirths|captures|mutations|steals|infections" end
+		local rows = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			local d = DataService.Get(p)
+			if d then table.insert(rows, { name = p.DisplayName, value = getter(d) }) end
+		end
+		table.sort(rows, function(a, b) return a.value > b.value end)
+		local lines = { `top by ${metric}:` }
+		for i = 1, math.min(5, #rows) do
+			table.insert(lines, string.format("  %d. %s — %d", i, rows[i].name, rows[i].value))
+		end
+		return table.concat(lines, "\n")
+	end,
+})
+
+table.insert(commands, {
 	name = "players",
 	usage = "/players",
 	help = "List online players (name, displayName, userId, cash).",
