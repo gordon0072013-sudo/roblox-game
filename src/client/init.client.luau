@@ -109,6 +109,9 @@ AutoSellUI.Init(screen, UIController)
 local NextEventUI = require(script.NextEventUI)
 NextEventUI.Init(screen)
 
+local SpectateController = require(script.SpectateController)
+SpectateController.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 

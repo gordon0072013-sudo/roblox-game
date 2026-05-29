@@ -632,6 +632,12 @@ end
 do
 	local container = resolveContainer("StarterPlayer.StarterPlayerScripts")
 	local root = container and container:FindFirstChild("Client")
+	local inst = root and resolveChild(root, "SpectateController")
+	check("StarterPlayer.StarterPlayerScripts/Client/SpectateController :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
+end
+do
+	local container = resolveContainer("StarterPlayer.StarterPlayerScripts")
+	local root = container and container:FindFirstChild("Client")
 	local inst = root and resolveChild(root, "TradeUI")
 	check("StarterPlayer.StarterPlayerScripts/Client/TradeUI :: ModuleScript", inst and inst.ClassName == "ModuleScript" or false)
 end

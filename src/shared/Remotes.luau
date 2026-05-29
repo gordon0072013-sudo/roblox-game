@@ -30,6 +30,7 @@ local RemoteNames = {
 	DecorationUpdate = "DecorationUpdate",
 	InviteUpdate = "InviteUpdate",
 	WelcomeOffer = "WelcomeOffer",
+	Spectate = "Spectate",
 	WheelUpdate = "WheelUpdate",
 	WheelSpinResult = "WheelSpinResult",
 	EventUpdate = "EventUpdate",

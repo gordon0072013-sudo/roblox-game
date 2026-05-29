@@ -995,6 +995,7 @@ local RemoteNames = {
 	DecorationUpdate = "DecorationUpdate",
 	InviteUpdate = "InviteUpdate",
 	WelcomeOffer = "WelcomeOffer",
+	Spectate = "Spectate",
 	WheelUpdate = "WheelUpdate",
 	WheelSpinResult = "WheelSpinResult",
 	EventUpdate = "EventUpdate",
@@ -1967,6 +1968,29 @@ table.insert(commands, {
 			return string.format("tp %s -> %s,%s,%s", target.Name, x, y, z)
 		end
 		return "could not resolve destination"
+	end,
+})
+
+table.insert(commands, {
+	name = "spectate",
+	usage = "/spectate <player|self>",
+	help = "Lock the camera onto a target. 'self' to release.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local arg = args[1] or ""
+		if arg == "" then return "usage: /spectate <player|self>" end
+		if string.lower(arg) == "self" then
+			Remotes.Event("Spectate"):FireClient(player, { kind = "release" })
+			return "released spectate"
+		end
+		local target = findPlayer(arg)
+		if not target then return "no such player" end
+		Remotes.Event("Spectate"):FireClient(player, {
+			kind = "attach",
+			targetUserId = target.UserId,
+			targetName = target.DisplayName,
+		})
+		return string.format("now spectating %s", target.Name)
 	end,
 })
 
@@ -9155,6 +9179,9 @@ AutoSellUI.Init(screen, UIController)
 local NextEventUI = require(script.NextEventUI)
 NextEventUI.Init(screen)
 
+local SpectateController = require(script.SpectateController)
+SpectateController.Init(screen)
+
 local LoadingScreen = require(script.LoadingScreen)
 LoadingScreen.Init()
 
@@ -12642,6 +12669,70 @@ return SoundController
         </Item>
         <Item class="ModuleScript" referent="108">
           <Properties>
+            <string name="Name">SpectateController</string>
+            <string name="Source"><![CDATA[--!strict
+
+local Players           = game:GetService("Players")
+local Workspace         = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared.Remotes)
+
+local SpectateController = {}
+
+local localPlayer = Players.LocalPlayer
+
+local indicator: TextLabel?
+
+local function release()
+	local cam = Workspace.CurrentCamera
+	if cam and localPlayer.Character then
+		cam.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+	end
+	if indicator then indicator.Visible = false end
+end
+
+local function attach(payload: any)
+	if not payload or not payload.targetUserId then return end
+	local target = Players:GetPlayerByUserId(payload.targetUserId)
+	if not target or not target.Character then return end
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	cam.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid")
+	if indicator then
+		indicator.Text = `👁 Spectating ${payload.targetName or target.Name}`
+		indicator.Visible = true
+	end
+end
+
+function SpectateController.Init(screen: ScreenGui)
+	indicator = Instance.new("TextLabel")
+	;(indicator :: TextLabel).AnchorPoint = Vector2.new(0.5, 0)
+	;(indicator :: TextLabel).Position = UDim2.new(0.5, 0, 0, 78)
+	;(indicator :: TextLabel).Size = UDim2.fromOffset(280, 28)
+	;(indicator :: TextLabel).BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+	;(indicator :: TextLabel).BackgroundTransparency = 0.2
+	;(indicator :: TextLabel).BorderSizePixel = 0
+	;(indicator :: TextLabel).Font = Enum.Font.GothamBold
+	;(indicator :: TextLabel).TextScaled = true
+	;(indicator :: TextLabel).TextColor3 = Color3.fromRGB(255, 215, 80)
+	;(indicator :: TextLabel).Visible = false
+	;(indicator :: TextLabel).Parent = screen
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = indicator
+
+	Remotes.Event(Remotes.Names.Spectate).OnClientEvent:Connect(function(payload)
+		if payload and payload.kind == "attach" then attach(payload) end
+		if payload and payload.kind == "release" then release() end
+	end)
+end
+
+return SpectateController
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="109">
+          <Properties>
             <string name="Name">TradeUI</string>
             <string name="Source"><![CDATA[--!strict
 --[[
@@ -13028,7 +13119,7 @@ return TradeUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="109">
+        <Item class="ModuleScript" referent="110">
           <Properties>
             <string name="Name">TutorialUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -13186,7 +13277,7 @@ return TutorialUI
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="110">
+        <Item class="ModuleScript" referent="111">
           <Properties>
             <string name="Name">UIController</string>
             <string name="Source"><![CDATA[--!strict
@@ -13325,7 +13416,7 @@ return UIController
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="111">
+        <Item class="ModuleScript" referent="112">
           <Properties>
             <string name="Name">WelcomeOfferUI</string>
             <string name="Source"><![CDATA[--!strict
@@ -13472,14 +13563,14 @@ return WelcomeOfferUI
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="112">
+  <Item class="Workspace" referent="113">
     <Properties>
       <string name="Name">Workspace</string>
       <bool name="FilteringEnabled">true</bool>
       <float name="Gravity">196.2</float>
       <bool name="NeedsPivotMigration">false</bool>
     </Properties>
-    <Item class="Part" referent="113">
+    <Item class="Part" referent="114">
       <Properties>
         <string name="Name">Baseplate</string>
         <bool name="Anchored">true</bool>
@@ -13497,12 +13588,12 @@ return WelcomeOfferUI
         </Vector3>
       </Properties>
     </Item>
-    <Item class="Folder" referent="114">
+    <Item class="Folder" referent="115">
       <Properties>
         <string name="Name">Brainrots</string>
       </Properties>
     </Item>
-    <Item class="Folder" referent="115">
+    <Item class="Folder" referent="116">
       <Properties>
         <string name="Name">Plots</string>
       </Properties>

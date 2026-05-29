@@ -223,6 +223,29 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "spectate",
+	usage = "/spectate <player|self>",
+	help = "Lock the camera onto a target. 'self' to release.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local arg = args[1] or ""
+		if arg == "" then return "usage: /spectate <player|self>" end
+		if string.lower(arg) == "self" then
+			Remotes.Event("Spectate"):FireClient(player, { kind = "release" })
+			return "released spectate"
+		end
+		local target = findPlayer(arg)
+		if not target then return "no such player" end
+		Remotes.Event("Spectate"):FireClient(player, {
+			kind = "attach",
+			targetUserId = target.UserId,
+			targetName = target.DisplayName,
+		})
+		return string.format("now spectating %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
 	name = "inventory",
 	usage = "/inventory <player>",
 	help = "List a player's brainrots.",
