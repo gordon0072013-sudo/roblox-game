@@ -1999,6 +1999,30 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "inventory",
+	usage = "/inventory <player>",
+	help = "List a player's brainrots.",
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target then return "usage: /inventory <player>" end
+		local data = DataService.Get(target)
+		if not data then return "no profile" end
+		if #data.inventory == 0 then return target.Name .. " has no brainrots" end
+		local lines = { target.Name .. " inventory:" }
+		for _, b in ipairs(data.inventory) do
+			local def = BrainrotData.Get(b.speciesId)
+			local label = def and def.displayName or b.speciesId
+			table.insert(lines, string.format("  %s [T%d] %s%s",
+				label, b.mutationTier,
+				b.placed and "(placed)" or "",
+				#b.mutations > 0 and (" {" .. table.concat(b.mutations, ",") .. "}") or ""))
+			if #lines > 20 then table.insert(lines, "  ...truncated"); break end
+		end
+		return table.concat(lines, "\n")
+	end,
+})
+
+table.insert(commands, {
 	name = "heal",
 	usage = "/heal <player>",
 	help = "Refill a player's character health.",
