@@ -9545,16 +9545,26 @@ function TradeService.Init()
 	task.spawn(function()
 		while true do
 			task.wait(15)
+			-- Snapshot expired entries before mutating to avoid
+			-- pairs()-during-nil-assignment undefined behavior.
 			local now = os.clock()
+			local expiredInvites: { number } = {}
 			for userId, inv in pairs(pendingInvites) do
 				if now - inv.at > INVITE_TTL then
-					pendingInvites[userId] = nil
+					table.insert(expiredInvites, userId)
 				end
 			end
-			for tid, trade in pairs(activeTrades) do
+			for _, userId in ipairs(expiredInvites) do
+				pendingInvites[userId] = nil
+			end
+			local expiredTrades: { Trade } = {}
+			for _, trade in pairs(activeTrades) do
 				if os.time() - trade.createdAt > TRADE_TTL then
-					endTrade(trade, "Trade timed out.")
+					table.insert(expiredTrades, trade)
 				end
+			end
+			for _, trade in ipairs(expiredTrades) do
+				endTrade(trade, "Trade timed out.")
 			end
 		end
 	end)
