@@ -1972,6 +1972,32 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "cleanup",
+	usage = "/cleanup",
+	help = "Sweep orphaned debris (firework leftovers, lost parts).",
+	ownerOnly = true,
+	fn = function()
+		local Workspace = game:GetService("Workspace")
+		local protected = { Baseplate = true, Plots = true, Brainrots = true, OutbreakPlaza = true, BossArena = true, Terrain = true }
+		local removed = 0
+		for _, inst in ipairs(Workspace:GetChildren()) do
+			if not protected[inst.Name] and not inst:IsA("Camera") and not inst:IsA("Terrain") then
+				-- Don't sweep player characters
+				local ok = true
+				for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+					if inst == p.Character then ok = false; break end
+				end
+				if ok and (inst:IsA("BasePart") or inst:IsA("Model")) then
+					inst:Destroy()
+					removed += 1
+				end
+			end
+		end
+		return string.format("cleaned %d orphaned objects", removed)
+	end,
+})
+
+table.insert(commands, {
 	name = "spectate",
 	usage = "/spectate <player|self>",
 	help = "Lock the camera onto a target. 'self' to release.",
