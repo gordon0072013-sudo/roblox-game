@@ -223,6 +223,28 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "global",
+	usage = "/global <text...>",
+	help = "Push a banner to every server in this experience.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local text = table.concat(args, " ")
+		if text == "" then return "usage: /global <text>" end
+		local ok, CrossServerShoutService = pcall(require, script.Parent.CrossServerShoutService)
+		if not ok then return "CrossServerShoutService unavailable" end
+		(CrossServerShoutService :: any).Publish({
+			kind = "owner_global",
+			text = text,
+			name = player.DisplayName,
+		})
+		-- Also push locally so the owner sees it on their own server.
+		local okA, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if okA then AnnouncementService.Push(text, { 255, 215, 80 }, 30) end
+		return string.format("global broadcast: %s", text)
+	end,
+})
+
+table.insert(commands, {
 	name = "restart",
 	usage = "/restart",
 	help = "Shut down this server (BindToClose runs; players get the grace bonus).",

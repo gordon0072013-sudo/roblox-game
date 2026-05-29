@@ -69,6 +69,10 @@ function CrossServerShoutService.Init()
 				AnnouncementService.Push(
 					string.format("🌐 Cross-server: %s passed %d total cash!", p.name, p.totalEarned),
 					{ 120, 220, 120 }, 20)
+			elseif p.kind == "owner_global" and AnnouncementService then
+				AnnouncementService.Push(
+					string.format("📢 %s: %s", p.name or "Owner", p.text or ""),
+					{ 255, 215, 80 }, 30)
 			end
 		end)
 	end)
