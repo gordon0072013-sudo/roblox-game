@@ -223,6 +223,21 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "announce",
+	usage = "/announce <text...>",
+	help = "Push a banner to every client in this server.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local text = table.concat(args, " ")
+		if text == "" then return "usage: /announce <text>" end
+		local ok, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if not ok then return "AnnouncementService unavailable" end
+		AnnouncementService.Push(text, { 255, 215, 80 }, 30)
+		return string.format("announced: %s", text)
+	end,
+})
+
+table.insert(commands, {
 	name = "freeze",
 	usage = "/freeze <player>",
 	help = "Lock a player in place (sets WalkSpeed=0, JumpPower=0).",
