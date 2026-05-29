@@ -1971,6 +1971,38 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "freeze",
+	usage = "/freeze <player>",
+	help = "Lock a player in place (sets WalkSpeed=0, JumpPower=0).",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /freeze <player>" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		hum.WalkSpeed = 0
+		hum.JumpPower = 0
+		return string.format("froze %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
+	name = "unfreeze",
+	usage = "/unfreeze <player>",
+	help = "Restore movement.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local target = findPlayer(args[1] or "")
+		if not target or not target.Character then return "usage: /unfreeze <player>" end
+		local hum = target.Character:FindFirstChildOfClass("Humanoid")
+		if not hum then return "no humanoid" end
+		hum.WalkSpeed = 16
+		hum.JumpPower = 50
+		return string.format("unfroze %s", target.Name)
+	end,
+})
+
+table.insert(commands, {
 	name = "kick",
 	usage = "/kick <player> [reason]",
 	help = "Kick a player.",
