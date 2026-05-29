@@ -8368,7 +8368,9 @@ function PetService.Hatch(player: Player, lucky: boolean?)
 	local rng = Random.new()
 	local bias = 0
 	if lucky then bias = 0.5 end
-	if data.gamepasses["LuckyMutations"] then bias += 0.1 end
+	-- PetLucky is the dedicated pet-egg bias pass. (LuckyMutations is its
+	-- mutation-roll counterpart and intentionally does NOT apply here.)
+	if data.gamepasses["PetLucky"] then bias += 0.2 end
 	local def = PetData.Roll(rng, bias)
 	local uid = Util.GenerateUid()
 	data._pets[uid] = def.id
