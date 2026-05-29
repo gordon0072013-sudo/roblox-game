@@ -133,6 +133,7 @@ local function endOutbreak()
 		m:Destroy()
 	end
 	activeSpawns = {}
+	activeUntil = 0    -- reset so the active=now<activeUntil check + loop-guard are honest
 	pushOutbreakState()
 end
 
