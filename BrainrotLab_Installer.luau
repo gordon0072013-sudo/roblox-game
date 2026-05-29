@@ -2582,6 +2582,26 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "gather",
+	usage = "/gather",
+	help = "Teleport every online player to your position.",
+	ownerOnly = true,
+	fn = function(player)
+		if not player.Character then return "your character has no position" end
+		local origin = player.Character:GetPivot()
+		local moved = 0
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= player and p.Character then
+				local offset = CFrame.new(math.random(-6, 6), 0, math.random(-6, 6))
+				p.Character:PivotTo(origin * offset)
+				moved += 1
+			end
+		end
+		return string.format("gathered %d players", moved)
+	end,
+})
+
+table.insert(commands, {
 	name = "maxmutate",
 	usage = "/maxmutate <player>",
 	help = "Fast-track all placed brainrots to apex tier.",
