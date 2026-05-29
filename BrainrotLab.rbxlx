@@ -2048,6 +2048,18 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "version",
+	usage = "/version",
+	help = "Show server build identity.",
+	fn = function()
+		local jobId = game.JobId
+		if jobId == "" then jobId = "studio" end
+		return string.format("place=%d job=%s placeVer=%d uptime=%ds",
+			game.PlaceId, jobId, game.PlaceVersion, math.floor(time()))
+	end,
+})
+
+table.insert(commands, {
 	name = "revenue",
 	usage = "/revenue",
 	help = "Show this server's purchase summary.",
