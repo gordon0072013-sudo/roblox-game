@@ -1972,6 +1972,28 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "jackpot",
+	usage = "/jackpot <amount>",
+	help = "Pick a random online player and grant them cash. Live-event hook.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local amount = asNumber(args[1])
+		if not amount then return "usage: /jackpot <amount>" end
+		local pool = Players:GetPlayers()
+		if #pool == 0 then return "no online players" end
+		local winner = pool[math.random(1, #pool)]
+		EconomyService.AwardCash(winner, math.floor(amount), "jackpot")
+		local okA, AnnouncementService = pcall(require, script.Parent.AnnouncementService)
+		if okA then
+			AnnouncementService.Push(
+				string.format("🎰 JACKPOT — %s won %d cash!", winner.DisplayName, math.floor(amount)),
+				{ 255, 215, 80 }, 20)
+		end
+		return string.format("jackpot %d -> %s", math.floor(amount), winner.Name)
+	end,
+})
+
+table.insert(commands, {
 	name = "addcode",
 	usage = "/addcode <CODE> <cash-amount>",
 	help = "Add a runtime redemption code without republishing.",
