@@ -169,6 +169,15 @@ Config.PURCHASE_LOG_RING_SIZE = 50
 Config.ADMIN_USER_IDS = {} :: { number }
 
 -- ============================================================
+-- LAUNCH METADATA
+-- ============================================================
+-- Set this to os.time() at the moment you publish the experience.
+-- Players who join within LAUNCH_FOUNDER_WINDOW_DAYS get the Founder
+-- badge automatically. Leave at 0 to disable the founder award.
+Config.LAUNCH_TS = 0
+Config.LAUNCH_FOUNDER_WINDOW_DAYS = 14
+
+-- ============================================================
 -- COMMUNITY / GROUP REWARD
 -- ============================================================
 -- Replace with your real Roblox group id after creating one. A 0 disables

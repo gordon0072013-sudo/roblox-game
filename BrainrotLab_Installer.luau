@@ -523,6 +523,15 @@ Config.PURCHASE_LOG_RING_SIZE = 50
 Config.ADMIN_USER_IDS = {} :: { number }
 
 -- ============================================================
+-- LAUNCH METADATA
+-- ============================================================
+-- Set this to os.time() at the moment you publish the experience.
+-- Players who join within LAUNCH_FOUNDER_WINDOW_DAYS get the Founder
+-- badge automatically. Leave at 0 to disable the founder award.
+Config.LAUNCH_TS = 0
+Config.LAUNCH_FOUNDER_WINDOW_DAYS = 14
+
+-- ============================================================
 -- COMMUNITY / GROUP REWARD
 -- ============================================================
 -- Replace with your real Roblox group id after creating one. A 0 disables
@@ -3626,6 +3635,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 
 local DataService = require(script.Parent.DataService)
 local Remotes = require(Shared.Remotes)
+local Config = require(Shared.Config)
 
 local BadgeService = {}
 
@@ -3646,11 +3656,11 @@ local BADGES: { [string]: { id: number, name: string, trigger: string } } = {
 }
 
 local function shouldAwardFounder(): boolean
-	-- Awards "Founder" badge to anyone joining within the first 14 days.
-	-- Update this timestamp when you publish — printed to console below.
-	local LAUNCH_TS = 0 -- e.g. os.time() at launch
-	if LAUNCH_TS == 0 then return false end
-	return os.time() - LAUNCH_TS < 14 * 24 * 3600
+	-- Awards "Founder" badge to anyone joining within the launch window.
+	-- Set Config.LAUNCH_TS = os.time() when you publish to enable it.
+	if Config.LAUNCH_TS == 0 then return false end
+	local windowDays = Config.LAUNCH_FOUNDER_WINDOW_DAYS or 14
+	return os.time() - Config.LAUNCH_TS < windowDays * 24 * 3600
 end
 
 local function tryAward(player: Player, key: string)
