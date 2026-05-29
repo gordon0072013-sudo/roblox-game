@@ -24,6 +24,11 @@ local MutationService -- forward
 
 local CodeService = {}
 
+-- Runtime-added codes (in-memory only; lost on shutdown). Filled by
+-- AdminService's /addcode command so the owner can drop a fresh code
+-- mid-stream without republishing the place.
+local runtimeCodes: { [string]: any } = {}
+
 local function deliverReward(player: Player, code: string, reward: any): boolean
 	if reward.kind == "cash" then
 		EconomyService.AwardCash(player, reward.amount or 0, `code ${code}`)
@@ -45,7 +50,7 @@ end
 function CodeService.Redeem(player: Player, codeRaw: string)
 	if typeof(codeRaw) ~= "string" then return end
 	local code = string.upper(string.gsub(codeRaw, "%s", ""))
-	local reward = (Config.REDEMPTION_CODES :: any)[code]
+	local reward = (Config.REDEMPTION_CODES :: any)[code] or runtimeCodes[code]
 	if not reward then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Invalid code: ${code}` })
 		return
@@ -79,11 +84,19 @@ end
 
 function CodeService.List(): { string }
 	local out: { string } = {}
+	local seen: { [string]: boolean } = {}
 	for code, _ in pairs((Config.REDEMPTION_CODES or {}) :: any) do
-		table.insert(out, code)
+		if not seen[code] then table.insert(out, code); seen[code] = true end
+	end
+	for code, _ in pairs(runtimeCodes) do
+		if not seen[code] then table.insert(out, code .. " (runtime)"); seen[code] = true end
 	end
 	table.sort(out)
 	return out
+end
+
+function CodeService.AddRuntime(code: string, cashAmount: number)
+	runtimeCodes[string.upper(code)] = { kind = "cash", amount = cashAmount }
 end
 
 return CodeService

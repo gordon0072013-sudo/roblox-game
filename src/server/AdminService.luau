@@ -223,6 +223,24 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "addcode",
+	usage = "/addcode <CODE> <cash-amount>",
+	help = "Add a runtime redemption code without republishing.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local code = args[1]
+		local amount = asNumber(args[2])
+		if not code or not amount then return "usage: /addcode <CODE> <cash-amount>" end
+		local ok, CodeService = pcall(require, script.Parent.CodeService)
+		if not ok then return "CodeService unavailable" end
+		local fn = (CodeService :: any).AddRuntime
+		if not fn then return "CodeService.AddRuntime not exposed" end
+		fn(string.upper(code), math.floor(amount))
+		return string.format("added runtime code %s -> +%d cash", string.upper(code), math.floor(amount))
+	end,
+})
+
+table.insert(commands, {
 	name = "codes",
 	usage = "/codes",
 	help = "List all active redemption codes.",

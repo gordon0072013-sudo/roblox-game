@@ -2000,6 +2000,24 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "addcode",
+	usage = "/addcode <CODE> <cash-amount>",
+	help = "Add a runtime redemption code without republishing.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local code = args[1]
+		local amount = asNumber(args[2])
+		if not code or not amount then return "usage: /addcode <CODE> <cash-amount>" end
+		local ok, CodeService = pcall(require, script.Parent.CodeService)
+		if not ok then return "CodeService unavailable" end
+		local fn = (CodeService :: any).AddRuntime
+		if not fn then return "CodeService.AddRuntime not exposed" end
+		fn(string.upper(code), math.floor(amount))
+		return string.format("added runtime code %s -> +%d cash", string.upper(code), math.floor(amount))
+	end,
+})
+
+table.insert(commands, {
 	name = "codes",
 	usage = "/codes",
 	help = "List all active redemption codes.",
@@ -3643,6 +3661,11 @@ local MutationService -- forward
 
 local CodeService = {}
 
+-- Runtime-added codes (in-memory only; lost on shutdown). Filled by
+-- AdminService's /addcode command so the owner can drop a fresh code
+-- mid-stream without republishing the place.
+local runtimeCodes: { [string]: any } = {}
+
 local function deliverReward(player: Player, code: string, reward: any): boolean
 	if reward.kind == "cash" then
 		EconomyService.AwardCash(player, reward.amount or 0, `code ${code}`)
@@ -3664,7 +3687,7 @@ end
 function CodeService.Redeem(player: Player, codeRaw: string)
 	if typeof(codeRaw) ~= "string" then return end
 	local code = string.upper(string.gsub(codeRaw, "%s", ""))
-	local reward = (Config.REDEMPTION_CODES :: any)[code]
+	local reward = (Config.REDEMPTION_CODES :: any)[code] or runtimeCodes[code]
 	if not reward then
 		Remotes.Event(Remotes.Names.Notify):FireClient(player, { kind="error", text=`Invalid code: ${code}` })
 		return
@@ -3698,11 +3721,19 @@ end
 
 function CodeService.List(): { string }
 	local out: { string } = {}
+	local seen: { [string]: boolean } = {}
 	for code, _ in pairs((Config.REDEMPTION_CODES or {}) :: any) do
-		table.insert(out, code)
+		if not seen[code] then table.insert(out, code); seen[code] = true end
+	end
+	for code, _ in pairs(runtimeCodes) do
+		if not seen[code] then table.insert(out, code .. " (runtime)"); seen[code] = true end
 	end
 	table.sort(out)
 	return out
+end
+
+function CodeService.AddRuntime(code: string, cashAmount: number)
+	runtimeCodes[string.upper(code)] = { kind = "cash", amount = cashAmount }
 end
 
 return CodeService
