@@ -1999,6 +1999,33 @@ table.insert(commands, {
 })
 
 table.insert(commands, {
+	name = "test-purchase",
+	usage = "/test-purchase <product-key>",
+	help = "Deliver a dev product without charging — verify the receipt path.",
+	ownerOnly = true,
+	fn = function(player, args)
+		local key = args[1]
+		if not key then return "usage: /test-purchase <product-key>" end
+		local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+		local def = Config.DEV_PRODUCTS[key]
+		if not def then return "unknown product: " .. key end
+		local ok, MonetizationService = pcall(require, script.Parent.MonetizationService)
+		if not ok then return "MonetizationService unavailable" end
+		local handler = (MonetizationService :: any).DeliverProductTestOnly
+		if handler then
+			handler(player, key)
+			return string.format("delivered %s to %s (test)", key, player.Name)
+		end
+		-- Fall back to direct cash for cash products if no test hook exists
+		if def.kind == "cash" then
+			EconomyService.AwardCash(player, def.amount or 0, "test purchase")
+			return string.format("test-delivered %s -> +%d cash", key, def.amount or 0)
+		end
+		return "no test hook for product kind: " .. tostring(def.kind)
+	end,
+})
+
+table.insert(commands, {
 	name = "announce",
 	usage = "/announce <text...>",
 	help = "Push a banner to every client in this server.",
@@ -6567,6 +6594,14 @@ function MonetizationService.Init()
 
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
+end
+
+-- Owner-only test path: deliver a product without ProcessReceipt firing.
+-- Used by AdminService's /test-purchase command. Wraps deliverProduct in
+-- a pcall so a broken delivery doesn't crash the admin loop.
+function MonetizationService.DeliverProductTestOnly(player: Player, key: string): boolean
+	local ok, result = pcall(deliverProduct, player, key)
+	return ok and result == true
 end
 
 return MonetizationService

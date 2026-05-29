@@ -215,4 +215,12 @@ function MonetizationService.Init()
 	end
 end
 
+-- Owner-only test path: deliver a product without ProcessReceipt firing.
+-- Used by AdminService's /test-purchase command. Wraps deliverProduct in
+-- a pcall so a broken delivery doesn't crash the admin loop.
+function MonetizationService.DeliverProductTestOnly(player: Player, key: string): boolean
+	local ok, result = pcall(deliverProduct, player, key)
+	return ok and result == true
+end
+
 return MonetizationService
