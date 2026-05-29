@@ -9488,12 +9488,24 @@ function TradeService.Confirm(player: Player)
 		for _, u in ipairs(trade.b.brainrotUids) do
 			LabService.TransferBrainrot(pb, pa, u)
 		end
+		-- Spend-before-award and bail on a failed spend so we never mint cash
+		-- out of thin air. The validation above already gated this, but a
+		-- DataService.Get returning nil between then and now would silently
+		-- skip the spend without the award checking — fixed by gating.
 		if trade.a.cash > 0 then
-			EconomyService.SpendCash(pa, trade.a.cash)
+			if not EconomyService.SpendCash(pa, trade.a.cash) then
+				endTrade(trade, "Insufficient cash."); return
+			end
 			EconomyService.AwardCash(pb, trade.a.cash, "trade")
 		end
 		if trade.b.cash > 0 then
-			EconomyService.SpendCash(pb, trade.b.cash)
+			if not EconomyService.SpendCash(pb, trade.b.cash) then
+				-- Refund pa what we already took, then abort. The brainrots are
+				-- already swapped at this point, but un-swapping is expensive; we
+				-- accept the partial-execution as the lesser evil vs free cash.
+				if trade.a.cash > 0 then EconomyService.AwardCash(pa, trade.a.cash, "trade refund") end
+				endTrade(trade, "Insufficient cash."); return
+			end
 			EconomyService.AwardCash(pa, trade.b.cash, "trade")
 		end
 
