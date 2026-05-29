@@ -9655,7 +9655,11 @@ function WelcomeOfferService.OnPlayerAdded(player: Player)
 		local hasBought = (data :: any)._purchaseLog and #((data :: any)._purchaseLog) > 0
 		if data._welcomeOffer.shown or hasBought then return end
 		task.delay(OFFER_SHOW_DELAY, function()
-			if not Players:FindFirstChild(player.Name) then return end
+			-- player.Parent vs Players:FindFirstChild(name): the latter is
+			-- true even if the player left and a same-named account rejoined,
+			-- which would surprise the new session with a leftover offer.
+			-- Parent check ties to this specific Player instance.
+			if not player.Parent then return end
 			pushOffer(player)
 		end)
 	end)
