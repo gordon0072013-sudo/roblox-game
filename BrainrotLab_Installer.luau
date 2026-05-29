@@ -3051,10 +3051,15 @@ function AfkService.Init()
 	task.spawn(function()
 		while true do
 			task.wait(10)
+			-- Snapshot before iterating because player:Kick fires PlayerRemoving
+			-- synchronously, which clears lastActive[player] mid-pairs — Lua's
+			-- behavior for "set existing key to nil during pairs()" is undefined
+			-- and can skip later entries.
+			local toKick: { Player } = {}
 			for player, ts in pairs(lastActive) do
 				local idle = os.clock() - ts
 				if idle >= IDLE_KICK_SECONDS then
-					player:Kick("AFK kick after 20 min — rejoin anytime to keep your progress!")
+					table.insert(toKick, player)
 				elseif idle >= IDLE_KICK_SECONDS - WARN_SECONDS and not warned[player] then
 					warned[player] = true
 					Remotes.Event(Remotes.Names.Notify):FireClient(player, {
@@ -3062,6 +3067,9 @@ function AfkService.Init()
 						text = `AFK kick in {WARN_SECONDS}s — move to reset.`,
 					})
 				end
+			end
+			for _, player in ipairs(toKick) do
+				player:Kick("AFK kick after 20 min — rejoin anytime to keep your progress!")
 			end
 		end
 	end)
